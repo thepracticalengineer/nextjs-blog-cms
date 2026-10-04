@@ -99,9 +99,40 @@ cd nextjs-blog-cms
 
 ### 2. Install dependencies
 
+Use Node **24.18.0** (`.nvmrc`) and pnpm **10.29.3** (`packageManager` in
+`package.json`). pnpm 10 is supported by Vercel and was verified against the
+existing dependency graph; dependency upgrades remain separate in issue #62.
+
 ```bash
-npm install
+nvm install
+nvm use
+corepack enable
+pnpm --version             # must print 10.29.3
+pnpm install --frozen-lockfile
 ```
+
+If Corepack is unavailable, install the pinned package manager with
+`npm install --global pnpm@10.29.3`, then run the same pnpm commands.
+
+Commit `package.json` and `pnpm-lock.yaml` together when changing dependencies.
+Use `pnpm add <package>` / `pnpm add -D <package>`; do not generate an npm lockfile.
+CI installs pnpm from the manifest before enabling the pnpm cache and uses the
+Node patch in `.nvmrc`. Required peers are checked strictly without blanket bypasses.
+
+Dependency build scripts are reviewed in `pnpm-workspace.yaml`: only
+`unrs-resolver` is allowed to bootstrap/check its native resolver; `msw`'s optional
+browser-worker copy script is ignored because no worker directory is configured.
+Review new scripts before adding an approval; do not enable all dependency scripts.
+The root `prepare` script installs Husky hooks normally.
+
+For Vercel, set the project Node runtime to **24.x** and enable
+`ENABLE_EXPERIMENTAL_COREPACK=1` in the project environment (Preview and
+Production). `vercel.json` uses
+`corepack pnpm` for frozen installation and build, so Corepack reads the exact
+manifest pin instead of relying on Vercel's default pnpm version. The committed
+pnpm lockfile also provides package-manager detection. Vercel manages the Node
+24 patch; local development and CI pin `.nvmrc`. See [Vercel package managers](https://vercel.com/docs/package-managers).
+Historical plans under `docs/superpowers/` retain their original npm commands.
 
 ### 3. Set up environment variables
 
@@ -129,7 +160,7 @@ WEBHOOK_SECRET=               # shared secret used to authenticate the /api/news
 ### 5. Run the app
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 ---
@@ -303,9 +334,9 @@ A `vercel.json` is included at the repo root that configures the cron to fire ev
 Covers lib utilities, API routes, services, and UI components with 80%+ thresholds across lines, branches, functions, and statements.
 
 ```bash
-npm test                  # watch mode
-npm run test:run          # single run
-npm run test:coverage     # coverage report
+pnpm test                  # watch mode
+pnpm run test:run          # single run
+pnpm run test:coverage     # coverage report
 ```
 
 ### API End-to-End Tests (Playwright)
@@ -318,8 +349,8 @@ Tests the five posts REST API routes (`GET`, `POST`, `PATCH`, `DELETE`) against 
 - The test project must have the full schema applied (`database/schema.sql`)
 
 ```bash
-npm run test:e2e          # run the full suite (19 tests)
-npm run test:e2e:report   # open the HTML report
+pnpm run test:e2e          # run the full suite (19 tests)
+pnpm run test:e2e:report   # open the HTML report
 ```
 
 Global setup seeds a test user, API key, and three posts before the suite runs. Global teardown deletes all seeded data by `user_id` after the suite finishes.
