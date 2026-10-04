@@ -1,0 +1,11 @@
+# Fail installation on incompatible required peers; keep pnpm's isolated layout.
+strictPeerDependencies: true
+
+# Reviewed native resolver bootstrap used by ESLint's import resolver.
+onlyBuiltDependencies:
+  - unrs-resolver
+
+# Its postinstall only copies a browser worker when msw.workerDirectory is set.
+# This app has no MSW worker configuration and does not need that script.
+ignoredBuiltDependencies:
+  - msw
