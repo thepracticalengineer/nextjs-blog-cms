@@ -15,11 +15,12 @@ export const test = base.extend<{
   apiKey: string
   seedPostIds: string[]
 }>({
-  apiKey: async ({}, use) => {
-    await use(readState().apiKey)
+  // Playwright requires object destructuring for the fixture dependency argument.
+  apiKey: async ({}, provideFixture) => {
+    await provideFixture(readState().apiKey)
   },
-  seedPostIds: async ({}, use) => {
-    await use(readState().seedPostIds)
+  seedPostIds: async ({}, provideFixture) => {
+    await provideFixture(readState().seedPostIds)
   },
 })
 

@@ -2,7 +2,7 @@ import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync, unlinkSync, existsSync } from 'node:fs'
 
-config({ path: '.env.local' })
+config({ path: '.env.e2e' })
 
 export default async function globalTeardown() {
   if (!existsSync('.e2e-state.json')) {
@@ -23,7 +23,7 @@ export default async function globalTeardown() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !serviceKey) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local')
+    throw new Error('Missing dedicated E2E Supabase credentials in .env.e2e or the environment')
   }
 
   const supabase = createClient(supabaseUrl, serviceKey, {

@@ -27,7 +27,7 @@ export function UserTable({ users, currentUserId }: UserTableProps) {
 
   if (users.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
+      <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100 shadow-xs text-center">
         <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-50 mb-4">
           <Users className="h-8 w-8 text-gray-300" />
         </div>
@@ -37,7 +37,7 @@ export function UserTable({ users, currentUserId }: UserTableProps) {
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-gray-100 bg-gray-50/70">
@@ -61,7 +61,7 @@ export function UserTable({ users, currentUserId }: UserTableProps) {
               <tr key={user.id} className="group hover:bg-blue-50/30 transition-colors duration-150">
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold shrink-0 ${isAdmin ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-gradient-to-br from-blue-400 to-blue-600'}`}>
+                    <div className={`flex items-center justify-center w-8 h-8 rounded-full text-white text-xs font-bold shrink-0 ${isAdmin ? 'bg-linear-to-br from-violet-500 to-indigo-600' : 'bg-linear-to-br from-blue-400 to-blue-600'}`}>
                       {initials}
                     </div>
                     <div>

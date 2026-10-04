@@ -56,7 +56,7 @@ export function PostRow({ post, onPublish, onUnpublish, onDelete }: PostRowProps
 
       <td className="px-5 py-4 hidden md:table-cell">
         <div className="flex items-center gap-2">
-          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 text-white text-[10px] font-bold shrink-0">
+          <div className="flex items-center justify-center w-6 h-6 rounded-full bg-linear-to-br from-blue-400 to-indigo-500 text-white text-[10px] font-bold shrink-0">
             {authorInitial}
           </div>
           <span className="text-sm text-muted-foreground">{authorName}</span>

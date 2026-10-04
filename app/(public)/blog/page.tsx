@@ -40,7 +40,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
           {page > 1 && (
             <Link
               href={`/blog?page=${page - 1}`}
-              className="px-5 py-2 border rounded-full text-sm font-medium hover:bg-muted transition-colors shadow-sm"
+              className="px-5 py-2 border rounded-full text-sm font-medium hover:bg-muted transition-colors shadow-xs"
             >
               ← Previous
             </Link>
@@ -51,7 +51,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
           {page < totalPages && (
             <Link
               href={`/blog?page=${page + 1}`}
-              className="px-5 py-2 border rounded-full text-sm font-medium hover:bg-muted transition-colors shadow-sm"
+              className="px-5 py-2 border rounded-full text-sm font-medium hover:bg-muted transition-colors shadow-xs"
             >
               Next →
             </Link>

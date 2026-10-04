@@ -81,6 +81,17 @@ vi.mock('@anthropic-ai/sdk', () => ({
 
 const mockOpenAICreate = vi.fn()
 
+const { mockGeminiGenerate, mockGeminiStream } = vi.hoisted(() => ({
+  mockGeminiGenerate: vi.fn(),
+  mockGeminiStream: vi.fn(),
+}))
+
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: class {
+    models = { generateContent: mockGeminiGenerate, generateContentStream: mockGeminiStream }
+  },
+}))
+
 vi.mock('openai', () => ({
   default: vi.fn(function () {
     return {
@@ -92,6 +103,59 @@ vi.mock('openai', () => ({
     }
   }),
 }))
+
+describe('Google GenAI migration', () => {
+  it('streams text properties and preserves conversation roles and system context', async () => {
+    mockGeminiStream.mockResolvedValue((async function* () {
+      yield { text: 'Hello' }
+      yield { text: undefined }
+      yield { text: ' world' }
+    })())
+    const { sendMessage } = await import('@/features/ai-assistant/llmService')
+    const chunks: string[] = []
+    for await (const text of sendMessage({
+      provider: 'gemini', model: 'gemini-1.5-flash', apiKey: 'test-key',
+      extractedText: 'Book context',
+      messages: [
+        { id: '1', chat_id: 'chat', created_at: '', role: 'user', content: 'Question' },
+        { id: '2', chat_id: 'chat', created_at: '', role: 'assistant', content: 'Answer' },
+      ],
+    })) chunks.push(text)
+    expect(chunks.join('')).toBe('Hello world')
+    expect(mockGeminiStream).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'gemini-3.5-flash-lite',
+      contents: [
+        { role: 'user', parts: [{ text: 'Question' }] },
+        { role: 'model', parts: [{ text: 'Answer' }] },
+      ],
+      config: { systemInstruction: expect.stringContaining('Book context') },
+    }))
+  })
+
+  it('requests JSON generation and parses the response text property', async () => {
+    const post = { title: 'Gemini Post', content: '<p>Body</p>', tags: ['test'] }
+    mockGeminiGenerate.mockResolvedValue({ text: JSON.stringify(post) })
+    const { generateBlogPost, generateBlogPostHeadless } = await import('@/features/ai-assistant/llmService')
+    expect(await generateBlogPost({
+      model: 'gemini-2.5-flash', apiKey: 'test-key', extractedText: 'Book', messages: [],
+    })).toEqual(post)
+    expect(mockGeminiGenerate).toHaveBeenLastCalledWith(expect.objectContaining({
+      config: { systemInstruction: expect.stringContaining('Book'), responseMimeType: 'application/json' },
+    }))
+    expect(await generateBlogPostHeadless({
+      model: 'gemini-2.5-flash', provider: 'gemini', apiKey: 'test-key', topic: 'Testing', tone: 'technical', wordCount: 800,
+    })).toEqual(post)
+    expect(mockGeminiGenerate).toHaveBeenLastCalledWith(expect.objectContaining({
+      config: { responseMimeType: 'application/json' },
+    }))
+  })
+
+  it('uses the title fallback when Gemini returns no text', async () => {
+    mockGeminiGenerate.mockResolvedValue({})
+    const { generateChatTitle } = await import('@/features/ai-assistant/llmService')
+    expect(await generateChatTitle('Question', 'gemini-2.5-flash', 'test-key')).toBe('New Chat')
+  })
+})
 
 // ─── generateChatTitle ────────────────────────────────────────────────────────
 

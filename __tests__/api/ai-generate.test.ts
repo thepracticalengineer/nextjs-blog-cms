@@ -182,7 +182,7 @@ describe('POST /api/ai-assistant/generate', () => {
     )
 
     // Verify the posts.insert call received the overridden title
-    const postsFrom = mock.from.mock.calls.find(([t]: [string]) => t === 'posts')
+    const postsFrom = mock.from.mock.calls.find(([t]) => t === 'posts')
     expect(postsFrom).toBeTruthy()
   })
 })

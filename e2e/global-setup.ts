@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { writeFileSync } from 'node:fs'
 import crypto from 'node:crypto'
 
-config({ path: '.env.local' })
+config({ path: '.env.e2e' })
 
 const E2E_EMAIL = 'e2e-test@playwright.local'
 
@@ -11,7 +11,7 @@ export default async function globalSetup() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
   if (!supabaseUrl || !serviceKey) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local')
+    throw new Error('Missing dedicated E2E Supabase credentials in .env.e2e or the environment')
   }
 
   const supabase = createClient(supabaseUrl, serviceKey, {

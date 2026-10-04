@@ -40,7 +40,7 @@ export function TwoFactorSetup() {
   const [enrollLoading, setEnrollLoading] = useState(false)
   const [disableLoading, setDisableLoading] = useState(false)
 
-  const supabase = useMemo(createClient, [])
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     async function loadFactors() {

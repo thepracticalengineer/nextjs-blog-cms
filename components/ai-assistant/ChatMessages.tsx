@@ -57,7 +57,7 @@ export function ChatMessages({ messages, streamingContent, isStreaming, onSugges
           className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
         >
           {message.role === 'assistant' && (
-            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 shrink-0 mr-2.5 mt-1">
+            <div className="flex items-center justify-center w-7 h-7 rounded-full bg-linear-to-br from-purple-500 to-indigo-600 shrink-0 mr-2.5 mt-1">
               <Bot className="w-3.5 h-3.5 text-white" />
             </div>
           )}
@@ -83,7 +83,7 @@ export function ChatMessages({ messages, streamingContent, isStreaming, onSugges
       {/* Streaming assistant message */}
       {isStreaming && (
         <div className="flex justify-start">
-          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-br from-purple-500 to-indigo-600 shrink-0 mr-2.5 mt-1">
+          <div className="flex items-center justify-center w-7 h-7 rounded-full bg-linear-to-br from-purple-500 to-indigo-600 shrink-0 mr-2.5 mt-1">
             <Bot className="w-3.5 h-3.5 text-white" />
           </div>
           <div className="max-w-[75%] rounded-2xl px-4 py-3 text-sm bg-slate-800 text-slate-100 rounded-bl-sm">

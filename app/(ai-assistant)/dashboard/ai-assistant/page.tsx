@@ -14,7 +14,7 @@ export default function AIAssistantPage() {
   return (
     <>
       <div className="flex-1 flex flex-col items-center justify-center h-full text-center p-8">
-        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 mb-6 shadow-lg shadow-purple-500/20">
+        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-linear-to-br from-purple-500 to-indigo-600 mb-6 shadow-lg shadow-purple-500/20">
           <Bot className="h-8 w-8 text-white" />
         </div>
         <h1 className="text-2xl font-bold text-white mb-2">AI Assistant</h1>

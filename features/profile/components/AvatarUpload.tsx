@@ -78,7 +78,7 @@ export function AvatarUpload({ profile }: AvatarUploadProps) {
               />
             </div>
           ) : (
-            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-xl shrink-0">
+            <div className="flex items-center justify-center w-16 h-16 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 text-white font-bold text-xl shrink-0">
               {initials}
             </div>
           )}

@@ -43,7 +43,7 @@ export function PostTableToolbar({
           <button
             onClick={() => onSearch('')}
             aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100 text-muted-foreground"
+            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-sm hover:bg-gray-100 text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>

@@ -1,6 +1,6 @@
 // features/ai-assistant/llmService.ts
 import Anthropic from '@anthropic-ai/sdk'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GoogleGenAI } from '@google/genai'
 import OpenAI from 'openai'
 import type { AIMessage, GeneratedPostData, LLMProvider } from './types'
 import { AVAILABLE_MODELS } from './types'
@@ -42,7 +42,7 @@ The post should be well-structured, SEO-friendly, and between 800-1500 words.`
 // ─── System Prompt Builder ────────────────────────────────────────────────────
 
 export function buildSystemPrompt(extractedText: string, modelId: string): string {
-  const model = AVAILABLE_MODELS.find((m) => m.id === modelId)
+  const model = AVAILABLE_MODELS.find((m) => m.id === resolveGeminiModel(modelId))
   const contextWindow = model?.contextWindow ?? 128000
   const reservedTokens = 8000
   const availableTokens = contextWindow - reservedTokens
@@ -117,23 +117,30 @@ async function* streamOpenAI(params: SendMessageParams): AsyncGenerator<string> 
   }
 }
 
+// Persisted chats can still contain retired Gemini 1.5 model IDs.
+function resolveGeminiModel(model: string): string {
+  if (model === 'gemini-1.5-flash') return 'gemini-3.5-flash-lite'
+  if (model === 'gemini-1.5-pro') return 'gemini-3.8-flash'
+  return model
+}
+
 // ─── Gemini streaming ─────────────────────────────────────────────────────────
 
 async function* streamGemini(params: SendMessageParams): AsyncGenerator<string> {
-  const genAI = new GoogleGenerativeAI(params.apiKey)
-  const geminiModel = genAI.getGenerativeModel({
-    model: params.model,
-    systemInstruction: buildSystemPrompt(params.extractedText, params.model),
-  })
+  const genAI = new GoogleGenAI({ apiKey: params.apiKey })
 
   const contents = params.messages.map((msg) => ({
     role: msg.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: msg.content }],
   }))
 
-  const result = await geminiModel.generateContentStream({ contents })
-  for await (const chunk of result.stream) {
-    const text = chunk.text()
+  const stream = await genAI.models.generateContentStream({
+    model: resolveGeminiModel(params.model),
+    contents,
+    config: { systemInstruction: buildSystemPrompt(params.extractedText, params.model) },
+  })
+  for await (const chunk of stream) {
+    const text = chunk.text
     if (text) yield text
   }
 }
@@ -197,13 +204,13 @@ export async function generateBlogPost(
       throw new Error(`LLM returned invalid JSON: ${rawJson.slice(0, 200)}`)
     }
   } else {
-    const genAI = new GoogleGenerativeAI(params.apiKey)
-    const geminiModel = genAI.getGenerativeModel({
-      model: params.model,
-      systemInstruction: systemPrompt,
+    const genAI = new GoogleGenAI({ apiKey: params.apiKey })
+    const result = await genAI.models.generateContent({
+      model: resolveGeminiModel(params.model),
+      contents: prompt,
+      config: { systemInstruction: systemPrompt, responseMimeType: 'application/json' },
     })
-    const result = await geminiModel.generateContent(prompt)
-    rawJson = result.response.text()
+    rawJson = result.text ?? '{}'
   }
 
   const cleaned = rawJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
@@ -280,10 +287,13 @@ Return ONLY a valid JSON object with NO markdown, NO code blocks:
       throw new Error(`LLM returned invalid JSON: ${rawJson.slice(0, 200)}`)
     }
   } else {
-    const genAI = new GoogleGenerativeAI(params.apiKey)
-    const geminiModel = genAI.getGenerativeModel({ model: params.model })
-    const result = await geminiModel.generateContent(prompt)
-    rawJson = result.response.text()
+    const genAI = new GoogleGenAI({ apiKey: params.apiKey })
+    const result = await genAI.models.generateContent({
+      model: resolveGeminiModel(params.model),
+      contents: prompt,
+      config: { responseMimeType: 'application/json' },
+    })
+    rawJson = result.text ?? '{}'
   }
 
   const cleaned = rawJson.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim()
@@ -313,10 +323,9 @@ export async function generateChatTitle(
   }
 
   if (model.startsWith('gemini')) {
-    const genAI = new GoogleGenerativeAI(apiKey)
-    const geminiModel = genAI.getGenerativeModel({ model })
-    const result = await geminiModel.generateContent(prompt)
-    return result.response.text().trim() || 'New Chat'
+    const genAI = new GoogleGenAI({ apiKey })
+    const result = await genAI.models.generateContent({ model: resolveGeminiModel(model), contents: prompt })
+    return result.text?.trim() || 'New Chat'
   }
 
   const client = new Anthropic({ apiKey })
@@ -366,9 +375,9 @@ export async function validateProviderKey(
         messages: [{ role: 'user', content: 'hi' }],
       })
     } else {
-      const genAI = new GoogleGenerativeAI(apiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
-      await model.generateContent('hi')
+      const genAI = new GoogleGenAI({ apiKey })
+      const model = AVAILABLE_MODELS.find((entry) => entry.provider === 'gemini')!.id
+      await genAI.models.generateContent({ model, contents: 'hi' })
     }
     return true
   } catch {

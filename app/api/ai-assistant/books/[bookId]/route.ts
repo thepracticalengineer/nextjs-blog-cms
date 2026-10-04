@@ -3,13 +3,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { deleteBook } from '@/features/ai-assistant/chatService'
 
-type Params = { params: { bookId: string } }
+type Params = { params: Promise<{ bookId: string }> }
 
 /**
  * DELETE /api/ai-assistant/books/[bookId]
  * Deletes a book and all its associated chats (via cascade in DB).
  */
-export async function DELETE(_req: NextRequest, { params }: Params) {
+export async function DELETE(_req: NextRequest, props: Params) {
+  const params = await props.params
   const { bookId } = params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

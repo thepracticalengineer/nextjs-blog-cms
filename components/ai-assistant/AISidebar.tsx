@@ -20,19 +20,16 @@ export function AISidebar({ onClose }: { onClose?: () => void }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const loadData = useCallback(async () => {
-    try {
-      const [chatsRes, booksRes] = await Promise.all([
-        fetch('/api/ai-assistant/chats').then((r) => r.json()),
-        fetch('/api/ai-assistant/books').then((r) => r.json()),
-      ])
+  const loadData = useCallback(() => {
+    return Promise.all([
+      fetch('/api/ai-assistant/chats').then((r) => r.json()),
+      fetch('/api/ai-assistant/books').then((r) => r.json()),
+    ]).then(([chatsRes, booksRes]) => {
       setChats(chatsRes.chats ?? [])
       setBooks(booksRes.books ?? [])
-    } catch {
-      // silently ignore
-    } finally {
-      setLoading(false)
-    }
+    }).catch(() => {
+      // Keep the current list on a failed refresh.
+    }).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
@@ -89,7 +86,7 @@ export function AISidebar({ onClose }: { onClose?: () => void }) {
         {/* Header */}
         <div className="p-4 border-b border-slate-800">
           <div className="flex items-center gap-2 mb-3">
-            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500 to-indigo-600">
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-linear-to-br from-purple-500 to-indigo-600">
               <Bot className="w-3.5 h-3.5 text-white" />
             </div>
             <span className="font-semibold text-white text-sm">AI Assistant</span>
@@ -152,7 +149,7 @@ export function AISidebar({ onClose }: { onClose?: () => void }) {
                           aria-label="Delete chat"
                           onClick={(e) => handleDeleteChat(chat.id, e)}
                           className={cn(
-                            'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity',
+                            'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-sm transition-opacity',
                             'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100',
                             currentChatId === chat.id
                               ? 'text-blue-200 hover:text-white hover:bg-blue-500'
@@ -196,7 +193,7 @@ export function AISidebar({ onClose }: { onClose?: () => void }) {
                             type="button"
                             aria-label="Delete book and all its chats"
                             onClick={(e) => handleDeleteBook(book.id, book.title, e)}
-                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100 text-slate-600 hover:text-red-400 hover:bg-slate-700"
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-sm transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100 text-slate-600 hover:text-red-400 hover:bg-slate-700"
                             title="Delete book and all its chats"
                           >
                             <Trash2 className="h-3 w-3" />
@@ -227,7 +224,7 @@ export function AISidebar({ onClose }: { onClose?: () => void }) {
                                     aria-label="Delete chat"
                                     onClick={(e) => handleDeleteChat(chat.id, e)}
                                     className={cn(
-                                      'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity',
+                                      'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-sm transition-opacity',
                                       'opacity-100 sm:opacity-0 sm:group-hover/chat:opacity-100 sm:group-focus-within:opacity-100 focus-visible:opacity-100',
                                       currentChatId === chat.id
                                         ? 'text-blue-200 hover:text-white hover:bg-blue-500'

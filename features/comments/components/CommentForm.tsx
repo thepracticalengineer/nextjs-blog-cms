@@ -1,7 +1,7 @@
 // features/comments/components/CommentForm.tsx
 'use client'
 
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
@@ -23,11 +23,11 @@ interface CommentFormProps {
 }
 
 export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) {
-  const { register, handleSubmit, reset, watch, formState: { errors, isSubmitting } } = useForm<FormValues>({
+  const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
   })
 
-  const content = watch('content', '')
+  const content = useWatch({ control, name: 'content', defaultValue: '' })
 
   async function onSubmit(values: FormValues) {
     const result = await createComment(postId, values.content, postSlug)

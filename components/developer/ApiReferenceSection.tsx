@@ -268,7 +268,7 @@ function EndpointCard({ ep }: { ep: EndpointDef }) {
       >
         <span
           className={cn(
-            'text-[11px] font-bold px-2 py-0.5 rounded font-mono w-14 text-center shrink-0',
+            'text-[11px] font-bold px-2 py-0.5 rounded-sm font-mono w-14 text-center shrink-0',
             METHOD_STYLES[ep.method]
           )}
         >

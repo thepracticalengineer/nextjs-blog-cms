@@ -8,12 +8,13 @@ import { sendMessage, generateChatTitle, isRateLimitError } from '@/features/ai-
 import { getDecryptedApiKey } from '@/features/ai-assistant/llmKeyService'
 import type { LLMProvider } from '@/features/ai-assistant/types'
 
-type Params = { params: { chatId: string } }
+type Params = { params: Promise<{ chatId: string }> }
 
 /**
  * GET /api/ai-assistant/chats/[chatId]/messages
  */
-export async function GET(_req: NextRequest, { params }: Params) {
+export async function GET(_req: NextRequest, props: Params) {
+  const params = await props.params
   const { chatId } = params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -33,7 +34,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
  * Body: { content: string }
  * Returns a streaming text/plain response (LLM reply chunks).
  */
-export async function POST(req: NextRequest, { params }: Params) {
+export async function POST(req: NextRequest, props: Params) {
+  const params = await props.params
   const { chatId } = params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

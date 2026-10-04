@@ -37,28 +37,33 @@ export function Editor({ value, onChange, className }: EditorProps) {
   )
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions,
     content: value ? parseEditorContent(value) : '',
     onUpdate: handleUpdate,
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose-base max-w-none focus:outline-none min-h-[300px] p-4',
+        class: 'prose prose-sm sm:prose-base max-w-none focus:outline-hidden min-h-[300px] p-4',
       },
     },
   })
 
   // Sync external value changes (e.g. form reset or switching posts)
   useEffect(() => {
-    if (!editor || !value) return
-    const parsed = parseEditorContent(value)
+    if (!editor) return
+    const parsed = value ? parseEditorContent(value) : ''
     if (typeof parsed === 'object') {
       // JSON content: skip if editor already contains the same data
       if (JSON.stringify(parsed) === JSON.stringify(editor.getJSON())) return
     }
     isInternalUpdate.current = true
-    editor.commands.setContent(parsed)
+    editor.commands.setContent(parsed, { emitUpdate: false })
     isInternalUpdate.current = false
   }, [editor, value])
+
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+  }, [])
 
   if (!editor) return null
 

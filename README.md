@@ -99,7 +99,7 @@ cd nextjs-blog-cms
 
 ### 2. Install dependencies
 
-Use Node **24.18.0** (`.nvmrc`) and pnpm **10.29.3** (`packageManager` in
+Use Node **24.21.0** (`.nvmrc`) and pnpm **10.29.3** (`packageManager` in
 `package.json`). pnpm 10 is supported by Vercel and was verified against the
 existing dependency graph; dependency upgrades remain separate in issue #62.
 
@@ -113,6 +113,8 @@ pnpm install --frozen-lockfile
 
 If Corepack is unavailable, install the pinned package manager with
 `npm install --global pnpm@10.29.3`, then run the same pnpm commands.
+
+See [dependency upgrade notes](docs/dependency-upgrade.md) for migrations, image host configuration, verification, and tracked compatibility blockers.
 
 Commit `package.json` and `pnpm-lock.yaml` together when changing dependencies.
 Use `pnpm add <package>` / `pnpm add -D <package>`; do not generate an npm lockfile.
@@ -334,26 +336,27 @@ A `vercel.json` is included at the repo root that configures the cron to fire ev
 Covers lib utilities, API routes, services, and UI components with 80%+ thresholds across lines, branches, functions, and statements.
 
 ```bash
+pnpm run typecheck         # route types and full TypeScript check
 pnpm test                  # watch mode
 pnpm run test:run          # single run
 pnpm run test:coverage     # coverage report
 ```
 
-### API End-to-End Tests (Playwright)
+### End-to-End Tests (Playwright)
 
-Tests the five posts REST API routes (`GET`, `POST`, `PATCH`, `DELETE`) against a real Next.js dev server and a dedicated Supabase test project. No browser — pure HTTP via `APIRequestContext`.
+The suite verifies 19 posts REST API cases and five browser flows: public navigation/newsletter/registration validation, editor save and publish, profile updates, PDF upload/chat, and MFA enrollment/login. Provider generation is stubbed; auth, PDF parsing, and database writes use the real local services.
 
-**Prerequisites:**
-
-- `.env.local` must point to a **separate Supabase test project** (not production)
-- The test project must have the full schema applied (`database/schema.sql`)
+Use a **dedicated disposable Supabase test project**, never production. Apply all `supabase/migrations` or start the local stack with `pnpm dlx supabase@2.119.0 start`. Put its `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the ignored `.env.e2e` file. The Playwright server inherits those values. Set `RESEND_API_KEY` and `SLACK_WEBHOOK_URL` to empty values in that file to keep local verification isolated from external integrations.
 
 ```bash
-pnpm run test:e2e          # run the full suite (19 tests)
-pnpm run test:e2e:report   # open the HTML report
+pnpm exec playwright install chromium
+pnpm run test:e2e                       # API and browser suites
+pnpm run test:e2e --project=api          # HTTP tests only
+pnpm run test:e2e --project=browser      # browser tests only
+pnpm run test:e2e:report                # open the HTML report
 ```
 
-Global setup seeds a test user, API key, and three posts before the suite runs. Global teardown deletes all seeded data by `user_id` after the suite finishes.
+Playwright starts its own server by default. Set `E2E_BASE_URL` for a different port; `E2E_REUSE_SERVER=1` explicitly reuses an existing local server configured for the same test database. Global setup seeds a disposable author, API key, and posts; teardown removes that user's rows and auth account. The newsletter smoke test removes its own subscription.
 
 ---
 

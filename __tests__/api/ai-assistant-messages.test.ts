@@ -95,7 +95,7 @@ describe('POST /api/ai-assistant/chats/[chatId]/messages — pre-flight', () => 
     }
     mockSendMessage.mockReturnValue(rateLimitGen())
 
-    const res = await POST(makePostRequest({ content: 'Hello' }), { params: { chatId: 'chat-1' } })
+    const res = await POST(makePostRequest({ content: 'Hello' }), { params: Promise.resolve({ chatId: 'chat-1' }) })
 
     expect(res.status).toBe(429)
     const json = await res.json()
@@ -113,7 +113,7 @@ describe('POST /api/ai-assistant/chats/[chatId]/messages — pre-flight', () => 
     }
     mockSendMessage.mockReturnValue(emptyGen())
 
-    const res = await POST(makePostRequest({ content: 'Hello' }), { params: { chatId: 'chat-1' } })
+    const res = await POST(makePostRequest({ content: 'Hello' }), { params: Promise.resolve({ chatId: 'chat-1' }) })
 
     expect(res.status).toBe(502)
     const json = await res.json()
@@ -132,7 +132,7 @@ describe('POST /api/ai-assistant/chats/[chatId]/messages — pre-flight', () => 
     }
     mockSendMessage.mockReturnValue(failingGen())
 
-    const res = await POST(makePostRequest({ content: 'Hello' }), { params: { chatId: 'chat-1' } })
+    const res = await POST(makePostRequest({ content: 'Hello' }), { params: Promise.resolve({ chatId: 'chat-1' }) })
 
     expect(res.status).toBe(502)
     expect(mockAddMessage).not.toHaveBeenCalled()
