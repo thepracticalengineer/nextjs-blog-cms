@@ -24,7 +24,7 @@ export default async function PostsPage() {
         </div>
         <Link
           href="/dashboard/posts/new"
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium shadow-sm shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 hover:-translate-y-px transition-all duration-200"
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium shadow-xs shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 hover:-translate-y-px transition-all duration-200"
         >
           <PenLine className="h-4 w-4" />
           New Post

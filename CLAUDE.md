@@ -9,10 +9,10 @@ A full-stack Blog CMS built with Next.js (App Router), Supabase, TailwindCSS, an
 ## Commands
 
 ```bash
-npm install        # Install dependencies
-npm run dev        # Start development server
-npm run build      # Production build
-npm run lint       # ESLint
+pnpm install --frozen-lockfile        # Install dependencies
+pnpm run dev        # Start development server
+pnpm run build      # Production build
+pnpm run lint       # ESLint
 ```
 
 ## Environment Variables

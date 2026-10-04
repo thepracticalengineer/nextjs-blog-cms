@@ -7,10 +7,10 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen flex flex-col">
-      <header className="border-b border-border/60 sticky top-0 z-50 bg-background/95 backdrop-blur-sm">
+      <header className="border-b border-border/60 sticky top-0 z-50 bg-background/95 backdrop-blur-xs">
         <div className="container max-w-5xl mx-auto py-4 px-4 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-            <Image src="/logo.png" alt="The Practical Engineer" width={32} height={32} className="rounded-sm" priority />
+            <Image src="/logo.png" alt="The Practical Engineer" width={32} height={32} className="rounded-xs" priority />
             <span
               className="font-bold text-lg tracking-tight"
               style={{ fontFamily: 'var(--font-playfair, serif)' }}

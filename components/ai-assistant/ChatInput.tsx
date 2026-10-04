@@ -45,7 +45,7 @@ export function ChatInput({ value, onChange, onSend, disabled, placeholder }: Pr
             rows={1}
             className={cn(
               'w-full bg-transparent text-sm text-slate-100 placeholder:text-slate-600',
-              'px-4 py-3 resize-none outline-none',
+              'px-4 py-3 resize-none outline-hidden',
               'disabled:opacity-50 disabled:cursor-not-allowed'
             )}
           />

@@ -29,7 +29,7 @@ const PROVIDERS: ProviderConfig[] = [
     provider: 'gemini',
     label: 'Google (Gemini)',
     color: 'text-blue-600',
-    models: 'Gemini 1.5 Flash (free), Gemini 1.5 Pro',
+    models: 'Gemini 3.5 Flash-Lite, Gemini 3.8 Flash',
     note: 'Gemini Flash has a free tier',
   },
   {

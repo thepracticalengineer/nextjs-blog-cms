@@ -95,7 +95,7 @@ export function PostTable({ posts }: PostTableProps) {
         onClearFilters={handleClearFilters}
       />
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
         {paginated.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <Search className="h-8 w-8 text-gray-200 mb-3" />

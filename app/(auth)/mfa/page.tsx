@@ -110,7 +110,7 @@ export default function MfaChallengePage() {
         <Button
           onClick={handleVerify}
           disabled={loading || code.length !== 6}
-          className="w-full h-10 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0"
+          className="w-full h-10 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0"
         >
           {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying…</> : 'Verify'}
         </Button>

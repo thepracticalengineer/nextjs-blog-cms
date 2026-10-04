@@ -6,7 +6,7 @@ export default function AuthLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-950 via-blue-950 to-slate-900">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-linear-to-br from-slate-950 via-blue-950 to-slate-900">
       {/* Grid pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:48px_48px]" />
 
@@ -26,7 +26,7 @@ export default function AuthLayout({
 
         {/* Subtle glow behind card */}
         <div className="relative">
-          <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 to-indigo-500/20 rounded-2xl blur-sm" />
+          <div className="absolute -inset-0.5 bg-linear-to-r from-blue-500/20 to-indigo-500/20 rounded-2xl blur-xs" />
           <div className="relative bg-white rounded-2xl shadow-2xl shadow-black/30 overflow-hidden">
             {children}
           </div>

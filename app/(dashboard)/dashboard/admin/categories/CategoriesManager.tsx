@@ -71,7 +71,7 @@ export function CategoriesManager({ categories: initial }: CategoriesManagerProp
   return (
     <div className="grid gap-6 lg:grid-cols-[280px_1fr] items-start">
       {/* Create form */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-5">
         <div className="flex items-center gap-3 mb-5">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-blue-50 shrink-0">
             <Plus className="h-4 w-4 text-blue-600" />
@@ -97,7 +97,7 @@ export function CategoriesManager({ categories: initial }: CategoriesManagerProp
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs p-5">
         <div className="flex items-center gap-3 mb-4">
           <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 shrink-0">
             <FolderOpen className="h-4 w-4 text-emerald-600" />
@@ -137,7 +137,7 @@ export function CategoriesManager({ categories: initial }: CategoriesManagerProp
                     <button
                       onClick={() => handleDelete(cat.id, cat.name)}
                       aria-label={`Delete category ${cat.name}`}
-                      className="opacity-0 group-hover:opacity-100 shrink-0 ml-1 flex items-center justify-center w-6 h-6 rounded text-red-400 hover:text-red-600 hover:bg-red-50 transition-all duration-150"
+                      className="opacity-0 group-hover:opacity-100 shrink-0 ml-1 flex items-center justify-center w-6 h-6 rounded-sm text-red-400 hover:text-red-600 hover:bg-red-50 transition-all duration-150"
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>

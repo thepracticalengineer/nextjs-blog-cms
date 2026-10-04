@@ -126,7 +126,7 @@ export function ShareButton({ url, title }: ShareButtonProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Share this post"
       >
         <Share2Icon className="size-4" />

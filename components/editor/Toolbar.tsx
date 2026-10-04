@@ -118,7 +118,7 @@ function ColorPanel({ editor, triggerRef, onClose }: ColorPanelProps) {
             type="button"
             title={label}
             style={{ background: hex }}
-            className={`w-6 h-6 rounded cursor-pointer border ${hex === '#ffffff' ? 'border-border' : 'border-transparent'} ${activeColor === hex ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+            className={`w-6 h-6 rounded-sm cursor-pointer border ${hex === '#ffffff' ? 'border-border' : 'border-transparent'} ${activeColor === hex ? 'ring-2 ring-primary ring-offset-1' : ''}`}
             onClick={() => {
               if (activeColor === hex) {
                 editor.chain().focus().unsetColor().run()
@@ -140,7 +140,7 @@ function ColorPanel({ editor, triggerRef, onClose }: ColorPanelProps) {
             type="button"
             title={label}
             style={{ background: hex }}
-            className={`w-6 h-6 rounded cursor-pointer border border-border ${activeHighlight === hex ? 'ring-2 ring-primary ring-offset-1' : ''}`}
+            className={`w-6 h-6 rounded-sm cursor-pointer border border-border ${activeHighlight === hex ? 'ring-2 ring-primary ring-offset-1' : ''}`}
             onClick={() => {
               if (activeHighlight === hex) {
                 editor.chain().focus().unsetHighlight().run()
@@ -215,12 +215,12 @@ function LineHeightMenu({ editor, activeLineHeight }: LineHeightMenuProps) {
               value={customValue}
               onChange={(e) => setCustomValue(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') applyCustom() }}
-              className="h-7 w-full rounded border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+              className="h-7 w-full rounded-sm border border-input bg-background px-2 text-xs focus:outline-hidden focus:ring-1 focus:ring-ring"
             />
             <button
               type="button"
               onClick={applyCustom}
-              className="h-7 px-2 rounded bg-primary text-primary-foreground text-xs hover:bg-primary/90"
+              className="h-7 px-2 rounded-sm bg-primary text-primary-foreground text-xs hover:bg-primary/90"
             >
               Set
             </button>
@@ -300,20 +300,20 @@ export function Toolbar({ editor }: ToolbarProps) {
         <button
           type="button"
           title="Text color"
-          className="h-8 w-auto px-1.5 rounded hover:bg-accent flex flex-col items-center justify-center gap-0.5"
+          className="h-8 w-auto px-1.5 rounded-sm hover:bg-accent flex flex-col items-center justify-center gap-0.5"
           onClick={() => setColorPanelOpen(o => !o)}
         >
           <span className="text-xs font-semibold leading-none">A</span>
-          <span className="block h-0.5 w-4 rounded" style={{ background: activeColor }} />
+          <span className="block h-0.5 w-4 rounded-sm" style={{ background: activeColor }} />
         </button>
         <button
           type="button"
           title="Highlight"
-          className="h-8 w-auto px-1.5 rounded hover:bg-accent flex flex-col items-center justify-center gap-0.5"
+          className="h-8 w-auto px-1.5 rounded-sm hover:bg-accent flex flex-col items-center justify-center gap-0.5"
           onClick={() => setColorPanelOpen(o => !o)}
         >
           <span className="text-xs font-semibold leading-none" style={{ background: activeHighlight, padding: '0 2px', borderRadius: 2 }}>A</span>
-          <span className="block h-0.5 w-4 rounded" style={{ background: activeHighlight }} />
+          <span className="block h-0.5 w-4 rounded-sm" style={{ background: activeHighlight }} />
         </button>
       </div>
 

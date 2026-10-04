@@ -19,7 +19,7 @@ const PROVIDER_PRIORITY: LLMProvider[] = ['claude', 'openai', 'gemini']
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
   claude: 'claude-sonnet-4-6',
   openai: 'gpt-4o',
-  gemini: 'gemini-1.5-pro',
+  gemini: 'gemini-3.8-flash',
 }
 
 type GenerateBody = {

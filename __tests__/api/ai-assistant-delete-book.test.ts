@@ -47,7 +47,7 @@ describe('DELETE /api/ai-assistant/books/[bookId]', () => {
   it('returns 401 when unauthenticated', async () => {
     mockCreateClient.mockResolvedValue(makeUnauthMock() as unknown as Awaited<ReturnType<typeof createClient>>)
 
-    const res = await DELETE(makeRequest(), { params: { bookId: 'book-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ bookId: 'book-1' }) })
     expect(res.status).toBe(401)
   })
 
@@ -56,7 +56,7 @@ describe('DELETE /api/ai-assistant/books/[bookId]', () => {
       makeSupabaseMock('user-1', null) as unknown as Awaited<ReturnType<typeof createClient>>
     )
 
-    const res = await DELETE(makeRequest(), { params: { bookId: 'book-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ bookId: 'book-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -66,7 +66,7 @@ describe('DELETE /api/ai-assistant/books/[bookId]', () => {
       makeSupabaseMock('other-user', null) as unknown as Awaited<ReturnType<typeof createClient>>
     )
 
-    const res = await DELETE(makeRequest(), { params: { bookId: 'book-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ bookId: 'book-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -76,7 +76,7 @@ describe('DELETE /api/ai-assistant/books/[bookId]', () => {
     )
     mockDeleteBook.mockResolvedValue(undefined)
 
-    const res = await DELETE(makeRequest(), { params: { bookId: 'book-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ bookId: 'book-1' }) })
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.success).toBe(true)

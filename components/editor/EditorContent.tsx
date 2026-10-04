@@ -133,7 +133,7 @@ function renderNode(node: TipTapNode): string {
       if (!src) return ''
       const safeSrc = src.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
       const safeAlt = String(node.attrs?.alt ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
-      return `<img src="${safeSrc}" alt="${safeAlt}" class="max-w-full rounded my-4" />`
+      return `<img src="${safeSrc}" alt="${safeAlt}" class="max-w-full rounded-sm my-4" />`
     }
     default: return inner
   }

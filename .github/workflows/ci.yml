@@ -11,19 +11,22 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run typecheck
 
       - name: Run ESLint
         run: pnpm run lint
@@ -32,13 +35,13 @@ jobs:
     name: Unit Tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: pnpm
@@ -50,7 +53,7 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-report
@@ -66,13 +69,13 @@ jobs:
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: '.nvmrc'
           cache: pnpm
@@ -82,3 +85,59 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  e2e:
+    name: API and Browser Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install dependencies and browser
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Start disposable Supabase
+        run: |
+          pnpm dlx supabase@2.119.0 start --exclude studio,imgproxy,vector,logflare,edge-runtime > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
+          pnpm dlx supabase@2.119.0 status -o json > /tmp/supabase-status.json
+          python3 - <<'PY'
+          import json, os
+          status = json.load(open('/tmp/supabase-status.json'))
+          values = {
+              'NEXT_PUBLIC_SUPABASE_URL': status['API_URL'],
+              'NEXT_PUBLIC_SUPABASE_ANON_KEY': status['ANON_KEY'],
+              'SUPABASE_SERVICE_ROLE_KEY': status['SERVICE_ROLE_KEY'],
+              'NEXT_PUBLIC_SITE_URL': 'http://localhost:3000',
+              'RESEND_API_KEY': '',
+              'SLACK_WEBHOOK_URL': '',
+          }
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              for key, value in values.items():
+                  output.write(f'{key}={value}\n')
+          PY
+
+      - name: Run API and browser tests
+        run: pnpm run test:e2e
+
+      - name: Upload failed test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-test-results
+          path: test-results/
+          retention-days: 7
+
+      - name: Stop disposable Supabase
+        if: always()
+        run: pnpm dlx supabase@2.119.0 stop --no-backup

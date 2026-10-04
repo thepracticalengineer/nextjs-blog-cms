@@ -58,15 +58,19 @@ export function NewChatModal({ open, onClose, onChatCreated }: Props) {
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
+  const [previousOpen, setPreviousOpen] = useState(open)
+  if (open !== previousOpen) {
+    setPreviousOpen(open)
     if (!open) {
       setStep(1)
       setSelectedBook(null)
       setSelectedModel(null)
       setUploadedBookData(null)
-      return
     }
+  }
 
+  useEffect(() => {
+    if (!open) return
     Promise.all([
       fetch('/api/ai-assistant/books').then((r) => r.json()),
       fetch('/api/developer/llm-keys').then((r) => r.json()),

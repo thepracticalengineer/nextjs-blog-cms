@@ -1,7 +1,7 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -12,11 +12,14 @@ export async function middleware(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
+        setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           )
           supabaseResponse = NextResponse.next({ request })
+          Object.entries(headers).forEach(([name, value]) =>
+            supabaseResponse.headers.set(name, value)
+          )
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -41,6 +44,10 @@ export async function middleware(request: NextRequest) {
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, cookie)
     })
+    for (const header of ['cache-control', 'expires', 'pragma']) {
+      const value = supabaseResponse.headers.get(header)
+      if (value) redirectResponse.headers.set(header, value)
+    }
     return redirectResponse
   }
 

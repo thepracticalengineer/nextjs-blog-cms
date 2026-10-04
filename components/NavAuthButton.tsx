@@ -111,7 +111,7 @@ export function NavAuthButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-foreground/30 focus-visible:ring-offset-2 transition-opacity disabled:opacity-50"
+        className="rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/30 focus-visible:ring-offset-2 transition-opacity disabled:opacity-50"
         aria-label="Account menu"
         disabled={busy}
       >

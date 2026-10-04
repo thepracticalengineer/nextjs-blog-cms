@@ -1,27 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// Mock pdf-parse
-vi.mock('pdf-parse', () => ({
-  default: vi.fn(),
+const { mockGetText, mockGetInfo, mockDestroy, mockPdfParse } = vi.hoisted(() => ({
+  mockGetText: vi.fn(),
+  mockGetInfo: vi.fn(),
+  mockDestroy: vi.fn(),
+  mockPdfParse: vi.fn(),
 }))
 
-import pdfParse from 'pdf-parse'
-const mockPdfParse = vi.mocked(pdfParse)
+vi.mock('pdf-parse', () => ({
+  PDFParse: class {
+    constructor(options: unknown) { mockPdfParse(options) }
+    getText = mockGetText
+    getInfo = mockGetInfo
+    destroy = mockDestroy
+  },
+}))
 
 import { extractTextFromPdf } from '@/features/ai-assistant/pdfService'
 
 describe('extractTextFromPdf', () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockGetInfo.mockResolvedValue({ info: {} })
+    mockDestroy.mockResolvedValue(undefined)
+  })
 
   it('returns text, pageCount, wordCount, charCount, wasTruncated=false for normal PDF', async () => {
-    mockPdfParse.mockResolvedValue({
+    mockGetText.mockResolvedValue({
       text: 'Hello world. This is a test document with some content.',
-      numpages: 3,
-      info: { Title: 'My PDF' },
+      total: 3,
       metadata: null,
       numrender: 0, version: 'v1.10.100',
     })
 
+    mockGetInfo.mockResolvedValue({ info: { Title: ' My PDF ' } })
     const buf = Buffer.from('fake-pdf-bytes')
     const result = await extractTextFromPdf(buf)
 
@@ -31,12 +43,27 @@ describe('extractTextFromPdf', () => {
     expect(result.wordCount).toBeGreaterThan(0)
     expect(result.charCount).toBe(result.text.length)
     expect(result.wasTruncated).toBe(false)
+    expect(mockPdfParse).toHaveBeenCalledWith({ data: buf })
+    expect(mockDestroy).toHaveBeenCalledOnce()
+  })
+
+  it('releases the parser when extraction fails', async () => {
+    mockGetText.mockRejectedValueOnce(new Error('Invalid PDF'))
+    await expect(extractTextFromPdf(Buffer.from('bad'))).rejects.toThrow('Invalid PDF')
+    expect(mockDestroy).toHaveBeenCalledOnce()
+  })
+
+  it('releases the parser when metadata fails', async () => {
+    mockGetText.mockResolvedValueOnce({ text: 'Text', total: 1 })
+    mockGetInfo.mockRejectedValueOnce(new Error('Metadata error'))
+    await expect(extractTextFromPdf(Buffer.from('bad'))).rejects.toThrow('Metadata error')
+    expect(mockDestroy).toHaveBeenCalledOnce()
   })
 
   it('returns null title when PDF metadata has no Title', async () => {
-    mockPdfParse.mockResolvedValue({
+    mockGetText.mockResolvedValue({
       text: 'Some text.',
-      numpages: 1,
+      total: 1,
       info: {},
       metadata: null,
       numrender: 0, version: 'v1.10.100',
@@ -48,9 +75,9 @@ describe('extractTextFromPdf', () => {
 
   it('sets wasTruncated=true and appends note when text exceeds 400,000 chars', async () => {
     const longText = 'a'.repeat(500000)
-    mockPdfParse.mockResolvedValue({
+    mockGetText.mockResolvedValue({
       text: longText,
-      numpages: 100,
+      total: 100,
       info: {},
       metadata: null,
       numrender: 0, version: 'v1.10.100',
@@ -64,9 +91,9 @@ describe('extractTextFromPdf', () => {
   })
 
   it('collapses multiple blank lines into at most two newlines', async () => {
-    mockPdfParse.mockResolvedValue({
+    mockGetText.mockResolvedValue({
       text: 'line one\n\n\n\n\n\nline two',
-      numpages: 1,
+      total: 1,
       info: {},
       metadata: null,
       numrender: 0, version: 'v1.10.100',

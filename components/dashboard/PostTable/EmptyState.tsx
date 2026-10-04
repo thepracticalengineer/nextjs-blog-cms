@@ -3,7 +3,7 @@ import { FileText, Plus } from 'lucide-react'
 
 export function PostEmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100 shadow-sm text-center">
+    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-100 shadow-xs text-center">
       <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gray-50 mb-4">
         <FileText className="h-8 w-8 text-gray-300" />
       </div>

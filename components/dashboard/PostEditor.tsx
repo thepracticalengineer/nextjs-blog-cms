@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
@@ -72,7 +72,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
 
   const isPublished = post?.status === 'published'
 
-  const { register, handleSubmit, control, setValue, watch, getValues, formState: { errors } } =
+  const { register, handleSubmit, control, setValue, getValues, formState: { errors } } =
     useForm<PostFormValues>({
       resolver: zodResolver(postSchema),
       defaultValues: {
@@ -88,9 +88,9 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
       },
     })
 
-  const title = watch('title')
-  const coverImage = watch('cover_image')
-  const selectedTagIds = watch('tag_ids')
+  const title = useWatch({ control, name: 'title' })
+  const coverImage = useWatch({ control, name: 'cover_image' })
+  const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
   function autoSlug() {
     if (!title) return
@@ -228,8 +228,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 onClick={handlePublishToggle}
                 className={
                   isPublished
-                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-sm shadow-amber-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]'
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-sm shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]'
+                    ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-xs shadow-amber-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]'
+                    : 'bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-xs shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]'
                 }
               >
                 {publishing ? (
@@ -252,7 +252,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 type="submit"
                 disabled={saving}
                 size="sm"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-sm shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]"
+                className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-xs shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]"
               >
                 {saving ? (
                   <>
@@ -282,7 +282,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 {...register('title')}
                 onBlur={autoSlug}
                 placeholder="Post title…"
-                className="w-full text-3xl font-bold tracking-tight bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 text-foreground resize-none leading-tight"
+                className="w-full text-3xl font-bold tracking-tight bg-transparent border-0 outline-hidden placeholder:text-muted-foreground/40 text-foreground resize-none leading-tight"
               />
               {errors.title && (
                 <p className="text-xs text-destructive pl-0.5">{errors.title.message}</p>
@@ -296,7 +296,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               <input
                 {...register('slug')}
                 placeholder="auto-generated-from-title"
-                className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-none placeholder:text-muted-foreground/40 font-mono"
+                className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-hidden placeholder:text-muted-foreground/40 font-mono"
                 onChange={(e) => {
                   const formatted = slugify(e.target.value, { lower: true, strict: true })
                   setValue('slug', formatted)
@@ -366,7 +366,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 <Label className="text-xs text-muted-foreground">Category</Label>
                 <select
                   {...register('category_id')}
-                  className="w-full h-9 rounded-md border border-border/60 bg-muted/30 px-3 py-1 text-sm shadow-none focus:outline-none focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/20 transition-colors"
+                  className="w-full h-9 rounded-md border border-border/60 bg-muted/30 px-3 py-1 text-sm shadow-none focus:outline-hidden focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/20 transition-colors"
                 >
                   <option value="">Select category…</option>
                   {categories.map((cat) => (
@@ -394,8 +394,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                         className={[
                           'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 select-none cursor-pointer',
                           isSelected
-                            ? `${palette.activeBg} ${palette.activeText} ${palette.activeBorder} shadow-sm scale-[1.03]`
-                            : `${palette.bg} ${palette.text} ${palette.border} hover:scale-[1.03] hover:shadow-sm`,
+                            ? `${palette.activeBg} ${palette.activeText} ${palette.activeBorder} shadow-xs scale-[1.03]`
+                            : `${palette.bg} ${palette.text} ${palette.border} hover:scale-[1.03] hover:shadow-xs`,
                         ].join(' ')}
                       >
                         {isSelected
@@ -469,7 +469,7 @@ function SidebarCard({
   readonly children: React.ReactNode
 }) {
   return (
-    <div className="rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+    <div className="rounded-xl border border-border/70 bg-card shadow-xs overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-muted/20">
         <Icon className="h-3.5 w-3.5 text-muted-foreground/70" />
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">

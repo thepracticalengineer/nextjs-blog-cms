@@ -71,7 +71,7 @@ export default async function DashboardPage() {
         </div>
         <Link
           href="/dashboard/posts/new"
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium shadow-sm shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 hover:-translate-y-px transition-all duration-200"
+          className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-linear-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium shadow-xs shadow-blue-500/20 hover:shadow-md hover:shadow-blue-500/25 hover:-translate-y-px transition-all duration-200"
         >
           <PenLine className="h-4 w-4" />
           New Post
@@ -85,9 +85,9 @@ export default async function DashboardPage() {
           return (
             <div
               key={stat.title}
-              className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 overflow-hidden"
+              className="relative bg-white rounded-2xl p-6 border border-gray-100 shadow-xs hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 overflow-hidden"
             >
-              <div className={`absolute top-0 inset-x-0 h-0.5 bg-gradient-to-r ${stat.gradient}`} />
+              <div className={`absolute top-0 inset-x-0 h-0.5 bg-linear-to-r ${stat.gradient}`} />
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
@@ -120,7 +120,7 @@ export default async function DashboardPage() {
               <Link
                 key={action.href}
                 href={action.href}
-                className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all duration-200 hover:-translate-y-0.5"
+                className="group flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 shadow-xs hover:shadow-md hover:border-gray-200 transition-all duration-200 hover:-translate-y-0.5"
               >
                 <div className={`flex items-center justify-center w-10 h-10 rounded-xl ${action.color} shrink-0`}>
                   <Icon className="h-5 w-5" />

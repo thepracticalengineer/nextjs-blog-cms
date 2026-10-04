@@ -49,7 +49,7 @@ describe('DELETE /api/ai-assistant/chats/[chatId]', () => {
       auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
     } as unknown as Awaited<ReturnType<typeof createClient>>)
 
-    const res = await DELETE(makeRequest(), { params: { chatId: 'chat-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ chatId: 'chat-1' }) })
     expect(res.status).toBe(401)
   })
 
@@ -57,7 +57,7 @@ describe('DELETE /api/ai-assistant/chats/[chatId]', () => {
     mockCreateClient.mockResolvedValue(makeAuthMock() as unknown as Awaited<ReturnType<typeof createClient>>)
     mockGetChat.mockResolvedValue(null)
 
-    const res = await DELETE(makeRequest(), { params: { chatId: 'chat-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ chatId: 'chat-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -65,7 +65,7 @@ describe('DELETE /api/ai-assistant/chats/[chatId]', () => {
     mockCreateClient.mockResolvedValue(makeAuthMock('other-user') as unknown as Awaited<ReturnType<typeof createClient>>)
     mockGetChat.mockResolvedValue(fakeChat)
 
-    const res = await DELETE(makeRequest(), { params: { chatId: 'chat-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ chatId: 'chat-1' }) })
     expect(res.status).toBe(404)
   })
 
@@ -74,7 +74,7 @@ describe('DELETE /api/ai-assistant/chats/[chatId]', () => {
     mockGetChat.mockResolvedValue(fakeChat)
     mockDeleteChat.mockResolvedValue(undefined)
 
-    const res = await DELETE(makeRequest(), { params: { chatId: 'chat-1' } })
+    const res = await DELETE(makeRequest(), { params: Promise.resolve({ chatId: 'chat-1' }) })
     expect(res.status).toBe(200)
     const json = await res.json()
     expect(json.success).toBe(true)

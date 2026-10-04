@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, Menu, X, MessageSquare, Loader2, Code, Bot, UserCircle, Mail,
 } from 'lucide-react'
@@ -18,21 +18,25 @@ interface SidebarProps {
 
 export function Sidebar({ profile }: SidebarProps) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [previousPathname, setPreviousPathname] = useState(pathname)
   const role = profile.role as Role
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
 
   // Close drawer on navigation
-  useEffect(() => {
+  if (pathname !== previousPathname) {
+    setPreviousPathname(pathname)
     setMobileOpen(false)
-  }, [pathname])
+  }
 
   function handleLogout() {
     startTransition(async () => {
       try {
         await fetch('/api/auth/signout', { method: 'POST' })
       } finally {
-        globalThis.location.href = '/login'
+        router.replace('/login')
+        router.refresh()
       }
     })
   }
@@ -92,7 +96,7 @@ export function Sidebar({ profile }: SidebarProps) {
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                   isActive
-                    ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                    ? 'bg-blue-600 text-white shadow-xs shadow-blue-600/30'
                     : 'text-slate-400 hover:text-white hover:bg-slate-800'
                 )}
               >
@@ -124,7 +128,7 @@ export function Sidebar({ profile }: SidebarProps) {
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                     isActive
-                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-600/30'
+                      ? 'bg-blue-600 text-white shadow-xs shadow-blue-600/30'
                       : 'text-slate-400 hover:text-white hover:bg-slate-800'
                   )}
                 >
@@ -144,7 +148,7 @@ export function Sidebar({ profile }: SidebarProps) {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={profile.avatar_url} alt={profile.full_name ?? profile.email} className="w-8 h-8 rounded-full object-cover shrink-0" />
           ) : (
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold shrink-0">
+            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-linear-to-br from-blue-500 to-indigo-600 text-white text-xs font-bold shrink-0">
               {initials}
             </div>
           )}
@@ -188,7 +192,7 @@ export function Sidebar({ profile }: SidebarProps) {
       {/* Backdrop */}
       {mobileOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+          className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-xs"
           onClick={() => setMobileOpen(false)}
           aria-hidden="true"
         />

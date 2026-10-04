@@ -15,9 +15,8 @@ const makeComment = (id: string, content: string): CommentWithAuthor => ({
   post_id: 'post-1',
   author_id: 'u1',
   content,
-  is_approved: true,
   created_at: '2024-01-01',
-  author: { id: 'u1', full_name: 'Alice', email: 'alice@example.com', role: 'author', created_at: '2024-01-01' },
+  author: { id: 'u1', full_name: 'Alice', avatar_url: null },
 })
 
 describe('CommentList', () => {

@@ -52,7 +52,7 @@ function makeChain(result: { data?: unknown; error?: unknown }) {
 }
 
 function makeSupabase({
-  dbResult = { data: null, error: null },
+  dbResult = { data: null, error: null } as { data: unknown; error: { message: string } | null },
   uploadError = null as { message: string } | null,
   removeError = null as { message: string } | null,
   publicUrl = 'https://example.com/avatars/user-1/avatar.jpg',

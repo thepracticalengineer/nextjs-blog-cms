@@ -50,19 +50,19 @@ export const AVAILABLE_MODELS: LLMModel[] = [
 
   // Gemini — Google
   {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
+    id: 'gemini-3.5-flash-lite',
+    name: 'Gemini 3.5 Flash-Lite',
     provider: 'gemini',
-    description: 'Best free option — generous free tier',
-    contextWindow: 1000000,
+    description: 'Fast and cost-efficient',
+    contextWindow: 1048576,
     free: true,
   },
   {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
+    id: 'gemini-3.8-flash',
+    name: 'Gemini 3.8 Flash',
     provider: 'gemini',
-    description: 'Most capable Gemini model',
-    contextWindow: 2000000,
+    description: 'Advanced reasoning and long document context',
+    contextWindow: 1048576,
     free: false,
   },
 ]

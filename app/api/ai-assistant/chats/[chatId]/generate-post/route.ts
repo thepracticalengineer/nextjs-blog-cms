@@ -8,14 +8,15 @@ import { resolveTagIds, resolveCategoryId, generateUniqueSlugForApi } from '@/fe
 import { createServiceClient } from '@/lib/supabase/service'
 import type { LLMProvider } from '@/features/ai-assistant/types'
 
-type Params = { params: { chatId: string } }
+type Params = { params: Promise<{ chatId: string }> }
 
 /**
  * POST /api/ai-assistant/chats/[chatId]/generate-post
  * Generates a blog post draft from the chat conversation.
  * Returns: { post_id: string, post_slug: string }
  */
-export async function POST(_req: NextRequest, { params }: Params) {
+export async function POST(_req: NextRequest, props: Params) {
+  const params = await props.params
   const { chatId } = params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
