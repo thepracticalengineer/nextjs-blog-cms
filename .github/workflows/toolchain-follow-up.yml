@@ -1,0 +1,94 @@
+name: Toolchain compatibility follow-up
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 1 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    name: Registry compatibility and dependency audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+          cache: pnpm
+
+      - name: Install with strict peer validation
+        run: pnpm install --frozen-lockfile
+
+      - name: Report latest registry versions and required peers
+        shell: bash
+        run: |
+          mkdir -p toolchain-report
+          {
+            echo '# Issue #65 toolchain follow-up'
+            echo
+            echo "Commit: $GITHUB_SHA"
+            echo "Checked at: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            echo
+            echo 'Review the required peer ranges before upgrading; latest releases are not necessarily compatible with each other or the installed Next configuration.'
+            for package in typescript eslint eslint-config-next @next/eslint-plugin-next typescript-eslint @typescript-eslint/parser eslint-plugin-import eslint-plugin-react eslint-plugin-jsx-a11y braces; do
+              echo
+              echo "## $package"
+              echo '```json'
+              pnpm view "$package@latest" version peerDependencies dependencies --json
+              echo '```'
+            done
+          } > toolchain-report/compatibility.md
+          cat toolchain-report/compatibility.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Full dependency audit
+        id: full-audit
+        continue-on-error: true
+        run: pnpm audit --json > toolchain-report/audit-full.json
+
+      - name: Production dependency audit
+        id: production-audit
+        continue-on-error: true
+        run: pnpm audit --prod --json > toolchain-report/audit-production.json
+
+      - name: Record audit findings
+        if: always()
+        env:
+          FULL_AUDIT_OUTCOME: ${{ steps.full-audit.outcome }}
+          PRODUCTION_AUDIT_OUTCOME: ${{ steps.production-audit.outcome }}
+        run: |
+          node --input-type=module <<'JS'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          for (const [scope, outcome] of [
+            ['full', process.env.FULL_AUDIT_OUTCOME],
+            ['production', process.env.PRODUCTION_AUDIT_OUTCOME],
+          ]) {
+            const report = JSON.parse(readFileSync(`toolchain-report/audit-${scope}.json`, 'utf8'))
+            if (!report.metadata?.vulnerabilities) {
+              throw new Error(`${scope} audit did not return vulnerability metadata`)
+            }
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              `\n## ${scope} audit\n\nCommand outcome: **${outcome}**\n\n` +
+              '```json\n' + JSON.stringify(report, null, 2) + '\n```\n')
+          }
+          JS
+
+      - name: Upload registry and audit evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: toolchain-follow-up
+          path: toolchain-report/
+          retention-days: 30
+
+      - name: Fail on unsuccessful audit commands
+        if: always() && (steps.full-audit.outcome != 'success' || steps.production-audit.outcome != 'success')
+        run: |
+          echo 'Audit findings or failures require review. See the job summary and toolchain-follow-up artifact.'
+          exit 1

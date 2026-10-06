@@ -34,6 +34,14 @@ Private routes and auth cookies keep their previous behavior. Cache Components a
 
 Dependabot groups Next, React/types, TipTap, Supabase and test tooling, and updates GitHub Actions weekly. ESLint/TypeScript majors wait for the tracked compatibility fixes; Node types stay on Node 24.
 
+### Monitoring the deferred upgrades
+
+The `Toolchain compatibility follow-up` GitHub Actions workflow runs weekly on Monday at 01:00 UTC (09:00 Manila) and can be run manually. Its job summary and 30-day artifact record the latest compiler, linter, Next lint configuration, parser, relevant plugin and braces registry metadata, including required peer ranges, alongside complete full and production audit JSON. Registry metadata is evidence for review, not an automatic compatibility decision; the Next configuration's dependency ranges and a strict installation must also accept the selected versions.
+
+Both audits run even when the full audit reports a vulnerability. Their original outcomes are recorded, and the workflow fails if either audit command fails; the known advisory is not ignored. This workflow does not change dependency versions or remove the major-version holds. When upstream compatibility or a fix becomes available, update the manifest and lockfile together and rerun all verification below before removing those holds.
+
+The issue #65 investigation rechecked commit `c44d54e` on October 5, 2026 using Node 24.21.0 and pnpm 10.29.3. A clean isolated frozen installation with strict peer validation, full type check, zero-warning ESLint, 451 tests across 53 files with coverage thresholds, and the production build passed. Coverage was 90.49% statements, 80.38% branches, 95.34% functions, and 92.37% lines. The full audit returned one high advisory through the reported braces path; the production audit returned zero findings. The latest registry versions and required peer ranges still matched the blockers above. Simple deeply nested brace-pattern probes did not reproduce stack exhaustion locally; the advisory and audit remain the evidence for the vulnerability. The deferred upgrade acceptance items therefore remain open.
+
 ## Verification
 
 A clean frozen installation, full type check, zero-warning ESLint, 451 unit tests across 53 files, coverage thresholds, and Next 16 Turbopack production build pass. Regression tests cover persisted editor content, proxy cookies/headers and MFA, Gemini streaming/JSON, and PDF extraction with both mocks and a real PDF worker.
