@@ -2,13 +2,17 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { passwordSchema } from '@/lib/auth/password-policy'
 
 export async function register(formData: FormData) {
+  const password = passwordSchema.safeParse(formData.get('password'))
+  if (!password.success) return { error: password.error.issues[0].message }
+
   const supabase = await createClient()
 
   const data = {
     email: formData.get('email') as string,
-    password: formData.get('password') as string,
+    password: password.data,
     options: {
       data: {
         full_name: formData.get('full_name') as string,

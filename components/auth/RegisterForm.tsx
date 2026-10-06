@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { passwordSchema } from '@/lib/auth/password-policy'
 import Link from 'next/link'
 import { AlertCircle, Loader2, Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 import { register as registerAction } from '@/app/(auth)/register/actions'
@@ -16,7 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 const registerSchema = z.object({
   full_name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: passwordSchema,
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Passwords do not match',
@@ -134,7 +135,7 @@ export default function RegisterForm() {
             <Input
               id="password"
               type="password"
-              placeholder="Min. 6 characters"
+              placeholder="Min. 8 characters"
               className="pl-9 h-10"
               {...register('password', { onChange: () => clearErrors('password') })}
             />
