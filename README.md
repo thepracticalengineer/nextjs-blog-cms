@@ -333,8 +333,9 @@ A `vercel.json` is included at the repo root that configures the cron to fire ev
 The login page links to `/forgot-password`. Requests use Supabase Auth and always
 show the same confirmation for registered and unregistered email addresses.
 Passwords must contain at least eight characters, matching registration and
-account settings. Login still accepts older six-character passwords. Additional
-Supabase password rules are enforced by Auth and reported during recovery.
+account settings. The signup server action enforces this policy even when browser
+validation is bypassed. Login still accepts older six-character passwords.
+Additional Supabase password rules are enforced by Auth and reported during recovery.
 
 Before deploying this feature:
 
@@ -368,13 +369,21 @@ Supabase user and session. A normal login session cannot reset a password. The
 reset page checks the capability, and the update action atomically deletes its
 database row before calling `auth.updateUser`. Expired, invalid, consumed, and
 replayed capabilities cannot authorize updates. Provider update failures also
-consume the capability and require a new email. Successful updates request global sign-out, clear browser credentials even if
-Auth sign-out is unavailable, and offer a link to sign in with the new password. Supabase
-access tokens already issued may remain valid until their normal expiry.
-MFA recovery and account-settings password changes are outside this flow.
+consume the capability and require a new email, except for MFA failures described
+below. Successful updates request global sign-out, clear browser credentials even
+if Auth sign-out is unavailable, and offer a link to sign in with the new
+password. Supabase access tokens already issued may remain valid until their
+normal expiry.
+MFA recovery and account-settings password changes are outside this flow. If
+Supabase requires a higher assurance level (`insufficient_aal`), the reset page
+explains that administrator assistance is needed rather than offering another
+reset email. A provider `weak_password` rejection explicitly explains that the
+link was consumed and a stronger password requires a fresh link.
 
-Expired grant rows are unusable; remove them during routine database maintenance:
-`delete from public.password_recovery_grants where expires_at < now();`
+Expired grant rows are unusable and are automatically deleted before a new
+recovery grant is issued. This uses the expiry index and removes abandoned grants
+across all users. During periods without recovery traffic, expired rows can also
+be removed with `delete from public.password_recovery_grants where expires_at < now();`.
 
 Run `pnpm exec vitest run __tests__/auth __tests__/lib/proxy.test.ts` for recovery
 unit/component tests. Run

@@ -26,6 +26,7 @@ export default defineConfig({
         'lib/auth/password-policy.ts',
         'lib/auth/recovery.ts',
         'app/(auth)/forgot-password/actions.ts',
+        'app/(auth)/register/actions.ts',
         'app/(auth)/reset-password/actions.ts',
         'app/auth/callback/route.ts',
         'components/auth/ForgotPasswordForm.tsx',

@@ -17,8 +17,15 @@ export async function createRecoveryGrant(supabase: SupabaseClient) {
   const sessionId = data?.claims.session_id
   if (error || !userId || typeof sessionId !== 'string') throw new Error('Invalid recovery session')
 
+  const service = createServiceClient()
+  // The expiry index keeps this opportunistic global sweep cheap. Abandoned
+  // grants are removed on subsequent recoveries without an extra scheduled job.
+  const { error: cleanupError } = await service.from('password_recovery_grants')
+    .delete().lt('expires_at', new Date().toISOString())
+  if (cleanupError) throw new Error('Unable to maintain recovery grants')
+
   const id = randomUUID()
-  const { error: insertError } = await createServiceClient().from('password_recovery_grants').insert({
+  const { error: insertError } = await service.from('password_recovery_grants').insert({
     id,
     user_id: userId,
     session_id: sessionId,

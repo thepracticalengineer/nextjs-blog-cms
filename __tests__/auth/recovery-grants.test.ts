@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-const mocks = vi.hoisted(() => ({ getUser: vi.fn(), getClaims: vi.fn(), get: vi.fn(), getAll: vi.fn(), set: vi.fn(), remove: vi.fn(), insert: vi.fn(), result: vi.fn(), from: vi.fn() }))
+const mocks = vi.hoisted(() => ({ getUser: vi.fn(), getClaims: vi.fn(), get: vi.fn(), getAll: vi.fn(), set: vi.fn(), remove: vi.fn(), insert: vi.fn(), cleanup: vi.fn(), result: vi.fn(), from: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: mocks.get, getAll: mocks.getAll, set: mocks.set, delete: mocks.remove }) }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: mocks.getUser, getClaims: mocks.getClaims } }) }))
@@ -14,10 +14,12 @@ beforeEach(() => {
   mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'user', session_id: 'session' } }, error: null })
   mocks.result.mockResolvedValue({ data: { id: 'grant' }, error: null })
   mocks.insert.mockResolvedValue({ error: null })
+  mocks.cleanup.mockResolvedValue({ error: null })
   chain = {}
   for (const method of ['select', 'delete', 'eq', 'gt']) chain[method] = vi.fn(() => chain)
   chain.maybeSingle = mocks.result
   chain.insert = mocks.insert
+  chain.lt = mocks.cleanup
   mocks.from.mockReturnValue(chain)
 })
 
@@ -35,6 +37,19 @@ describe('server recovery grants', () => {
     await createRecoveryGrant({ auth: { getClaims: mocks.getClaims } } as never)
     expect(mocks.insert).toHaveBeenCalledWith(expect.objectContaining({ user_id: 'user', session_id: 'session' }))
     expect(mocks.set).toHaveBeenCalledWith(RECOVERY_COOKIE, expect.any(String), expect.objectContaining({ httpOnly: true, sameSite: 'lax', maxAge: 900 }))
+  })
+  it('sweeps expired grants across users before inserting a new grant', async () => {
+    await createRecoveryGrant({ auth: { getClaims: mocks.getClaims } } as never)
+    expect(chain.delete).toHaveBeenCalledOnce()
+    expect(mocks.cleanup).toHaveBeenCalledWith('expires_at', expect.any(String))
+    expect(mocks.cleanup.mock.invocationCallOrder[0]).toBeLessThan(mocks.insert.mock.invocationCallOrder[0])
+    expect(chain.eq).not.toHaveBeenCalled()
+  })
+  it('fails closed without minting a grant if cleanup fails', async () => {
+    mocks.cleanup.mockResolvedValue({ error: { message: 'db' } })
+    await expect(createRecoveryGrant({ auth: { getClaims: mocks.getClaims } } as never)).rejects.toThrow()
+    expect(mocks.insert).not.toHaveBeenCalled()
+    expect(mocks.set).not.toHaveBeenCalled()
   })
   it('rejects a session without a verified session ID when creating a grant', async () => {
     mocks.getClaims.mockResolvedValue({ data: { claims: { sub: 'user' } }, error: null })

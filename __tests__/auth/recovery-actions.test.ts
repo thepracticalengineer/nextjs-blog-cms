@@ -93,6 +93,21 @@ describe('resetPassword', () => {
     expect(await resetPassword(validPasswords())).toEqual({ success: true })
     expect(mocks.clearAuth).toHaveBeenCalledOnce()
   })
+  it('explains MFA requirements without recommending another email', async () => {
+    mocks.update.mockResolvedValue({ error: { code: 'insufficient_aal', status: 401 } })
+    expect(await resetPassword(validPasswords())).toEqual({
+      error: 'This account requires two-factor verification before its password can be changed. Contact an administrator for help; another reset email will not resolve this.',
+      invalidRecovery: true,
+      mfaBlocked: true,
+    })
+  })
+  it('explains why a rejected weak password needs a new link', async () => {
+    mocks.update.mockResolvedValue({ error: { code: 'weak_password', status: 422 } })
+    const result = await resetPassword(validPasswords())
+    expect(result.error).toContain('This reset link has been used')
+    expect(result.error).toContain('Request a new link and choose a stronger password')
+    expect(result.invalidRecovery).toBe(true)
+  })
   it.each(['weak_password', 'same_password', 'unknown'])('offers a new link after provider error %s', async code => {
     mocks.update.mockResolvedValue({ error: { code, status: 400, message: 'Private provider detail' } })
     const result = await resetPassword(validPasswords())

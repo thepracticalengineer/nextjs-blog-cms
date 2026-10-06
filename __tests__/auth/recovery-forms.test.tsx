@@ -81,6 +81,15 @@ describe('recovery forms', () => {
     expect(await screen.findByRole('button', { name: 'Updating password…' })).toBeDisabled()
     expect(mocks.update).toHaveBeenCalledOnce()
   })
+  it('shows administrator guidance without a retry-email loop for MFA', async () => {
+    mocks.update.mockResolvedValue({ error: 'Contact an administrator for two-factor verification.', invalidRecovery: true, mfaBlocked: true })
+    render(<ResetPasswordForm validRecovery />)
+    fillReset('NewPassword123!')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Contact an administrator')
+    expect(screen.queryByRole('link', { name: 'Request a new reset link' })).toBeNull()
+    expect(screen.getByRole('link', { name: 'Back to sign in' })).toHaveAttribute('href', '/login')
+    expect(screen.queryByRole('button')).toBeNull()
+  })
   it('offers a fresh link on update failure', async () => {
     mocks.update.mockResolvedValue({ error: 'Expired recovery session', invalidRecovery: true })
     render(<ResetPasswordForm validRecovery />)

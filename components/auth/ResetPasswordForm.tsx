@@ -20,6 +20,7 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [invalidRecovery, setInvalidRecovery] = useState(!validRecovery)
+  const [mfaBlocked, setMfaBlocked] = useState(false)
   const [success, setSuccess] = useState(false)
   const { register, handleSubmit, reset, formState: { errors } } = useForm<Values>({ resolver: zodResolver(resetPasswordSchema) })
 
@@ -35,6 +36,7 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
       const result = await resetPassword(formData)
       if (result.error) {
         setError(result.error)
+        if (result.mfaBlocked) setMfaBlocked(true)
         if (result.invalidRecovery) setInvalidRecovery(true)
       } else {
         reset()
@@ -63,7 +65,13 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
       ) : invalidRecovery ? (
         <>
           <Alert variant="destructive"><AlertDescription>{error ?? 'This reset link is missing, expired, invalid, or already used. Request a new link to try again.'}</AlertDescription></Alert>
-          <p className="text-sm mt-6"><Link href="/forgot-password" className="text-blue-600 font-medium hover:text-blue-700">Request a new reset link</Link></p>
+          <p className="text-sm mt-6">
+            {mfaBlocked ? (
+              <Link href="/login" className="text-blue-600 font-medium hover:text-blue-700">Back to sign in</Link>
+            ) : (
+              <Link href="/forgot-password" className="text-blue-600 font-medium hover:text-blue-700">Request a new reset link</Link>
+            )}
+          </p>
         </>
       ) : (
         <form onSubmit={event => { void handleSubmit(onSubmit)(event) }} noValidate className="space-y-5" aria-busy={loading}>

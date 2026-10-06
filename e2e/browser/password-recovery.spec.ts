@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
-import { randomUUID } from 'node:crypto'
+import { createHmac, randomUUID } from 'node:crypto'
 
 const confirmation = 'If an account exists for this email, you’ll receive a password reset link.'
 const initialPassword = 'OldPassword123!'
@@ -54,9 +54,15 @@ test('real email recovery works in a fresh browser and rejects reused links', as
     expect(link.searchParams.get('type')).toBe('recovery')
     expect(link.searchParams.get('token_hash')).toBeTruthy()
 
+    const expiredId = randomUUID()
+    expect((await admin().from('password_recovery_grants').insert({
+      id: expiredId, user_id: userId, session_id: randomUUID(),
+      expires_at: new Date(Date.now() - 60_000).toISOString(),
+    })).error).toBeNull()
     const recoveryPage = await fresh.newPage()
     await recoveryPage.goto(href)
     await expect(recoveryPage).toHaveURL(/\/reset-password$/)
+    expect((await admin().from('password_recovery_grants').select('id').eq('id', expiredId)).data).toEqual([])
     await expect(recoveryPage.getByLabel('New password', { exact: true })).toBeVisible()
     await recoveryPage.getByLabel('New password', { exact: true }).fill('short')
     await recoveryPage.getByLabel('Confirm new password').fill('short')
@@ -141,3 +147,48 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
     expect((await service.auth.admin.deleteUser(userId)).error).toBeNull()
   }
 })
+
+test('MFA-protected accounts receive administrator guidance instead of a reset-email loop', async ({ page }) => {
+  const email = `mfa-recovery-${randomUUID()}@playwright.local`
+  const service = admin()
+  const { data, error } = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
+  if (error || !data.user) throw new Error('Unable to create disposable MFA user')
+  const userId = data.user.id
+  try {
+    const client = anon()
+    expect((await client.auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()
+    const enrollment = await client.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'Recovery test' })
+    if (enrollment.error) throw new Error('Unable to enroll disposable MFA factor')
+    const verification = await client.auth.mfa.challengeAndVerify({
+      factorId: enrollment.data.id,
+      code: totp(enrollment.data.totp.secret),
+    })
+    expect(verification.error).toBeNull()
+    const link = await service.auth.admin.generateLink({ type: 'recovery', email })
+    if (link.error) throw new Error('Unable to generate disposable MFA recovery link')
+    await page.goto(`/auth/callback?type=recovery&token_hash=${encodeURIComponent(link.data.properties.hashed_token)}`)
+    await expect(page.getByLabel('New password', { exact: true })).toBeVisible()
+    await page.getByLabel('New password', { exact: true }).fill(newPassword)
+    await page.getByLabel('Confirm new password').fill(newPassword)
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await expect(page.getByRole('alert').filter({ hasText: 'two-factor verification' })).toContainText('Contact an administrator')
+    await expect(page.getByRole('link', { name: 'Request a new reset link' })).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Back to sign in' })).toBeVisible()
+    expect((await anon().auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()
+    expect((await anon().auth.signInWithPassword({ email, password: newPassword })).error?.code).toBe('invalid_credentials')
+    expect((await service.from('password_recovery_grants').select('id').eq('user_id', userId)).data).toEqual([])
+  } finally {
+    expect((await service.auth.admin.deleteUser(userId)).error).toBeNull()
+  }
+})
+
+function totp(secret: string) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const bits = [...secret.toUpperCase().replace(/=+$/, '')].map(char => alphabet.indexOf(char).toString(2).padStart(5, '0')).join('')
+  const key = Buffer.from(bits.match(/.{8}/g)!.map(byte => parseInt(byte, 2)))
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)))
+  const hash = createHmac('sha1', key).update(counter).digest()
+  const offset = hash[hash.length - 1] & 15
+  return String((hash.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}

@@ -16,11 +16,18 @@ export async function resetPassword(formData: FormData) {
     if (!supabase) return { error: RECOVERY_ERROR, invalidRecovery: true }
 
     const { error } = await supabase.auth.updateUser({ password: parsed.data.password })
-    // The grant stays consumed even on provider failure. Never allow a replay;
-    // the actionable error offers a fresh email instead.
+    // The grant stays consumed even on provider failure. MFA needs administrator
+    // guidance; other errors offer a fresh email without allowing a replay.
     if (error) {
+      if (error.code === 'insufficient_aal') {
+        return {
+          error: 'This account requires two-factor verification before its password can be changed. Contact an administrator for help; another reset email will not resolve this.',
+          invalidRecovery: true,
+          mfaBlocked: true,
+        }
+      }
       const message = error.code === 'weak_password'
-        ? 'This password does not meet the account password requirements.'
+        ? 'This password does not meet the account password requirements. This reset link has been used. Request a new link and choose a stronger password.'
         : error.code === 'same_password'
           ? 'Choose a password different from your current password.'
           : error.status === 429
