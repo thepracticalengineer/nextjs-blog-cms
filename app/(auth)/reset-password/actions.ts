@@ -1,7 +1,7 @@
 'use server'
 
 import { resetPasswordSchema } from '@/lib/auth/password-policy'
-import { clearRecoveryAuthCookies, clearRecoveryGrant, consumeRecoveryGrant, RECOVERY_ERROR } from '@/lib/auth/recovery'
+import { clearRecoveryAuthCookies, clearRecoveryGrant, consumeRecoveryGrant, getRecoveryContext, hasRecoveryGrant, RECOVERY_ERROR } from '@/lib/auth/recovery'
 
 export async function resetPassword(formData: FormData) {
   const parsed = resetPasswordSchema.safeParse({
@@ -11,6 +11,36 @@ export async function resetPassword(formData: FormData) {
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   try {
+    // Verify MFA before consuming the single-use capability. Invalid codes may
+    // be retried, but no password update can bypass the final atomic consume.
+    if (!await hasRecoveryGrant()) return { error: RECOVERY_ERROR, invalidRecovery: true }
+    const context = await getRecoveryContext()
+    if (!context) return { error: RECOVERY_ERROR, invalidRecovery: true }
+    const { data: assurance, error: assuranceError } = await context.supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    if (assuranceError || !assurance) return { error: 'Unable to check two-factor verification. Please try again.' }
+    if (assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2') {
+      const { data: factors, error: factorsError } = await context.supabase.auth.mfa.listFactors()
+      if (factorsError) return { error: 'Unable to load your authenticators. Please try again.', mfaRequired: true }
+      const authenticators = factors.totp.filter(factor => factor.status === 'verified')
+      if (!authenticators.length) return {
+        error: 'This account requires a verification method that password recovery does not support. Contact an administrator for help.',
+        invalidRecovery: true, mfaBlocked: true,
+      }
+      const code = formData.get('code')
+      const requestedFactor = formData.get('factorId')
+      const factor = authenticators.find(item => item.id === requestedFactor) ?? authenticators[0]
+      const choices = authenticators.map(item => ({ id: item.id, name: item.friendly_name || 'Authenticator' }))
+      if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return {
+        error: 'Enter the six-digit code from your authenticator app.', mfaRequired: true, factors: choices,
+      }
+      const { error: verificationError } = await context.supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code })
+      if (verificationError) return {
+        error: verificationError.status === 429
+          ? 'Too many verification attempts. Please wait before trying again.'
+          : 'That verification code is invalid or expired. Try the current code from your authenticator app.',
+        mfaRequired: true, factors: choices,
+      }
+    }
     const supabase = await consumeRecoveryGrant()
     await clearRecoveryGrant()
     if (!supabase) return { error: RECOVERY_ERROR, invalidRecovery: true }

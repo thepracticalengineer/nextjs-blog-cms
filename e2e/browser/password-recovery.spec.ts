@@ -148,7 +148,7 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
   }
 })
 
-test('MFA-protected accounts receive administrator guidance instead of a reset-email loop', async ({ page }) => {
+test('MFA-protected accounts verify their authenticator before resetting', async ({ page }) => {
   const email = `mfa-recovery-${randomUUID()}@playwright.local`
   const service = admin()
   const { data, error } = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
@@ -171,11 +171,16 @@ test('MFA-protected accounts receive administrator guidance instead of a reset-e
     await page.getByLabel('New password', { exact: true }).fill(newPassword)
     await page.getByLabel('Confirm new password').fill(newPassword)
     await page.getByRole('button', { name: 'Update password' }).click()
-    await expect(page.getByRole('alert').filter({ hasText: 'two-factor verification' })).toContainText('Contact an administrator')
-    await expect(page.getByRole('link', { name: 'Request a new reset link' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Back to sign in' })).toBeVisible()
+    await expect(page.getByLabel('Authenticator code')).toBeVisible()
+    await page.getByLabel('Authenticator code').fill('000000')
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await expect(page.getByRole('alert').filter({ hasText: 'verification code' })).toContainText('invalid or expired')
     expect((await anon().auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()
-    expect((await anon().auth.signInWithPassword({ email, password: newPassword })).error?.code).toBe('invalid_credentials')
+    await page.getByLabel('Authenticator code').fill(totp(enrollment.data.totp.secret))
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await expect(page.getByRole('status')).toContainText('Your password has been updated')
+    expect((await anon().auth.signInWithPassword({ email, password: initialPassword })).error?.code).toBe('invalid_credentials')
+    expect((await anon().auth.signInWithPassword({ email, password: newPassword })).error).toBeNull()
     expect((await service.from('password_recovery_grants').select('id').eq('user_id', userId)).data).toEqual([])
   } finally {
     expect((await service.auth.admin.deleteUser(userId)).error).toBeNull()

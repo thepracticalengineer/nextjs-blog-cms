@@ -369,16 +369,17 @@ Supabase user and session. A normal login session cannot reset a password. The
 reset page checks the capability, and the update action atomically deletes its
 database row before calling `auth.updateUser`. Expired, invalid, consumed, and
 replayed capabilities cannot authorize updates. Provider update failures also
-consume the capability and require a new email, except for MFA failures described
-below. Successful updates request global sign-out, clear browser credentials even
+consume the capability and require a new email. Authenticator verification
+failures happen before consumption and can be retried. Successful updates request global sign-out, clear browser credentials even
 if Auth sign-out is unavailable, and offer a link to sign in with the new
 password. Supabase access tokens already issued may remain valid until their
 normal expiry.
-MFA recovery and account-settings password changes are outside this flow. If
-Supabase requires a higher assurance level (`insufficient_aal`), the reset page
-explains that administrator assistance is needed rather than offering another
-reset email. A provider `weak_password` rejection explicitly explains that the
-link was consumed and a stronger password requires a fresh link.
+Accounts with a verified TOTP authenticator are prompted for a six-digit code
+before the recovery grant is consumed. Invalid or expired codes can be retried
+within the grant's 15-minute lifetime. Supabase verifies the factor and upgrades
+the recovery session before the password change. Other verification methods
+require administrator assistance. Account-settings password changes remain
+outside this flow.
 
 Expired grant rows are unusable and are automatically deleted before a new
 recovery grant is issued. This uses the expiry index and removes abandoned grants

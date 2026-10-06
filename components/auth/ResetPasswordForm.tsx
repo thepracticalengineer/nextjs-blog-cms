@@ -20,6 +20,10 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [invalidRecovery, setInvalidRecovery] = useState(!validRecovery)
+  const [mfaRequired, setMfaRequired] = useState(false)
+  const [code, setCode] = useState('')
+  const [factorId, setFactorId] = useState('')
+  const [factors, setFactors] = useState<{ id: string; name: string }[]>([])
   const [mfaBlocked, setMfaBlocked] = useState(false)
   const [success, setSuccess] = useState(false)
   const { register, handleSubmit, reset, formState: { errors } } = useForm<Values>({ resolver: zodResolver(resetPasswordSchema) })
@@ -31,11 +35,15 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
     setError(null)
     try {
       const formData = new FormData()
+      formData.set('code', code)
+      formData.set('factorId', factorId)
       formData.set('password', values.password)
       formData.set('confirmPassword', values.confirmPassword)
       const result = await resetPassword(formData)
       if (result.error) {
         setError(result.error)
+        if (result.mfaRequired) { setMfaRequired(true); setCode('') }
+        if (result.factors) setFactors(result.factors)
         if (result.mfaBlocked) setMfaBlocked(true)
         if (result.invalidRecovery) setInvalidRecovery(true)
       } else {
@@ -89,6 +97,17 @@ export function ResetPasswordForm({ validRecovery }: { validRecovery: boolean })
               aria-describedby={errors.confirmPassword ? 'confirm-password-error' : undefined} {...register('confirmPassword')} />
             {errors.confirmPassword && <p id="confirm-password-error" role="alert" className="text-xs text-red-600">{errors.confirmPassword.message}</p>}
           </div>
+          {mfaRequired && <div className="space-y-1.5">
+            {factors.length > 1 && <>
+              <Label htmlFor="recovery-authenticator">Authenticator</Label>
+              <select id="recovery-authenticator" value={factorId || factors[0].id} onChange={event => setFactorId(event.target.value)} className="w-full rounded-md border p-2">
+                {factors.map(factor => <option key={factor.id} value={factor.id}>{factor.name}</option>)}
+              </select>
+            </>}
+            <Label htmlFor="recovery-code">Authenticator code</Label>
+            <Input id="recovery-code" value={code} onChange={event => setCode(event.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={6} aria-describedby="recovery-code-hint" />
+            <p id="recovery-code-hint" className="text-xs text-gray-500">Enter the six-digit code from your authenticator app to verify this password change.</p>
+          </div>}
           <Button type="submit" disabled={loading} className="w-full h-10 bg-linear-to-r from-blue-600 to-indigo-600 text-white">
             {loading && <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />}
             {loading ? 'Updating password…' : 'Update password'}
