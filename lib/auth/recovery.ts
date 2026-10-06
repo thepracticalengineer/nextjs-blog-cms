@@ -72,9 +72,11 @@ export async function getRecoveryContext() {
   return { id, userId: user.id, sessionId, supabase }
 }
 
-export async function hasRecoveryGrant() {
+export type RecoveryContext = NonNullable<Awaited<ReturnType<typeof getRecoveryContext>>>
+
+export async function hasRecoveryGrant(existingContext?: RecoveryContext) {
   try {
-    const context = await getRecoveryContext()
+    const context = existingContext ?? await getRecoveryContext()
     if (!context) return false
     const { data, error } = await createServiceClient().from('password_recovery_grants')
       .select('id').eq('id', context.id).eq('user_id', context.userId)
@@ -87,11 +89,20 @@ export async function hasRecoveryGrant() {
 
 // DELETE ... RETURNING consumes the grant atomically, including concurrent submits
 // and replay of an old cookie. A UI flag or a signed cookie alone cannot do this.
-export async function consumeRecoveryGrant() {
-  const context = await getRecoveryContext()
+export async function consumeRecoveryGrant(existingContext?: RecoveryContext) {
+  const context = existingContext ?? await getRecoveryContext()
   if (!context) return null
   const { data, error } = await createServiceClient().from('password_recovery_grants')
     .delete().eq('id', context.id).eq('user_id', context.userId)
     .eq('session_id', context.sessionId).gt('expires_at', new Date().toISOString()).select('id').maybeSingle()
   return !error && data ? context.supabase : null
+}
+
+
+export async function reserveRecoveryMfaAttempt(context: RecoveryContext) {
+  const { data, error } = await createServiceClient().rpc('reserve_recovery_mfa_attempt', {
+    grant_id: context.id, recovery_user_id: context.userId, recovery_session_id: context.sessionId,
+  })
+  if (error) throw new Error('Unable to reserve verification attempt')
+  return typeof data === 'number' ? data : null
 }

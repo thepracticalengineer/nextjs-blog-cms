@@ -81,6 +81,17 @@ describe('recovery forms', () => {
     expect(await screen.findByRole('button', { name: 'Updating password…' })).toBeDisabled()
     expect(mocks.update).toHaveBeenCalledOnce()
   })
+  it('requests an authenticator code and submits it with the retained passwords', async () => {
+    mocks.update.mockResolvedValueOnce({ error: 'Enter your code', mfaRequired: true, factors: [{ id: 'factor-1', name: 'Phone' }] })
+    render(<ResetPasswordForm validRecovery />)
+    fillReset('NewPassword123!')
+    fireEvent.change(await screen.findByLabelText('Authenticator code'), { target: { value: '123456' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Update password' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Your password has been updated')
+    const submitted = mocks.update.mock.calls[1][0] as FormData
+    expect(submitted.get('code')).toBe('123456')
+    expect(submitted.get('password')).toBe('NewPassword123!')
+  })
   it('shows administrator guidance without a retry-email loop for MFA', async () => {
     mocks.update.mockResolvedValue({ error: 'Contact an administrator for two-factor verification.', invalidRecovery: true, mfaBlocked: true })
     render(<ResetPasswordForm validRecovery />)

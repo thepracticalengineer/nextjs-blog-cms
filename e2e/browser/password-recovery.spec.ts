@@ -136,6 +136,15 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
     expect((await authenticated.from('password_recovery_grants').select('id')).error).not.toBeNull()
     expect((await authenticated.from('password_recovery_grants').insert({ id: randomUUID(), user_id: userId, session_id: sessionId, expires_at: new Date().toISOString() })).error).not.toBeNull()
 
+    const reserveArgs = { grant_id: id, recovery_user_id: userId, recovery_session_id: sessionId }
+    expect((await anon().rpc('reserve_recovery_mfa_attempt', reserveArgs)).error).not.toBeNull()
+    expect((await authenticated.rpc('reserve_recovery_mfa_attempt', reserveArgs)).error).not.toBeNull()
+    expect((await service.rpc('reserve_recovery_mfa_attempt', { ...reserveArgs, recovery_session_id: randomUUID() })).data).toBeNull()
+    expect((await service.rpc('reserve_recovery_mfa_attempt', { ...reserveArgs, grant_id: expiredId })).data).toBeNull()
+    const reservations = await Promise.all(Array.from({ length: 10 }, () => service.rpc('reserve_recovery_mfa_attempt', reserveArgs)))
+    expect(reservations.every(result => !result.error)).toBe(true)
+    expect(reservations.map(result => result.data).filter(value => value !== null).sort()).toEqual([1, 2, 3, 4, 5])
+
     const consume = (grantId: string) => service.from('password_recovery_grants').delete()
       .eq('id', grantId).eq('user_id', userId).eq('session_id', sessionId)
       .gt('expires_at', new Date().toISOString()).select('id').maybeSingle()
@@ -148,7 +157,7 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
   }
 })
 
-test('MFA-protected accounts receive administrator guidance instead of a reset-email loop', async ({ page }) => {
+test('MFA-protected accounts verify their authenticator before resetting', async ({ page }) => {
   const email = `mfa-recovery-${randomUUID()}@playwright.local`
   const service = admin()
   const { data, error } = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
@@ -171,11 +180,16 @@ test('MFA-protected accounts receive administrator guidance instead of a reset-e
     await page.getByLabel('New password', { exact: true }).fill(newPassword)
     await page.getByLabel('Confirm new password').fill(newPassword)
     await page.getByRole('button', { name: 'Update password' }).click()
-    await expect(page.getByRole('alert').filter({ hasText: 'two-factor verification' })).toContainText('Contact an administrator')
-    await expect(page.getByRole('link', { name: 'Request a new reset link' })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: 'Back to sign in' })).toBeVisible()
+    await expect(page.getByLabel('Authenticator code')).toBeVisible()
+    await page.getByLabel('Authenticator code').fill('000000')
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await expect(page.getByRole('alert').filter({ hasText: 'verification code' })).toContainText('invalid or expired')
     expect((await anon().auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()
-    expect((await anon().auth.signInWithPassword({ email, password: newPassword })).error?.code).toBe('invalid_credentials')
+    await page.getByLabel('Authenticator code').fill(totp(enrollment.data.totp.secret))
+    await page.getByRole('button', { name: 'Update password' }).click()
+    await expect(page.getByRole('status')).toContainText('Your password has been updated')
+    expect((await anon().auth.signInWithPassword({ email, password: initialPassword })).error?.code).toBe('invalid_credentials')
+    expect((await anon().auth.signInWithPassword({ email, password: newPassword })).error).toBeNull()
     expect((await service.from('password_recovery_grants').select('id').eq('user_id', userId)).data).toEqual([])
   } finally {
     expect((await service.auth.admin.deleteUser(userId)).error).toBeNull()
