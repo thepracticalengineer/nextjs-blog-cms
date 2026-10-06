@@ -136,6 +136,15 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
     expect((await authenticated.from('password_recovery_grants').select('id')).error).not.toBeNull()
     expect((await authenticated.from('password_recovery_grants').insert({ id: randomUUID(), user_id: userId, session_id: sessionId, expires_at: new Date().toISOString() })).error).not.toBeNull()
 
+    const reserveArgs = { grant_id: id, recovery_user_id: userId, recovery_session_id: sessionId }
+    expect((await anon().rpc('reserve_recovery_mfa_attempt', reserveArgs)).error).not.toBeNull()
+    expect((await authenticated.rpc('reserve_recovery_mfa_attempt', reserveArgs)).error).not.toBeNull()
+    expect((await service.rpc('reserve_recovery_mfa_attempt', { ...reserveArgs, recovery_session_id: randomUUID() })).data).toBeNull()
+    expect((await service.rpc('reserve_recovery_mfa_attempt', { ...reserveArgs, grant_id: expiredId })).data).toBeNull()
+    const reservations = await Promise.all(Array.from({ length: 10 }, () => service.rpc('reserve_recovery_mfa_attempt', reserveArgs)))
+    expect(reservations.every(result => !result.error)).toBe(true)
+    expect(reservations.map(result => result.data).filter(value => value !== null).sort()).toEqual([1, 2, 3, 4, 5])
+
     const consume = (grantId: string) => service.from('password_recovery_grants').delete()
       .eq('id', grantId).eq('user_id', userId).eq('session_id', sessionId)
       .gt('expires_at', new Date().toISOString()).select('id').maybeSingle()

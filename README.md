@@ -374,9 +374,15 @@ failures happen before consumption and can be retried. Successful updates reques
 if Auth sign-out is unavailable, and offer a link to sign in with the new
 password. Supabase access tokens already issued may remain valid until their
 normal expiry.
+Deploy migration `20261006152137_limit_recovery_mfa_attempts.sql` before enabling
+this flow.
+
 Accounts with a verified TOTP authenticator are prompted for a six-digit code
 before the recovery grant is consumed. Invalid or expired codes can be retried
-within the grant's 15-minute lifetime. Supabase verifies the factor and upgrades
+within the grant's 15-minute lifetime, up to five verification attempts. Each
+attempt is reserved atomically in the database before calling Auth, including
+concurrent requests. The fifth failed code invalidates the grant; a new reset
+email is then required. Interrupted verification calls also use an attempt. Supabase verifies the factor and upgrades
 the recovery session before the password change. Other verification methods
 require administrator assistance. Account-settings password changes remain
 outside this flow.

@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ request: vi.fn(), consume: vi.fn(), clear: vi.fn(), clearAuth: vi.fn(), update: vi.fn(), signOut: vi.fn(), hasGrant: vi.fn(), context: vi.fn(), assurance: vi.fn(), factors: vi.fn(), verify: vi.fn() }))
+const mocks = vi.hoisted(() => ({ request: vi.fn(), consume: vi.fn(), clear: vi.fn(), clearAuth: vi.fn(), update: vi.fn(), signOut: vi.fn(), reserve: vi.fn(), hasGrant: vi.fn(), context: vi.fn(), assurance: vi.fn(), factors: vi.fn(), verify: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { resetPasswordForEmail: mocks.request } }) }))
 vi.mock('@/lib/auth/recovery', () => ({
-  hasRecoveryGrant: mocks.hasGrant, getRecoveryContext: mocks.context, consumeRecoveryGrant: mocks.consume, clearRecoveryGrant: mocks.clear, clearRecoveryAuthCookies: mocks.clearAuth,
+  reserveRecoveryMfaAttempt: mocks.reserve, hasRecoveryGrant: mocks.hasGrant, getRecoveryContext: mocks.context, consumeRecoveryGrant: mocks.consume, clearRecoveryGrant: mocks.clear, clearRecoveryAuthCookies: mocks.clearAuth,
   RECOVERY_ERROR: 'Invalid recovery link',
 }))
 import { requestPasswordReset } from '@/app/(auth)/forgot-password/actions'
@@ -19,6 +19,7 @@ const validPasswords = () => form({ password: 'NewPassword123!', confirmPassword
 beforeEach(() => {
   vi.resetAllMocks()
   vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://example.com')
+  mocks.reserve.mockResolvedValue(1)
   mocks.hasGrant.mockResolvedValue(true)
   mocks.context.mockResolvedValue({ supabase: { auth: { mfa: { getAuthenticatorAssuranceLevel: mocks.assurance, listFactors: mocks.factors, challengeAndVerify: mocks.verify } } } })
   mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null })
@@ -84,6 +85,9 @@ describe('resetPassword', () => {
   it('updates only after consuming recovery and ends the recovery session', async () => {
     expect(await resetPassword(validPasswords())).toEqual({ success: true })
     expect(mocks.update).toHaveBeenCalledWith({ password: 'NewPassword123!' })
+    expect(mocks.context).toHaveBeenCalledOnce()
+    expect(mocks.hasGrant).toHaveBeenCalledWith(await mocks.context.mock.results[0].value)
+    expect(mocks.consume).toHaveBeenCalledWith(await mocks.context.mock.results[0].value)
     expect(mocks.consume.mock.invocationCallOrder[0]).toBeLessThan(mocks.update.mock.invocationCallOrder[0])
     expect(mocks.clear).toHaveBeenCalled()
     expect(mocks.signOut).toHaveBeenCalledWith({ scope: 'global' })
@@ -139,6 +143,37 @@ describe('resetPassword', () => {
     mocks.assurance.mockResolvedValue({ data: null, error: { message: 'network' } })
     expect((await resetPassword(validPasswords())).error).toBeTruthy()
     expect(mocks.consume).not.toHaveBeenCalled()
+  })
+  it.each(['factors', 'verify'] as const)('keeps the form retryable when %s throws', async step => {
+    mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    mocks[step].mockRejectedValue(new Error('network'))
+    const input = validPasswords(); input.set('code', '123456')
+    const result = await resetPassword(input)
+    expect(result.mfaRequired).toBe(true)
+    expect(result.invalidRecovery).not.toBe(true)
+    expect(mocks.consume).not.toHaveBeenCalled()
+  })
+  it('handles missing factor data without declaring the link dead', async () => {
+    mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    mocks.factors.mockResolvedValue({ data: null, error: null })
+    expect((await resetPassword(validPasswords())).mfaRequired).toBe(true)
+    expect(mocks.consume).not.toHaveBeenCalled()
+  })
+  it('invalidates the grant on the fifth rejected code', async () => {
+    mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    mocks.reserve.mockResolvedValue(5)
+    mocks.verify.mockResolvedValue({ error: { status: 400 } })
+    const input = validPasswords(); input.set('code', '123456')
+    expect((await resetPassword(input)).invalidRecovery).toBe(true)
+    expect(mocks.consume).toHaveBeenCalledOnce()
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+  it('never challenges Auth after the attempt budget is exhausted', async () => {
+    mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    mocks.reserve.mockResolvedValue(null)
+    const input = validPasswords(); input.set('code', '123456')
+    expect((await resetPassword(input)).invalidRecovery).toBe(true)
+    expect(mocks.verify).not.toHaveBeenCalled()
   })
   it('explains MFA requirements without recommending another email', async () => {
     mocks.update.mockResolvedValue({ error: { code: 'insufficient_aal', status: 401 } })

@@ -1,7 +1,7 @@
 'use server'
 
 import { resetPasswordSchema } from '@/lib/auth/password-policy'
-import { clearRecoveryAuthCookies, clearRecoveryGrant, consumeRecoveryGrant, getRecoveryContext, hasRecoveryGrant, RECOVERY_ERROR } from '@/lib/auth/recovery'
+import { clearRecoveryAuthCookies, clearRecoveryGrant, consumeRecoveryGrant, getRecoveryContext, hasRecoveryGrant, reserveRecoveryMfaAttempt, RECOVERY_ERROR } from '@/lib/auth/recovery'
 
 export async function resetPassword(formData: FormData) {
   const parsed = resetPasswordSchema.safeParse({
@@ -10,17 +10,17 @@ export async function resetPassword(formData: FormData) {
   })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
+  let consumptionStarted = false
   try {
     // Verify MFA before consuming the single-use capability. Invalid codes may
     // be retried, but no password update can bypass the final atomic consume.
-    if (!await hasRecoveryGrant()) return { error: RECOVERY_ERROR, invalidRecovery: true }
     const context = await getRecoveryContext()
-    if (!context) return { error: RECOVERY_ERROR, invalidRecovery: true }
+    if (!context || !await hasRecoveryGrant(context)) return { error: RECOVERY_ERROR, invalidRecovery: true }
     const { data: assurance, error: assuranceError } = await context.supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (assuranceError || !assurance) return { error: 'Unable to check two-factor verification. Please try again.' }
     if (assurance.nextLevel === 'aal2' && assurance.currentLevel !== 'aal2') {
       const { data: factors, error: factorsError } = await context.supabase.auth.mfa.listFactors()
-      if (factorsError) return { error: 'Unable to load your authenticators. Please try again.', mfaRequired: true }
+      if (factorsError || !factors?.totp) return { error: 'Unable to load your authenticators. Please try again.', mfaRequired: true }
       const authenticators = factors.totp.filter(factor => factor.status === 'verified')
       if (!authenticators.length) return {
         error: 'This account requires a verification method that password recovery does not support. Contact an administrator for help.',
@@ -33,7 +33,18 @@ export async function resetPassword(formData: FormData) {
       if (typeof code !== 'string' || !/^\d{6}$/.test(code)) return {
         error: 'Enter the six-digit code from your authenticator app.', mfaRequired: true, factors: choices,
       }
+      const attempt = await reserveRecoveryMfaAttempt(context)
+      if (attempt === null) {
+        await consumeRecoveryGrant(context)
+        await clearRecoveryGrant()
+        return { error: 'Too many verification attempts. Request a new reset link to try again.', invalidRecovery: true }
+      }
       const { error: verificationError } = await context.supabase.auth.mfa.challengeAndVerify({ factorId: factor.id, code })
+      if (verificationError && attempt === 5) {
+        await consumeRecoveryGrant(context)
+        await clearRecoveryGrant()
+        return { error: 'Too many verification attempts. Request a new reset link to try again.', invalidRecovery: true }
+      }
       if (verificationError) return {
         error: verificationError.status === 429
           ? 'Too many verification attempts. Please wait before trying again.'
@@ -41,7 +52,8 @@ export async function resetPassword(formData: FormData) {
         mfaRequired: true, factors: choices,
       }
     }
-    const supabase = await consumeRecoveryGrant()
+    consumptionStarted = true
+    const supabase = await consumeRecoveryGrant(context)
     await clearRecoveryGrant()
     if (!supabase) return { error: RECOVERY_ERROR, invalidRecovery: true }
 
@@ -74,6 +86,7 @@ export async function resetPassword(formData: FormData) {
     await clearRecoveryAuthCookies()
     return { success: true }
   } catch {
+    if (!consumptionStarted) return { error: 'Unable to verify your authenticator right now. Please try again.', mfaRequired: true }
     return { error: 'Unable to update your password. Request a new link and try again.', invalidRecovery: true }
   }
 }
