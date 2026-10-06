@@ -118,6 +118,12 @@ export default function LoginForm() {
         </Button>
       </form>
 
+      <p className="text-sm text-center mt-6">
+        <Link href="/forgot-password" className="text-blue-600 font-medium hover:text-blue-700 transition-colors">
+          Forgot password?
+        </Link>
+      </p>
+
       <p className="text-sm text-gray-500 text-center mt-6">
         Don&apos;t have an account?{' '}
         <Link href="/register" className="text-blue-600 font-medium hover:text-blue-700 transition-colors">

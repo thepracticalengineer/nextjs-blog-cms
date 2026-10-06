@@ -101,5 +101,7 @@ export const config = {
     '/login',
     '/register',
     '/mfa',
+    '/forgot-password',
+    '/reset-password',
   ],
 }

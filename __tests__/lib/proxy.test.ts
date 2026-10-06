@@ -73,3 +73,11 @@ describe('Supabase proxy redirects', () => {
     expectRefresh(response)
   })
 })
+
+describe('Password recovery navigation', () => {
+  it.each(['/forgot-password', '/reset-password'])('allows %s with or without a session', async path => {
+    expect((await proxy(request(path))).headers.get('location')).toBeNull()
+    getUser.mockResolvedValue({ data: { user: null } })
+    expect((await proxy(request(path))).headers.get('location')).toBeNull()
+  })
+})
