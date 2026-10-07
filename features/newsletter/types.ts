@@ -12,6 +12,7 @@ export type NewsletterSend = {
   scheduled_at: string
   status: 'pending' | 'sending' | 'sent' | 'failed'
   sending_started_at: string | null
+  delivery_started_at: string | null
   sent_at: string | null
   created_at: string
 }
@@ -20,4 +21,10 @@ export type SubscriberStats = {
   active: number
   sends_dispatched: number
   unsubscribed: number
+}
+
+export type PostNewsletterState = {
+  delayMinutes: number
+  send: NewsletterSend | null
+  error?: string
 }

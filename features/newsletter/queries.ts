@@ -1,6 +1,23 @@
 // features/newsletter/queries.ts
 import { createServiceClient } from '@/lib/supabase/service'
-import type { NewsletterSubscription, NewsletterSend, SubscriberStats } from './types'
+import type { NewsletterSubscription, NewsletterSend, SubscriberStats, PostNewsletterState } from './types'
+import { getNewsletterDelayMinutes } from './config'
+
+// Call only after authorizing access to the post. No subscriber data is exposed.
+export async function getPostNewsletterState(postId?: string): Promise<PostNewsletterState> {
+  const delayMinutes = getNewsletterDelayMinutes()
+  if (!postId) return { delayMinutes, send: null }
+  try {
+    const { data, error } = await createServiceClient().from('newsletter_sends')
+      .select('id, post_id, status, scheduled_at, sending_started_at, delivery_started_at, sent_at, created_at')
+      .eq('post_id', postId).maybeSingle()
+    if (error) throw error
+    return { delayMinutes, send: data as NewsletterSend | null }
+  } catch (error) {
+    console.error('[getPostNewsletterState] Failed to read newsletter status:', error)
+    return { delayMinutes, send: null, error: 'Newsletter status is unavailable. Refresh status before retrying.' }
+  }
+}
 
 export async function getSubscriberStats(): Promise<SubscriberStats> {
   const supabase = createServiceClient()

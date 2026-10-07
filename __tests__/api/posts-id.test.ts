@@ -163,7 +163,7 @@ describe('PATCH /api/posts/[id]', () => {
     const res = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))
     expect(res.status).toBe(200)
     expect(db.posts[0]).toMatchObject({ status: 'published', published_at: expect.any(String) })
-    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1', { resetPendingDelay: true })
   })
   it('preserves the original publication timestamp and does not requeue live edits', async () => {
     const db = postClient([{ ...validPost, status: 'published', published_at: '2026-01-01T00:00:00Z' }])
@@ -181,6 +181,24 @@ describe('PATCH /api/posts/[id]', () => {
     expect(res.status).toBe(200)
     expect(db.posts[0]).toMatchObject({ status: 'draft', published_at: null })
     expect(cancelNewsletterSend).toHaveBeenCalledWith('post-1')
+  })
+  it('returns publication success separately from scheduling failure', async () => {
+    const db = postClient([validPost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    vi.mocked(scheduleNewsletterSend).mockRejectedValueOnce(new Error('Queue unavailable'))
+    const res = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ success: true, newsletter_warning: expect.stringContaining('Post published') })
+    expect(db.posts[0].status).toBe('published')
+  })
+  it('returns unpublish success separately from cancellation failure', async () => {
+    const db = postClient([{ ...validPost, status: 'published' }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    vi.mocked(cancelNewsletterSend).mockRejectedValueOnce(new Error('Queue unavailable'))
+    const res = await PATCH(makeReq('PATCH', { status: 'draft' }), makeParams('post-1'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ success: true, newsletter_warning: expect.stringContaining('Post unpublished') })
+    expect(db.posts[0].status).toBe('draft')
   })
   it.each([{ title: null }, { slug: 123 }, { tags: {} }, { status: 'scheduled' }])('returns structured errors for malformed fields %j', async body => {
     const db = postClient([validPost])

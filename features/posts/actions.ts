@@ -6,16 +6,16 @@ import { z } from 'zod'
 import { validatePublication, type FieldErrors } from './publication'
 import { refreshPostPaths, refreshDraftPaths } from './cache'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT, SLUG_CHANGE_CONFIRMATION } from './slugs'
-import { cancelNewsletterSend } from '@/features/newsletter/actions'
+import { cancelNewsletterSend, scheduleNewsletterSend } from '@/features/newsletter/actions'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { can } from '@/lib/permissions'
 import type { Role } from '@/lib/permissions'
 import { getProfile } from '@/lib/auth/session'
 import type { PostFormValues, Post } from './types'
+import { getPostNewsletterState } from '@/features/newsletter/queries'
 
-type PostMutationResult = { data?: Post; error?: string; fieldErrors?: FieldErrors }
-import { scheduleNewsletterSend } from '@/features/newsletter/actions'
+type PostMutationResult = { data?: Post; error?: string; fieldErrors?: FieldErrors; newsletterWarning?: string }
 
 export async function createPost(values: PostFormValues, editorId?: string, documentId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
@@ -104,12 +104,16 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
   if (error || !post) return { error: error?.code === '40001' ? 'The post changed. Your input is preserved; reload before trying again.' : 'The post and tags could not be saved. No changes were applied. Try again.' }
 
+  let newsletterWarning: string | undefined
   if (publish && existing.status !== 'published') {
-    try { await scheduleNewsletterSend(id) } catch (err) { console.error('[updatePost] Newsletter scheduling failed:', err) }
+    try { await scheduleNewsletterSend(id, { resetPendingDelay: true }) } catch (err) {
+      console.error('[updatePost] Newsletter scheduling failed:', err)
+      newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check the newsletter status and retry scheduling if available.'
+    }
   }
   if (targetPublished) refreshPostPaths(existing.slug, slug)
   else refreshDraftPaths()
-  return { data: post }
+  return { data: post, ...(newsletterWarning ? { newsletterWarning } : {}) }
 }
 
 export async function publishPost(id: string, values: PostFormValues, expectedUpdatedAt?: string | null, editorId?: string) {
@@ -118,7 +122,7 @@ export async function publishPost(id: string, values: PostFormValues, expectedUp
   return updatePost(id, values, true, expectedUpdatedAt, editorId)
 }
 
-export async function unpublishPost(id: string, editorId?: string) {
+export async function unpublishPost(id: string, editorId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:publish')) {
     return { error: 'Unauthorized' }
@@ -135,9 +139,37 @@ export async function unpublishPost(id: string, editorId?: string) {
 
   if (error) return { error: error.message }
 
-  await cancelNewsletterSend(id)
+  let newsletterWarning: string | undefined
+  try { await cancelNewsletterSend(id) } catch (err) {
+    console.error('[unpublishPost] Newsletter cancellation failed:', err)
+    newsletterWarning = 'Post unpublished, but newsletter cancellation could not be confirmed. Delivery checks will block new batches while the post is unpublished. Refresh newsletter status before republishing.'
+  }
   refreshPostPaths(post.slug)
-  return { data: post }
+  return { data: post, ...(newsletterWarning ? { newsletterWarning } : {}) }
+}
+
+export async function retryNewsletterScheduling(id: string, editorId?: string): Promise<{ error?: string }> {
+  const profile = await getProfile()
+  if (!profile || !can(profile.role as Role, 'posts:publish')) return { error: 'Unauthorized' }
+  if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor.' }
+  const supabase = await createClient()
+  const { data: post, error } = await supabase.from('posts').select('author_id, status').eq('id', id).single()
+  if (error || !post) return { error: 'Post not found' }
+  if (profile.role !== 'admin' && post.author_id !== profile.id) return { error: 'Unauthorized' }
+  if (post.status !== 'published') return { error: 'Publish this post before scheduling its newsletter.' }
+  const state = await getPostNewsletterState(id)
+  if (state.error) return { error: state.error }
+  if (state.send && (state.send.status !== 'failed' || state.send.delivery_started_at || state.send.sent_at)) {
+    return { error: 'This newsletter is already queued or delivery has started. It will not be restarted to avoid duplicate emails.' }
+  }
+  try {
+    // The unique post_id and conditional restore also guard concurrent retries.
+    await scheduleNewsletterSend(id)
+    return {}
+  } catch (err) {
+    console.error('[retryNewsletterScheduling] Scheduling failed:', err)
+    return { error: 'Newsletter scheduling could not be confirmed. Refresh status and try again. The post remains published.' }
+  }
 }
 
 export async function deletePost(id: string) {

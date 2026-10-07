@@ -20,6 +20,9 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     await page.getByRole('button', { name: 'Sign in', exact: true }).click()
     await expect(page).toHaveURL(/\/dashboard$/)
     await page.goto(`/dashboard/posts/${id}/edit`)
+    const newsletter = page.getByRole('region', { name: 'Newsletter notification' })
+    await expect(newsletter).toContainText('Publishing will notify active subscribers')
+    await expect(newsletter).toContainText('Configured delay:')
     await expect(page.getByText('Publication readiness', { exact: true })).toBeVisible()
     await expect(page.getByRole('checkbox')).not.toBeChecked()
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
@@ -32,12 +35,24 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     await page.getByRole('checkbox').check()
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
+    await expect(newsletter).toContainText('Queued')
+    await expect(newsletter.getByRole('button', { name: 'Retry newsletter scheduling' })).toHaveCount(0)
     expect((await admin().from('posts').select('status').eq('id', id).single()).data?.status).toBe('published')
     expect((await request.get(`/blog/${slug}`)).status()).toBe(200)
     const storedContent = (await admin().from('posts').select('content').eq('id', id).single()).data?.content
     expect(JSON.parse(storedContent).type).toBe('doc')
 
     await page.getByLabel('Post title').fill('hello this is for test')
+    // A claimed failure before provider handoff can be retried without saving input.
+    const queuedSend = (await admin().from('newsletter_sends').select('id').eq('post_id', id).single()).data
+    expect((await admin().from('newsletter_sends').update({ status: 'failed', sending_started_at: new Date().toISOString(), dispatch_token: '00000000-0000-4000-8000-000000000086' }).eq('post_id', id)).error).toBeNull()
+    await newsletter.getByRole('button', { name: 'Refresh status' }).click()
+    await expect(newsletter).toContainText('Failed')
+    await newsletter.getByRole('button', { name: 'Retry newsletter scheduling' }).click()
+    await expect(newsletter).toContainText('Queued')
+    expect((await admin().from('newsletter_sends').select('id, status').eq('post_id', id).single()).data).toEqual({ id: queuedSend?.id, status: 'pending' })
+    await expect(page.getByLabel('Post title')).toHaveValue('hello this is for test')
+    expect((await admin().from('posts').select('title').eq('id', id).single()).data?.title).toBe(readyArticle.title)
     await expect(page.getByRole('checkbox')).not.toBeChecked()
     await page.getByRole('checkbox').check()
     await page.getByRole('button', { name: 'Save Changes', exact: true }).click()
@@ -48,6 +63,7 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
 
     await page.getByRole('button', { name: 'Unpublish', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible()
+    await expect(newsletter).toContainText('Canceled')
     expect((await admin().from('newsletter_sends').select('status').eq('post_id', id).single()).data?.status).toBe('failed')
     expect((await request.get(`/blog/${slug}`)).status()).toBe(404)
     // A withdrawn pending notification must be restored once the corrected article is reviewed.
@@ -58,6 +74,7 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
     const restored = await admin().from('newsletter_sends').select('id, status, scheduled_at, sending_started_at').eq('post_id', id).single()
     expect(restored.data).toMatchObject({ id: previousSend?.id, status: 'pending', sending_started_at: null })
+    await expect(newsletter).toContainText('Queued')
     expect(Date.parse(restored.data!.scheduled_at)).toBeGreaterThan(Date.now())
     expect((await request.get(`/blog/${slug}`)).status()).toBe(200)
   } finally {

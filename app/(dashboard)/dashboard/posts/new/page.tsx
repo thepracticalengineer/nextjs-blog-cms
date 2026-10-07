@@ -7,6 +7,7 @@ import { draftValuesSchema } from '@/features/posts/drafts/schema'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { PostEditor } from '@/components/dashboard/PostEditor'
+import { getNewsletterDelayMinutes } from '@/features/newsletter/config'
 
 export const metadata: Metadata = { title: 'New Post' }
 
@@ -28,7 +29,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   return (
     <div className="p-4 md:p-8 pb-16 animate-page">
       <NewPostRecovery userId={profile.id} documentId={draft} serverCopies={(workingCopies ?? []).map(copy => ({ document_id: copy.document_id, title: draftValuesSchema.safeParse(copy.values).data?.title ?? '', updated_at: copy.updated_at }))} />
-      <PostEditor key={`${profile.id}:${draft}`} draftIdentity={{ userId: profile.id, documentId: draft }} categories={categories ?? []} tags={tags ?? []} />
+      <PostEditor key={`${profile.id}:${draft}`} draftIdentity={{ userId: profile.id, documentId: draft }} newsletter={{ delayMinutes: getNewsletterDelayMinutes(), send: null }} categories={categories ?? []} tags={tags ?? []} />
     </div>
   )
 }
