@@ -164,3 +164,19 @@ it('creates a draft with an automatic URL after a manually edited slug is cleare
   useDb([])
   expect((await createPost({ ...values, title: 'Cleared Slug Draft', slug: '   ', auto_slug: false })).data?.slug).toBe('cleared-slug-draft')
 })
+
+describe('atomic persistence failures', () => {
+  it('does not acknowledge or invalidate a draft when tag insertion fails', async () => {
+    const db = useDb([]); db.failAtomic()
+    expect((await createPost({ ...values, tag_ids: ['missing-tag'] })).error).toBeDefined()
+    expect(db.posts).toEqual([])
+    expect(refreshDraftPaths).not.toHaveBeenCalled()
+  })
+  it.each([false, true])('preserves the document and avoids newsletters on failed save/publish (%s)', async publish => {
+    const db = useDb(); db.failAtomic()
+    expect((await updatePost(validPost.id, { ...values, tag_ids: ['missing-tag'] }, publish)).error).toContain('No changes')
+    expect(db.posts[0]).toEqual(validPost)
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+    expect(refreshPostPaths).not.toHaveBeenCalled()
+  })
+})

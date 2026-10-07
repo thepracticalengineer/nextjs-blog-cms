@@ -1,7 +1,7 @@
 // app/(ai-assistant)/dashboard/ai-assistant/[chatId]/page.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { FileText, Sparkles, Loader2, AlertCircle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,6 +27,8 @@ export default function ChatPage(_props: Props) {
   const [streamingContent, setStreamingContent] = useState('')
   const [sendError, setSendError] = useState<string | null>(null)
   const [generateOpen, setGenerateOpen] = useState(false)
+  const generationAttempt = useRef<{ snapshot: string; key: string } | null>(null)
+  const generationInFlight = useRef(false)
   const [generating, setGenerating] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -111,14 +113,22 @@ export default function ChatPage(_props: Props) {
   }
 
   async function handleGeneratePost() {
+    if (generationInFlight.current) return
+    generationInFlight.current = true
+    const snapshot = JSON.stringify({ chatId, messages })
+    if (generationAttempt.current?.snapshot !== snapshot) {
+      generationAttempt.current = { snapshot, key: crypto.randomUUID() }
+    }
     setGenerating(true)
     try {
       const res = await fetch(`/api/ai-assistant/chats/${chatId}/generate-post`, {
         method: 'POST',
+        headers: { 'Idempotency-Key': generationAttempt.current.key },
       })
       const data = await res.json()
       if (!res.ok) { toast.error(data.error ?? 'Generation failed'); return }
 
+      generationAttempt.current = null
       setGenerateOpen(false)
       toast.success(
         <span>
@@ -134,6 +144,7 @@ export default function ChatPage(_props: Props) {
     } catch {
       toast.error('Generation failed')
     } finally {
+      generationInFlight.current = false
       setGenerating(false)
     }
   }

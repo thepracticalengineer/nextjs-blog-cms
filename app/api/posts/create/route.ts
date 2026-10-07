@@ -1,3 +1,4 @@
+import { savePostAtomic, creationIdentity, findCreatedPost } from '@/features/posts/persistence'
 import type { Post } from '@/features/posts/types'
 import { NextResponse } from 'next/server'
 import { postApiSchema, validatePublication, type PostApiBody } from '@/features/posts/publication'
@@ -5,7 +6,6 @@ import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend } from '@/features/newsletter/actions'
 import {
   validateApiKey,
-  resolveTagIds,
   resolveCategoryId,
 } from '@/features/api-keys/apiKeyService'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
@@ -30,44 +30,6 @@ function buildPostPayload(body: PostApiBody, slug: string, categoryId: string | 
     seo_description: seoDescription,
     published_at: postStatus === 'published' ? new Date().toISOString() : null,
   }
-}
-
-async function insertPostWithTags(
-  supabase: ReturnType<typeof createServiceClient>,
-  payload: ReturnType<typeof buildPostPayload>,
-  tags: string[] | undefined,
-  plan: ReturnType<typeof planSlug>
-) {
-  const { data: post, error: postError } = await writeWithSlug<Post>(plan, slug => supabase
-    .from('posts')
-    .insert({ ...payload, slug })
-    .select()
-    .single())
-
-  if (postError) {
-    console.error('[API] Failed to insert post:', postError.message)
-    return { post: null, error: isSlugConflict(postError) ? SLUG_CONFLICT : 'Failed to create post' }
-  }
-
-  if (!post) return { post: null, error: 'Failed to create post' }
-
-  if (Array.isArray(tags) && tags.length > 0) {
-    const tagNames = tags.filter((t) => typeof t === 'string' && t.trim())
-    const tagIds = await resolveTagIds(tagNames, supabase)
-    if (tagIds.length > 0) {
-      const { error: postTagsError } = await supabase
-        .from('post_tags')
-        .insert(tagIds.map((tag_id) => ({ post_id: post.id, tag_id })))
-
-      if (postTagsError) {
-        await supabase.from('posts').delete().eq('id', post.id)
-        console.error('[API] Failed to insert post tags:', postTagsError.message)
-        return { post: null, error: 'Failed to create post tags' }
-      }
-    }
-  }
-
-  return { post, error: null }
 }
 
 export async function POST(request: Request) {
@@ -98,6 +60,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Invalid post fields', details: { field_errors: parsed.error.flatten().fieldErrors } }, { status: 422 })
   }
   const body = parsed.data
+  const identity = creationIdentity('rest', body, request.headers.get('Idempotency-Key'))
+  const previous = await findCreatedPost(userId, identity)
+  if (previous.error) return NextResponse.json({ success: false, error: previous.error }, { status: previous.status })
+  if (previous.post) return NextResponse.json({ success: true, data: { post: previous.post } }, { status: 201, headers: { 'Idempotent-Replayed': 'true' } })
   const supabase = createServiceClient()
   const plan = planSlug(body.slug, body.title ?? '')
   if (plan.error) return NextResponse.json({ success: false, error: plan.error, details: { field_errors: { slug: [plan.error] } } }, { status: 422 })
@@ -105,22 +71,36 @@ export async function POST(request: Request) {
   if (payload.status === 'published') {
     const fieldErrors = await validatePublication(supabase, payload, body.editorial_reviewed, undefined, plan.automatic)
     if (Object.keys(fieldErrors).length) {
+      // Another retry may have committed after the first receipt lookup.
+      const committed = await findCreatedPost(userId, identity)
+      if (committed.post) return NextResponse.json({ success: true, data: { post: committed.post } }, { status: 201, headers: { 'Idempotent-Replayed': 'true' } })
       return NextResponse.json({ success: false, error: 'Publication blocked', details: { field_errors: fieldErrors } }, { status: 422 })
     }
   }
   payload.category_id = body.category ? await resolveCategoryId(body.category, supabase) : null
 
   // 4. Insert post with tags
-  const { post, error } = await insertPostWithTags(supabase, payload, body.tags, plan)
-
-  if (error) {
-    return NextResponse.json({ success: false, error, ...(error === SLUG_CONFLICT ? { details: { field_errors: { slug: [error] } } } : {}) }, { status: error === SLUG_CONFLICT ? 409 : 500 })
+  let replayed = false
+  const { data: post, error: writeError } = await writeWithSlug<Post>(plan, async slug => {
+    const result = await savePostAtomic({ actorId: userId, payload: { ...payload, slug }, tagNames: body.tags ?? [], ...identity })
+    replayed = result.data?.replayed ?? false
+    return { data: result.data?.post ?? null, error: result.error }
+  })
+  let error: string | null = null
+  if (writeError) {
+    error = 'The post and tags could not be saved. No changes were applied.'
+    if (isSlugConflict(writeError)) error = SLUG_CONFLICT
+    else if (writeError.code === '22023') error = writeError.message
   }
 
-  if (post?.status === 'published') {
+  if (error) {
+    return NextResponse.json({ success: false, error, ...(error === SLUG_CONFLICT ? { details: { field_errors: { slug: [error] } } } : {}) }, { status: error === SLUG_CONFLICT || writeError?.code === '22023' ? 409 : 500 })
+  }
+
+  if (post?.status === 'published' && !replayed) {
     try { await scheduleNewsletterSend(post.id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
   }
   if (post?.status === 'published') refreshPostPaths(post.slug)
   else refreshDraftPaths()
-  return NextResponse.json({ success: true, data: { post } }, { status: 201 })
+  return NextResponse.json({ success: true, data: { post } }, { status: 201, ...(replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : {}) })
 }

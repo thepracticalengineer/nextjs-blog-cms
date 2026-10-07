@@ -110,3 +110,61 @@ it('blocks malformed custom draft slugs before writes', async () => {
   }
   expect(db.writes).toHaveLength(0)
 })
+
+it('rolls back tag failures and permits retry after failure', async () => {
+  const failed = postClient(); failed.failAtomic()
+  vi.mocked(createServiceClient).mockReturnValue(failed.client)
+  expect((await POST(request(validApiPost))).status).toBe(500)
+  expect(failed.posts).toHaveLength(0)
+  expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  failed.clearAtomicFailure()
+  expect((await POST(request(validApiPost))).status).toBe(201)
+  expect(failed.posts).toHaveLength(1)
+})
+it('replays successful publication before duplicate-slug validation and schedules once', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const body = { ...validApiPost, status: 'published', editorial_reviewed: true }
+  const first = request(body); first.headers.set('Idempotency-Key', 'publish-attempt')
+  const retry = request(body); retry.headers.set('Idempotency-Key', 'publish-attempt')
+  expect((await POST(first)).status).toBe(201)
+  const replay = await POST(retry)
+  expect(replay.status).toBe(201)
+  expect(replay.headers.get('Idempotent-Replayed')).toBe('true')
+  expect(db.posts).toHaveLength(1)
+  expect(scheduleNewsletterSend).toHaveBeenCalledTimes(1)
+})
+it('rejects reusing an explicit creation key with different input', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const keyed = (title: string) => {
+    const req = request({ title })
+    req.headers.set('Idempotency-Key', 'operation-71')
+    return req
+  }
+  expect((await POST(keyed('First draft'))).status).toBe(201)
+  expect((await POST(keyed('Changed draft'))).status).toBe(409)
+  expect(db.posts).toHaveLength(1)
+})
+
+it('creates separate drafts for identical keyless requests', async () => {
+  const db = postClient(); vi.mocked(createServiceClient).mockReturnValue(db.client)
+  expect((await POST(request({ title: 'Recurring draft' }))).status).toBe(201)
+  expect((await POST(request({ title: 'Recurring draft' }))).status).toBe(201)
+  expect(db.posts).toHaveLength(2)
+})
+it('returns structured validation for invalid tag names', async () => {
+  const res = await POST(request({ title: 'Draft', tags: ['!!!'] }))
+  expect(res.status).toBe(422)
+  expect((await res.json()).details.field_errors.tags).toBeDefined()
+  expect(createServiceClient).not.toHaveBeenCalled()
+})
+
+it('returns 503 for a transient receipt read failure', async () => {
+  const db = postClient()
+  vi.mocked(db.client.from).mockReturnValue({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: { message: 'Database unavailable' } }) }) }) }) } as unknown as ReturnType<typeof db.client.from>)
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const req = request({ title: 'Draft' }); req.headers.set('Idempotency-Key', 'retry-read')
+  expect((await POST(req)).status).toBe(503)
+  expect(db.posts).toHaveLength(0)
+})
