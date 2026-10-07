@@ -4,7 +4,7 @@ import { readyArticle } from '../publication-fixture'
 
 test('dispatch failure before provider handoff releases real claims and allows republish', async ({ request, apiKey }) => {
   // Skip outside isolated provider-disabled stacks: this test must never send real emails.
-  test.skip(!!process.env.RESEND_API_KEY || !process.env.WEBHOOK_SECRET, 'Requires an isolated stack with email delivery disabled and a webhook secret.')
+  test.skip(!!process.env.RESEND_API_KEY || !process.env.CRON_SECRET, 'Requires an isolated stack with email delivery disabled and a cron secret.')
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } })
   const headers = { Authorization: `Bearer ${apiKey}` }
   const suffix = Date.now()
@@ -19,7 +19,8 @@ test('dispatch failure before provider handoff releases real claims and allows r
     expect((await admin.from('newsletter_subscriptions').insert({ email })).error).toBeNull()
     expect((await admin.from('newsletter_sends').update({ scheduled_at: '2020-01-01T00:00:00Z' }).in('post_id', postIds)).error).toBeNull()
 
-    const response = await request.post('/api/newsletter/send', { headers: { 'x-webhook-secret': process.env.WEBHOOK_SECRET! } })
+    expect((await request.get('/api/newsletter/send')).status()).toBe(401)
+    const response = await request.get('/api/newsletter/send', { headers: { Authorization: `Bearer ${process.env.CRON_SECRET!}` } })
     expect(response.status()).toBe(500)
     const { data: failed, error } = await admin.from('newsletter_sends').select('id, post_id, status, sending_started_at, delivery_started_at, dispatch_token').in('post_id', postIds)
     expect(error).toBeNull()
