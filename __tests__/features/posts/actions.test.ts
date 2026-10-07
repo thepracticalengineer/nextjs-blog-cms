@@ -28,6 +28,15 @@ beforeEach(() => {
   vi.mocked(getProfile).mockResolvedValue({ id: 'user-1', role: 'author', full_name: 'Frank Mendez' } as Awaited<ReturnType<typeof getProfile>>)
 })
 describe('dashboard publication actions', () => {
+  it('cannot create a second post from the same recovery document after cleanup or acknowledgement failure', async () => {
+    const db = useDb([])
+    const documentId = '00000000-0000-4000-8000-000000000003'
+    expect((await createPost(values, 'user-1', documentId)).data?.id).toBe(documentId)
+    const retry = await createPost({ ...values, content: 'Newer local writing' }, 'user-1', documentId)
+    expect(retry.error).toContain('already created')
+    expect(db.posts).toHaveLength(1)
+    expect(db.posts[0].content).toBe(values.content)
+  })
   it('creates incomplete drafts', async () => {
     const db = useDb([])
     expect((await createPost({ ...values, title: '', content: '', excerpt: '', slug: '' })).error).toBeUndefined()
@@ -74,6 +83,11 @@ describe('dashboard publication actions', () => {
     expect((await publishPost('post-1', values)).error).toContain('changed')
     expect(db.posts[0]).toEqual(validPost)
     expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('rejects a manual save from a stale loaded post before attempting writes', async () => {
+    const db = useDb([{ ...validPost, updated_at: '2026-10-07T00:00:00Z' }])
+    expect((await updatePost('post-1', values, false, validPost.updated_at)).error).toContain('another editor')
+    expect(db.writes).toEqual([])
   })
   it('cannot publish another author’s post', async () => {
     const db = useDb([{ ...validPost, author_id: 'other-author' }])

@@ -51,6 +51,20 @@ export async function proxy(request: NextRequest) {
     return redirectResponse
   }
 
+  // Action requests must fail in place when authentication expires. Redirecting
+  // would unmount the editor before it can show retry and recovery controls.
+  function denyPostAction(status: number): NextResponse {
+    const response = NextResponse.json({ error: 'Authentication required. Your input is preserved; sign in again and retry.' }, { status })
+    supabaseResponse.cookies.getAll().forEach(cookie => response.cookies.set(cookie.name, cookie.value, cookie))
+    for (const header of ['cache-control', 'expires', 'pragma']) {
+      const value = supabaseResponse.headers.get(header)
+      if (value) response.headers.set(header, value)
+    }
+    return response
+  }
+  const isPostAction = request.method === 'POST' && request.headers.has('next-action') &&
+    (pathname === '/dashboard/posts' || pathname.startsWith('/dashboard/posts/'))
+
   // ── /mfa page ──────────────────────────────────────────────────────────────
   if (pathname === '/mfa') {
     if (!user) return redirectWithCookies('/login')
@@ -64,14 +78,14 @@ export async function proxy(request: NextRequest) {
 
   // ── /dashboard routes ──────────────────────────────────────────────────────
   if (pathname.startsWith('/dashboard')) {
-    if (!user) return redirectWithCookies('/login')
+    if (!user) return isPostAction ? denyPostAction(401) : redirectWithCookies('/login')
 
     // Enforce MFA for users who have it enrolled.
     // Fail-closed: if the AAL lookup fails, redirect to /mfa rather than
     // allowing the request through without MFA verification.
     const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     if (aalError || (aal?.nextLevel === 'aal2' && aal.currentLevel !== 'aal2')) {
-      return redirectWithCookies('/mfa')
+      return isPostAction ? denyPostAction(403) : redirectWithCookies('/mfa')
     }
 
     // Protect /dashboard/admin — require admin role

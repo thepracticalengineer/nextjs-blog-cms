@@ -1,3 +1,4 @@
+import { requirePermission } from '@/lib/auth/session'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
@@ -12,6 +13,7 @@ interface EditPostPageProps {
 }
 
 export default async function EditPostPage({ params }: EditPostPageProps) {
+  const profile = await requirePermission('posts:create')
   const { id } = await params
   const supabase = await createClient()
   const [post, { data: categories }, { data: tags }] = await Promise.all([
@@ -20,7 +22,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
     supabase.from('tags').select('*').order('name'),
   ])
 
-  if (!post) notFound()
+  if (!post || (profile.role !== 'admin' && post.author_id !== profile.id)) notFound()
 
   return (
     <div className="p-4 md:p-8 space-y-6">
@@ -28,7 +30,7 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
         <h1 className="text-3xl font-bold">Edit Post</h1>
         <PostStatusBadge status={post.status} />
       </div>
-      <PostEditor post={post} categories={categories ?? []} tags={tags ?? []} />
+      <PostEditor key={`${profile.id}:${post.id}`} draftIdentity={{ userId: profile.id, documentId: post.id }} post={post} categories={categories ?? []} tags={tags ?? []} />
     </div>
   )
 }

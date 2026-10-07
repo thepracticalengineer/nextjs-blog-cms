@@ -105,7 +105,7 @@ describe('PostEditor publication readiness', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Write at least 200 readable words.'))
     expect(screen.getByLabelText('Article body')).toHaveValue('<p>My unfinished article</p>')
-    expect(publishPost).toHaveBeenCalledWith('post-1', expect.objectContaining({ content: '<p>My unfinished article</p>', editorial_reviewed: true }))
+    expect(publishPost).toHaveBeenCalledWith('post-1', expect.objectContaining({ content: '<p>My unfinished article</p>', editorial_reviewed: true }), editorPost.updated_at, undefined)
     expect(updatePost).not.toHaveBeenCalled()
   })
   it('clears editorial confirmation when the author edits reviewed content', () => {
