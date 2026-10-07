@@ -19,7 +19,7 @@ interface PostRowProps {
 
 export function PostRow({ post, onPublish, onUnpublish, onDelete }: PostRowProps) {
   const router = useRouter()
-  const authorName = post.author?.full_name ?? post.author?.email ?? '—'
+  const authorName = post.author?.full_name ?? '—'
   const authorInitial = authorName[0]?.toUpperCase() ?? '?'
 
   return (

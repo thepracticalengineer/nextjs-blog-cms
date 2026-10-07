@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { requireAuth } from '@/lib/auth/session'
 import { GeneralInfoForm } from '@/features/profile/components/GeneralInfoForm'
 import { AvatarUpload } from '@/features/profile/components/AvatarUpload'
@@ -16,8 +17,11 @@ export default async function ProfilePage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold tracking-tight">My Profile</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage your personal information and account settings
+          Manage your public author information and account settings
         </p>
+        <Link href={`/authors/${profile.id}`} className="inline-block mt-2 text-sm underline underline-offset-4 hover:text-primary focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring">
+          View your public author profile
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">

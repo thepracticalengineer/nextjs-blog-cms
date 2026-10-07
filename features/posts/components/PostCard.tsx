@@ -3,13 +3,15 @@ import Image from 'next/image'
 import { format } from 'date-fns'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import type { PostWithRelations } from '../types'
 
 interface PostCardProps {
   post: PostWithRelations
+  showTags?: boolean
 }
 
-export function PostCard({ post }: PostCardProps) {
+export function PostCard({ post, showTags = false }: PostCardProps) {
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-all duration-200 hover:-translate-y-0.5 flex flex-col">
       {post.cover_image && (
@@ -38,8 +40,17 @@ export function PostCard({ post }: PostCardProps) {
         {post.excerpt && (
           <p className="text-muted-foreground text-sm line-clamp-3">{post.excerpt}</p>
         )}
-        <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t">
-          <span className="font-medium">{post.author?.full_name ?? post.author?.email ?? 'Unknown'}</span>
+        {showTags && post.tags.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {post.tags.map((tag) => (
+              <Link key={tag.id} href={`/blog/tag/${tag.slug}`} className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
+                <Badge variant="secondary" className="text-xs">#{tag.name}</Badge>
+              </Link>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-2 items-center justify-between text-xs text-muted-foreground pt-2 border-t">
+          <AuthorByline author={post.author} />
           {post.published_at && (
             <time dateTime={post.published_at}>
               {format(new Date(post.published_at), 'MMM d, yyyy')}

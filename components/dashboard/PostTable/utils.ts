@@ -38,8 +38,8 @@ export function filterAndSort(
       aVal = a.title.toLowerCase()
       bVal = b.title.toLowerCase()
     } else if (sortField === 'author') {
-      aVal = (a.author?.full_name ?? a.author?.email ?? '').toLowerCase()
-      bVal = (b.author?.full_name ?? b.author?.email ?? '').toLowerCase()
+      aVal = (a.author?.full_name ?? '').toLowerCase()
+      bVal = (b.author?.full_name ?? '').toLowerCase()
     } else if (sortField === 'status') {
       aVal = a.status
       bVal = b.status

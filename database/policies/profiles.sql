@@ -2,32 +2,17 @@
 -- RLS Policies: profiles
 -- ============================================
 
--- Public can read all profiles
-create policy "Profiles are publicly readable"
-  on public.profiles for select
-  using (true);
+-- Private account details are readable only by their owner. Public consumers
+-- use public.public_author_profiles (see the public_author_profiles migration).
+create policy "Users can read own private profile"
+  on public.profiles for select to authenticated
+  using ((select auth.uid()) = id);
 
 -- Users can update their own profile
 create policy "Users can update own profile"
-  on public.profiles for update
-  using (auth.uid() = id);
+  on public.profiles for update to authenticated
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
 
--- Admins can update any profile
-create policy "Admins can update any profile"
-  on public.profiles for update
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
-
--- Admins can delete profiles
-create policy "Admins can delete profiles"
-  on public.profiles for delete
-  using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+-- Administrative profile edits/deletes use the server-only service client.
+-- Column grants and the public author projection are defined by the migration.

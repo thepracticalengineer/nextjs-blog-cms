@@ -4,7 +4,7 @@ import { format } from 'date-fns'
 import type { Metadata } from 'next'
 import { getPublishedPosts } from '@/features/posts/queries'
 import { getPopularTags } from '@/features/posts/queries'
-import { AuthorAvatar } from '@/components/AuthorAvatar'
+import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import { readTime, cn } from '@/lib/utils'
 import type { PostWithRelations } from '@/features/posts/types'
 
@@ -131,7 +131,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                         {post.title}
                       </Link>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {post.author?.full_name ?? post.author?.email ?? 'Unknown'}
+                        <AuthorByline author={post.author} />
                       </p>
                     </div>
                   </li>
@@ -149,7 +149,6 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 // ── Article card sub-component ────────────────────────────────────────────────
 
 function ArticleCard({ post, featured }: { post: PostWithRelations; featured: boolean }) {
-  const authorName = post.author?.full_name ?? post.author?.email ?? 'Unknown'
   const mins = readTime(post.content ?? '')
   const publishedDate = post.published_at
     ? format(new Date(post.published_at), 'MMM d')
@@ -163,10 +162,10 @@ function ArticleCard({ post, featured }: { post: PostWithRelations; featured: bo
       )}
     >
       {/* Author row */}
-      <div className="flex items-center gap-2.5 mb-2.5">
-        <AuthorAvatar name={authorName} size={32} />
-        <div className="flex items-center gap-1.5 text-sm">
-          <span className="font-semibold text-foreground">{authorName}</span>
+      <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
+
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          <AuthorByline author={post.author} showAvatar />
           {publishedDate && (
             <time
               dateTime={post.published_at!}

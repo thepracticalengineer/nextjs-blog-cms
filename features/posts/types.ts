@@ -1,7 +1,7 @@
 import type { Post, Profile, Category, Tag } from '@/lib/supabase/types'
 
 export type PostWithRelations = Post & {
-  author: Pick<Profile, 'id' | 'full_name' | 'email' | 'avatar_url'> | null
+  author: Pick<Profile, 'id' | 'full_name' | 'avatar_url'> | null
   category: Pick<Category, 'id' | 'name' | 'slug'> | null
   tags: Tag[]
 }

@@ -4,31 +4,49 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/session'
+import { z } from 'zod'
 import type { ProfileFormData, SocialLinksFormData } from './types'
+
+const optionalText = (max: number) => z.string().trim().max(max).transform((value) => value || null).nullable().optional()
+const publicUrl = z.string().trim().max(2048).refine((value) => {
+  if (!value) return true
+  try {
+    const url = new URL(value)
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+  } catch { return false }
+}, 'Use a valid HTTP or HTTPS URL without credentials').transform((value) => value || null).nullable().optional()
+
+const profileUpdateSchema = z.object({
+  full_name: z.string().trim().min(1).max(120).nullable().optional(),
+  pronouns: optionalText(100), bio: optionalText(2000),
+  company: optionalText(200), location: optionalText(200), website: publicUrl,
+  twitter_url: publicUrl, linkedin_url: publicUrl, github_url: publicUrl,
+  instagram_url: publicUrl, facebook_url: publicUrl, youtube_url: publicUrl, tiktok_url: publicUrl,
+}).strict().refine((value) => Object.keys(value).length > 0, 'Provide at least one profile field')
+
+function revalidatePublicProfile(id: string) {
+  revalidatePath('/dashboard/profile')
+  revalidatePath(`/authors/${id}`)
+  revalidatePath('/blog', 'layout')
+  revalidatePath('/')
+}
 
 export async function updateProfile(data: Partial<{ [K in keyof (ProfileFormData & SocialLinksFormData)]: string | null }>) {
   const profile = await getProfile()
   if (!profile) return { error: 'Unauthorized' }
 
-  const ALLOWED_PROFILE_KEYS = new Set([
-    'full_name', 'pronouns', 'bio', 'company', 'location', 'website',
-    'twitter_url', 'linkedin_url', 'github_url', 'instagram_url',
-    'facebook_url', 'youtube_url', 'tiktok_url',
-  ])
-
-  const safeData = Object.fromEntries(
-    Object.entries(data).filter(([k]) => ALLOWED_PROFILE_KEYS.has(k))
-  )
+  const parsed = profileUpdateSchema.safeParse(data)
+  if (!parsed.success) return { error: 'Invalid profile information. Check field lengths and use HTTP or HTTPS links.' }
 
   const supabase = await createClient()
   const { error } = await supabase
     .from('profiles')
-    .update(safeData)
+    .update(parsed.data)
     .eq('id', profile.id)
 
   if (error) return { error: error.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true }
 }
 
@@ -71,7 +89,7 @@ export async function updateAvatar(formData: FormData) {
 
   if (updateError) return { error: updateError.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true, avatar_url: versionedUrl }
 }
 
@@ -100,7 +118,7 @@ export async function deleteAvatar() {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true }
 }
 

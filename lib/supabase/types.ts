@@ -293,7 +293,13 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_author_profiles: {
+        Row: Pick<Database['public']['Tables']['profiles']['Row'],
+          'id' | 'full_name' | 'avatar_url' | 'bio' | 'website' |
+          'twitter_url' | 'linkedin_url' | 'github_url' | 'instagram_url' |
+          'facebook_url' | 'youtube_url' | 'tiktok_url'>
+        Relationships: []
+      }
     }
     Functions: {
       [_ in never]: never

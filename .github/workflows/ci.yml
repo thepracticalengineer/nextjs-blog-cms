@@ -128,6 +128,9 @@ jobs:
                   output.write(f'{key}={value}\n')
           PY
 
+      - name: Verify author profile database privacy
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/public_author_profiles.sql
+
       - name: Run API and browser tests
         run: pnpm run test:e2e
 

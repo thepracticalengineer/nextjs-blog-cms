@@ -14,7 +14,7 @@ function makePost(overrides: Partial<PostWithRelations> = {}): PostWithRelations
     category_id: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-02T00:00:00Z',
-    author: { id: 'u1', full_name: 'Alice', email: 'alice@example.com', avatar_url: null },
+    author: { id: 'u1', full_name: 'Alice', avatar_url: null },
     category: null,
     tags: [],
     ...overrides,
@@ -22,8 +22,8 @@ function makePost(overrides: Partial<PostWithRelations> = {}): PostWithRelations
 }
 
 const posts: PostWithRelations[] = [
-  makePost({ id: 'p1', title: 'Alpha Post', status: 'published', updated_at: '2024-03-01T00:00:00Z', author: { id: 'u1', full_name: 'Alice', email: 'alice@example.com', avatar_url: null }, category: { id: 'c1', name: 'Tech', slug: 'tech' }, tags: [] }),
-  makePost({ id: 'p2', title: 'Beta Post', status: 'draft', updated_at: '2024-01-15T00:00:00Z', author: { id: 'u2', full_name: 'Bob', email: 'bob@example.com', avatar_url: null }, category: { id: 'c2', name: 'News', slug: 'news' }, tags: [] }),
+  makePost({ id: 'p1', title: 'Alpha Post', status: 'published', updated_at: '2024-03-01T00:00:00Z', author: { id: 'u1', full_name: 'Alice', avatar_url: null }, category: { id: 'c1', name: 'Tech', slug: 'tech' }, tags: [] }),
+  makePost({ id: 'p2', title: 'Beta Post', status: 'draft', updated_at: '2024-01-15T00:00:00Z', author: { id: 'u2', full_name: 'Bob', avatar_url: null }, category: { id: 'c2', name: 'News', slug: 'news' }, tags: [] }),
   makePost({ id: 'p3', title: 'Gamma Post', status: 'draft', updated_at: null, author: null, category: null, tags: [] }),
 ]
 

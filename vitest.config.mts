@@ -35,6 +35,8 @@ export default defineConfig({
         'lib/notifications/user-confirmed.ts',
         // features
         'features/posts/components/**/*.{ts,tsx}',
+        'features/authors/**/*.{ts,tsx}',
+        'app/(public)/authors/[id]/page.tsx',
         'features/comments/components/CommentCard.tsx',
         'features/comments/components/CommentForm.tsx',
         'features/comments/components/CommentList.tsx',
