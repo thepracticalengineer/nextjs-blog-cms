@@ -142,9 +142,7 @@ async function processClaimedSends(
   }
 
   const activeSubscribers = (subscribers ?? []) as NewsletterSubscription[]
-  if (activeSubscribers.length && (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL)) {
-    throw new Error('Newsletter email provider is not configured')
-  }
+  ensureProviderConfigured(activeSubscribers.length)
   let dispatched = 0
 
   for (const send of claimedSends) {
@@ -182,6 +180,12 @@ async function processClaimedSends(
   }
 
   return NextResponse.json({ dispatched })
+}
+
+function ensureProviderConfigured(recipientCount: number): void {
+  if (recipientCount && (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL)) {
+    throw new Error('Newsletter email provider is not configured')
+  }
 }
 
 async function getDeliverablePost(supabase: ReturnType<typeof createServiceClient>, postId: string): Promise<PostEmailData | null> {
