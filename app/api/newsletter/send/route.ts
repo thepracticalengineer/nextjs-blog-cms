@@ -33,9 +33,10 @@ async function sendInBatches(
   return { failures, stopped: false }
 }
 
-function authenticate(secret: string | null, envSecret: string | undefined): NextResponse | null {
+function authenticate(secret: string | null, variable: 'CRON_SECRET' | 'WEBHOOK_SECRET'): NextResponse | null {
+  const envSecret = process.env[variable]
   if (!envSecret) {
-    console.error('[newsletter/send] Scheduler secret is not configured')
+    console.error(`[newsletter/send] ${variable} is not configured`)
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
   }
   if (!secret || !secureCompare(secret, envSecret)) {
@@ -48,14 +49,14 @@ function authenticate(secret: string | null, envSecret: string | undefined): Nex
 export async function GET(req: NextRequest) {
   const authorization = req.headers.get('authorization')
   const secret = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
-  const error = authenticate(secret, process.env.CRON_SECRET)
-  return error ?? dispatchNewsletter()
+  const error = authenticate(secret, 'CRON_SECRET')
+  return error ?? await dispatchNewsletter()
 }
 
 // Retain authenticated POST for existing external schedulers.
 export async function POST(req: NextRequest) {
-  const error = authenticate(req.headers.get('x-webhook-secret'), process.env.WEBHOOK_SECRET)
-  return error ?? dispatchNewsletter()
+  const error = authenticate(req.headers.get('x-webhook-secret'), 'WEBHOOK_SECRET')
+  return error ?? await dispatchNewsletter()
 }
 
 async function dispatchNewsletter() {

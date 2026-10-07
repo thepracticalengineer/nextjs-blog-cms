@@ -123,7 +123,10 @@ describe('GET /api/newsletter/send (Vercel Cron)', () => {
 
   it('fails closed if CRON_SECRET is not configured', async () => {
     vi.stubEnv('CRON_SECRET', '')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect((await GET(cronRequest('Bearer vercel-cron-secret'))).status).toBe(500)
+    expect(log).toHaveBeenCalledWith('[newsletter/send] CRON_SECRET is not configured')
+    log.mockRestore()
     expect(mockCreateServiceClient).not.toHaveBeenCalled()
   })
 
@@ -138,6 +141,15 @@ describe('GET /api/newsletter/send (Vercel Cron)', () => {
 })
 
 describe('POST /api/newsletter/send', () => {
+  it('names WEBHOOK_SECRET when the external scheduler is misconfigured', async () => {
+    vi.stubEnv('WEBHOOK_SECRET', '')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await POST(makeReq(WEBHOOK_SECRET))).status).toBe(500)
+    expect(log).toHaveBeenCalledWith('[newsletter/send] WEBHOOK_SECRET is not configured')
+    expect(mockCreateServiceClient).not.toHaveBeenCalled()
+    log.mockRestore()
+  })
+
   it('returns 401 when webhook secret is missing', async () => {
     mockCreateServiceClient.mockReturnValue(makeSupabase())
     const res = await POST(makeReq())
