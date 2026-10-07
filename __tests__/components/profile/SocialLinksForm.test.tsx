@@ -21,6 +21,26 @@ const fakeProfile = {
 beforeEach(() => { vi.clearAllMocks() })
 
 describe('SocialLinksForm', () => {
+  it.each(['ftp://example.com', 'mailto:author@example.com', 'https://user:pass@example.com'])('identifies an unsafe stored social link %s and allows correction', async (github_url) => {
+    mockUpdateProfile.mockResolvedValue({ success: true })
+    render(<SocialLinksForm profile={{ ...fakeProfile, github_url } as any} />)
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Use a valid HTTP or HTTPS URL without credentials')
+    expect(screen.getByLabelText('GitHub')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockUpdateProfile).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByLabelText('GitHub'), { target: { value: 'https://github.com/author' } })
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(mockUpdateProfile).toHaveBeenCalledOnce())
+  })
+
+  it('highlights the social input named in server validation errors', async () => {
+    mockUpdateProfile.mockResolvedValue({ error: 'Check profile fields', fieldErrors: { twitter_url: ['Invalid public URL'] } })
+    render(<SocialLinksForm profile={fakeProfile as any} />)
+    fireEvent.click(screen.getByRole('button', { name: /save changes/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid public URL')
+    expect(screen.getByLabelText(/twitter/i)).toHaveAccessibleDescription('Invalid public URL')
+  })
+
   it('renders all 7 social link inputs', () => {
     render(<SocialLinksForm profile={fakeProfile as any} />)
     expect(screen.getByLabelText(/twitter/i)).toBeInTheDocument()

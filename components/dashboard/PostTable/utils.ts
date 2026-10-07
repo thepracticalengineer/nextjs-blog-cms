@@ -1,3 +1,4 @@
+import { authorName } from '@/features/authors/presentation'
 import type { PostWithRelations } from '@/features/posts/types'
 
 export type SortField = 'title' | 'author' | 'status' | 'updated_at'
@@ -38,8 +39,8 @@ export function filterAndSort(
       aVal = a.title.toLowerCase()
       bVal = b.title.toLowerCase()
     } else if (sortField === 'author') {
-      aVal = (a.author?.full_name ?? '').toLowerCase()
-      bVal = (b.author?.full_name ?? '').toLowerCase()
+      aVal = (a.author ? authorName(a.author.full_name) : '').toLowerCase()
+      bVal = (b.author ? authorName(b.author.full_name) : '').toLowerCase()
     } else if (sortField === 'status') {
       aVal = a.status
       bVal = b.status

@@ -48,7 +48,6 @@ export default defineConfig({
         // components
         'components/dashboard/RoleBadge.tsx',
         'components/dashboard/PostTable/utils.ts',
-        'components/AuthorAvatar.tsx',
         // api routes
         'app/api/posts/route.ts',
         'app/api/posts/create/route.ts',

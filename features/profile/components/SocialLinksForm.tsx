@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import type { z } from 'zod'
+import { socialLinksSchema as schema } from '../validation'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,18 +13,6 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { updateProfile } from '@/features/profile/actions'
 import type { Profile } from '@/lib/supabase/types'
-
-const urlOrEmpty = z.string().url('Must be a valid URL').or(z.literal(''))
-
-const schema = z.object({
-  twitter_url: urlOrEmpty,
-  linkedin_url: urlOrEmpty,
-  github_url: urlOrEmpty,
-  instagram_url: urlOrEmpty,
-  facebook_url: urlOrEmpty,
-  youtube_url: urlOrEmpty,
-  tiktok_url: urlOrEmpty,
-})
 
 type FormValues = z.infer<typeof schema>
 
@@ -44,7 +33,7 @@ interface SocialLinksFormProps {
 export function SocialLinksForm({ profile }: SocialLinksFormProps) {
   const [saving, setSaving] = useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setError, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       twitter_url: profile.twitter_url ?? '',
@@ -66,6 +55,11 @@ export function SocialLinksForm({ profile }: SocialLinksFormProps) {
       )
       const result = await updateProfile(normalized)
       if (result.error) {
+        if (result.fieldErrors) {
+          for (const [field, messages] of Object.entries(result.fieldErrors)) {
+            if (messages?.[0]) setError(field as keyof FormValues, { type: 'server', message: messages[0] })
+          }
+        }
         toast.error(result.error)
       } else {
         toast.success('Social links updated')
@@ -82,12 +76,12 @@ export function SocialLinksForm({ profile }: SocialLinksFormProps) {
         <CardDescription>Add links to your social profiles</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {SOCIALS.map(({ key, label, placeholder }) => (
             <div key={key} className="space-y-1.5">
               <Label htmlFor={key}>{label}</Label>
-              <Input id={key} type="url" placeholder={placeholder} {...register(key)} />
-              {errors[key] && <p className="text-xs text-destructive">{errors[key]?.message}</p>}
+              <Input id={key} type="url" placeholder={placeholder} aria-invalid={!!errors[key]} aria-describedby={errors[key] ? `${key}-error` : undefined} {...register(key)} />
+              {errors[key] && <p id={`${key}-error`} role="alert" className="text-xs text-destructive">{errors[key]?.message}</p>}
             </div>
           ))}
           <Button type="submit" disabled={saving}>

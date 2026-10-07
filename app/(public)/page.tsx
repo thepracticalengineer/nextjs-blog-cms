@@ -162,19 +162,16 @@ function ArticleCard({ post, featured }: { post: PostWithRelations; featured: bo
       )}
     >
       {/* Author row */}
-      <div className="flex flex-wrap items-center gap-2.5 mb-2.5">
-
-        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-          <AuthorByline author={post.author} showAvatar />
-          {publishedDate && (
-            <time
-              dateTime={post.published_at!}
-              className="text-muted-foreground text-xs"
-            >
-              {publishedDate}
-            </time>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-sm mb-2.5">
+        <AuthorByline author={post.author} showAvatar />
+        {publishedDate && (
+          <time
+            dateTime={post.published_at!}
+            className="text-muted-foreground text-xs"
+          >
+            {publishedDate}
+          </time>
+        )}
       </div>
 
       {/* Title */}

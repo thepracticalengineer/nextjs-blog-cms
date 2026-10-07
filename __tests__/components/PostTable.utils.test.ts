@@ -28,6 +28,13 @@ const posts: PostWithRelations[] = [
 ]
 
 describe('filterAndSort', () => {
+  it('sorts unnamed authors using the visible Author fallback', () => {
+    const unnamed = makePost({ id: 'unnamed', author: { id: 'u3', full_name: null, avatar_url: null } })
+    const whitespace = makePost({ id: 'whitespace', author: { id: 'u4', full_name: '  ', avatar_url: null } })
+    const result = filterAndSort([posts[1], unnamed, whitespace, posts[0]], '', null, 'author', 'asc')
+    expect(result.map(post => post.id)).toEqual(['p1', 'unnamed', 'whitespace', 'p2'])
+  })
+
   it('returns all posts when search is empty and no category filter', () => {
     const result = filterAndSort(posts, '', null, 'title', 'asc')
     expect(result).toHaveLength(3)

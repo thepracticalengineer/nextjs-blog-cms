@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { z } from 'zod'
+import type { z } from 'zod'
+import { generalInfoSchema as schema } from '../validation'
 import { toast } from 'sonner'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -14,15 +15,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { updateProfile } from '@/features/profile/actions'
 import type { Profile } from '@/lib/supabase/types'
 
-const schema = z.object({
-  full_name: z.string().min(1, 'Name is required'),
-  pronouns: z.string(),
-  bio: z.string(),
-  company: z.string(),
-  location: z.string(),
-  website: z.string().url('Must be a valid URL').or(z.literal('')),
-})
-
 type FormValues = z.infer<typeof schema>
 
 interface GeneralInfoFormProps {
@@ -32,7 +24,7 @@ interface GeneralInfoFormProps {
 export function GeneralInfoForm({ profile }: GeneralInfoFormProps) {
   const [saving, setSaving] = useState(false)
 
-  const { register, handleSubmit, formState: { errors } } = useForm<FormValues>({
+  const { register, handleSubmit, setError, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       full_name: profile.full_name ?? '',
@@ -60,6 +52,11 @@ export function GeneralInfoForm({ profile }: GeneralInfoFormProps) {
         website: normalizeOptional(values.website),
       })
       if (result.error) {
+        if (result.fieldErrors) {
+          for (const [field, messages] of Object.entries(result.fieldErrors)) {
+            if (messages?.[0]) setError(field as keyof FormValues, { type: 'server', message: messages[0] })
+          }
+        }
         toast.error(result.error)
       } else {
         toast.success('Profile updated')
@@ -76,39 +73,43 @@ export function GeneralInfoForm({ profile }: GeneralInfoFormProps) {
         <CardDescription>Your name and public profile details</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form noValidate onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="full_name">Full Name</Label>
-              <Input id="full_name" {...register('full_name')} />
-              {errors.full_name && <p className="text-xs text-destructive">{errors.full_name.message}</p>}
+              <Input id="full_name" aria-invalid={!!errors.full_name} aria-describedby={errors.full_name ? 'full_name-error' : undefined} {...register('full_name')} />
+              {errors.full_name && <p id="full_name-error" role="alert" className="text-xs text-destructive">{errors.full_name.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="pronouns">Pronouns</Label>
-              <Input id="pronouns" placeholder="e.g. he/him, she/her, they/them" {...register('pronouns')} />
+              <Input id="pronouns" placeholder="e.g. he/him, she/her, they/them" aria-invalid={!!errors.pronouns} aria-describedby={errors.pronouns ? 'pronouns-error' : undefined} {...register('pronouns')} />
+              {errors.pronouns && <p id="pronouns-error" role="alert" className="text-xs text-destructive">{errors.pronouns.message}</p>}
             </div>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="bio">Bio</Label>
-            <Textarea id="bio" rows={3} placeholder="Tell us a little about yourself" {...register('bio')} />
+            <Textarea id="bio" rows={3} placeholder="Tell us a little about yourself" aria-invalid={!!errors.bio} aria-describedby={errors.bio ? 'bio-error' : undefined} {...register('bio')} />
+            {errors.bio && <p id="bio-error" role="alert" className="text-xs text-destructive">{errors.bio.message}</p>}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="company">Company</Label>
-              <Input id="company" {...register('company')} />
+              <Input id="company" aria-invalid={!!errors.company} aria-describedby={errors.company ? 'company-error' : undefined} {...register('company')} />
+              {errors.company && <p id="company-error" role="alert" className="text-xs text-destructive">{errors.company.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="location">Location</Label>
-              <Input id="location" placeholder="City, Country" {...register('location')} />
+              <Input id="location" placeholder="City, Country" aria-invalid={!!errors.location} aria-describedby={errors.location ? 'location-error' : undefined} {...register('location')} />
+              {errors.location && <p id="location-error" role="alert" className="text-xs text-destructive">{errors.location.message}</p>}
             </div>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="website">Website</Label>
-            <Input id="website" type="url" placeholder="https://yoursite.com" {...register('website')} />
-            {errors.website && <p className="text-xs text-destructive">{errors.website.message}</p>}
+            <Input id="website" type="url" placeholder="https://yoursite.com" aria-invalid={!!errors.website} aria-describedby={errors.website ? 'website-error' : undefined} {...register('website')} />
+            {errors.website && <p id="website-error" role="alert" className="text-xs text-destructive">{errors.website.message}</p>}
           </div>
 
           <div className="space-y-1.5">

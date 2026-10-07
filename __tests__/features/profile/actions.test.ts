@@ -82,6 +82,14 @@ beforeEach(() => { vi.clearAllMocks() })
 // ─── updateProfile ────────────────────────────────────────────────────────────
 
 describe('updateProfile', () => {
+  it('returns validation errors keyed by the failed fields', async () => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    const result = await updateProfile({ full_name: ' ', github_url: 'ftp://example.com' })
+    expect(result.fieldErrors?.full_name).toEqual(['Name is required'])
+    expect(result.fieldErrors?.github_url).toEqual(['Use a valid HTTP or HTTPS URL without credentials'])
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
   it('returns error when not authenticated', async () => {
     mockGetProfile.mockResolvedValue(null)
     const result = await updateProfile({ full_name: 'Frank' })

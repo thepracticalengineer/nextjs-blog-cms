@@ -1,5 +1,6 @@
 'use client'
 
+import { authorName as publicAuthorName } from '@/features/authors/presentation'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
@@ -19,7 +20,7 @@ interface PostRowProps {
 
 export function PostRow({ post, onPublish, onUnpublish, onDelete }: PostRowProps) {
   const router = useRouter()
-  const authorName = post.author?.full_name ?? '—'
+  const authorName = post.author ? publicAuthorName(post.author.full_name) : '—'
   const authorInitial = authorName[0]?.toUpperCase() ?? '?'
 
   return (
