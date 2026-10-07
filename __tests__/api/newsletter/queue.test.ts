@@ -33,7 +33,7 @@ describe('newsletter queue delivery with isolated recipients and provider', () =
   it('does not claim a row whose publication deadline changed after selection', async () => {
     const db = useQueue()
     db.observeQueries(({ table, operation, payload }) => {
-      if (table === 'newsletter_sends' && operation === 'update' && payload.status === 'sending') {
+      if (table === 'newsletter_sends' && operation === 'update' && 'status' in payload && payload.status === 'sending') {
         db.sends[0].scheduled_at = new Date(Date.now() + 30 * 60 * 1000).toISOString()
       }
     })
