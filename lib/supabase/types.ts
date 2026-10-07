@@ -318,18 +318,21 @@ export type Database = {
           id: string
           name: string
           slug: string
+          merged_into?: string | null
         }
         Insert: {
           created_at?: string | null
           id?: string
           name: string
           slug: string
+          merged_into?: string | null
         }
         Update: {
           created_at?: string | null
           id?: string
           name?: string
           slug?: string
+          merged_into?: string | null
         }
         Relationships: []
       }
@@ -344,7 +347,7 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      merge_tags: { Args: { source_id: string; target_id: string }; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

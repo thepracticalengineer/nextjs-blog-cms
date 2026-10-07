@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
@@ -29,6 +29,10 @@ export async function generateMetadata({ params }: TagPageProps): Promise<Metada
     .single()
 
   if (!tag) return {}
+  if (tag.merged_into) {
+    const { data: canonical } = await supabase.from('tags').select('slug').eq('id', tag.merged_into).single()
+    if (canonical) permanentRedirect(`/blog/tag/${canonical.slug}`)
+  }
   return {
     title: `#${tag.name} - Blog`,
     description: `Posts tagged with ${tag.name}`,
@@ -46,6 +50,11 @@ export default async function TagPage({ params }: TagPageProps) {
     .single()
 
   if (!tag) notFound()
+  if (tag.merged_into) {
+    const { data: canonical } = await supabase.from('tags').select('slug').eq('id', tag.merged_into).single()
+    if (!canonical) notFound()
+    permanentRedirect(`/blog/tag/${canonical.slug}`)
+  }
 
   const { data: postTagsData } = await supabase
     .from('post_tags')
