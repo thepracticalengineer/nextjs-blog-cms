@@ -31,7 +31,7 @@ const makePost = (id: string, title: string): PostWithRelations => ({
   category_id: null,
   seo_title: null,
   seo_description: null,
-  author: { id: 'a1', full_name: 'Author', email: 'a@test.com', avatar_url: null },
+  author: { id: 'a1', full_name: 'Author', avatar_url: null },
   category: null,
   tags: [],
 })

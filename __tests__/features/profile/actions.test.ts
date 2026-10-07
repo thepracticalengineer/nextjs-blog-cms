@@ -14,6 +14,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/session'
+import { revalidatePath } from 'next/cache'
 import { updateProfile, updateAvatar, deleteAvatar, updatePassword } from '@/features/profile/actions'
 
 const mockCreateClient = vi.mocked(createClient)
@@ -81,6 +82,14 @@ beforeEach(() => { vi.clearAllMocks() })
 // ─── updateProfile ────────────────────────────────────────────────────────────
 
 describe('updateProfile', () => {
+  it('returns validation errors keyed by the failed fields', async () => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    const result = await updateProfile({ full_name: ' ', github_url: 'ftp://example.com' })
+    expect(result.fieldErrors?.full_name).toEqual(['Name is required'])
+    expect(result.fieldErrors?.github_url).toEqual(['Use a valid HTTP or HTTPS URL without credentials'])
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
   it('returns error when not authenticated', async () => {
     mockGetProfile.mockResolvedValue(null)
     const result = await updateProfile({ full_name: 'Frank' })
@@ -101,6 +110,45 @@ describe('updateProfile', () => {
     mockCreateClient.mockResolvedValue(makeSupabase() as any)
     const result = await updateProfile({ full_name: 'Frank', bio: 'Hello' })
     expect(result).toEqual({ success: true })
+  })
+
+  it('binds normalized changes to the authenticated owner and refreshes public pages', async () => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    const supabase = makeSupabase()
+    mockCreateClient.mockResolvedValue(supabase as any)
+    expect(await updateProfile({ full_name: '  Frank  ', bio: ' ', website: 'https://example.com' })).toEqual({ success: true })
+    const chain = supabase.from.mock.results[0].value
+    expect(chain.update).toHaveBeenCalledWith({ full_name: 'Frank', bio: null, website: 'https://example.com' })
+    expect(chain.eq).toHaveBeenCalledWith('id', fakeProfile.id)
+    expect(revalidatePath).toHaveBeenCalledWith(`/authors/${fakeProfile.id}`)
+    expect(revalidatePath).toHaveBeenCalledWith('/blog', 'layout')
+    expect(revalidatePath).toHaveBeenCalledWith('/')
+  })
+
+  it.each(['id', 'role', 'email', 'author_id', 'avatar_url'])('rejects forbidden %s changes before creating a database client', async (key) => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    const result = await updateProfile({ full_name: 'Frank', [key]: key === 'id' ? 'another-user' : 'changed' } as any)
+    expect(result.error).toBeDefined()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it.each(['javascript:alert(1)', 'data:text/html,test', 'ftp://example.com', '//example.com', 'https://user:password@example.com', 'invalid'])('rejects unsafe external URL %s', async (url) => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    expect((await updateProfile({ website: url })).error).toBeDefined()
+    expect((await updateProfile({ github_url: url })).error).toBeDefined()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it.each([null, [], 'text', {}, { bio: 123 }, { full_name: ' ' }, { bio: 'a'.repeat(2001) }, { website: 'https://example.com/' + 'a'.repeat(2048) }])('rejects malformed runtime payload %#', async (data) => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    expect((await updateProfile(data as any)).error).toBeDefined()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it('allows optional fields to be cleared and valid HTTP links', async () => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    mockCreateClient.mockResolvedValue(makeSupabase() as any)
+    expect(await updateProfile({ bio: null, website: '', github_url: 'http://example.com' })).toEqual({ success: true })
   })
 })
 

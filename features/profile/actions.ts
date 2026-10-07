@@ -4,31 +4,35 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/session'
+import { profileUpdateSchema } from './validation'
 import type { ProfileFormData, SocialLinksFormData } from './types'
+
+function revalidatePublicProfile(id: string) {
+  revalidatePath('/dashboard/profile')
+  revalidatePath(`/authors/${id}`)
+  revalidatePath('/blog', 'layout')
+  revalidatePath('/')
+}
 
 export async function updateProfile(data: Partial<{ [K in keyof (ProfileFormData & SocialLinksFormData)]: string | null }>) {
   const profile = await getProfile()
   if (!profile) return { error: 'Unauthorized' }
 
-  const ALLOWED_PROFILE_KEYS = new Set([
-    'full_name', 'pronouns', 'bio', 'company', 'location', 'website',
-    'twitter_url', 'linkedin_url', 'github_url', 'instagram_url',
-    'facebook_url', 'youtube_url', 'tiktok_url',
-  ])
-
-  const safeData = Object.fromEntries(
-    Object.entries(data).filter(([k]) => ALLOWED_PROFILE_KEYS.has(k))
-  )
+  const parsed = profileUpdateSchema.safeParse(data)
+  if (!parsed.success) return {
+    error: 'Check the highlighted profile fields and try again.',
+    fieldErrors: parsed.error.flatten().fieldErrors,
+  }
 
   const supabase = await createClient()
   const { error } = await supabase
     .from('profiles')
-    .update(safeData)
+    .update(parsed.data)
     .eq('id', profile.id)
 
   if (error) return { error: error.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true }
 }
 
@@ -71,7 +75,7 @@ export async function updateAvatar(formData: FormData) {
 
   if (updateError) return { error: updateError.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true, avatar_url: versionedUrl }
 }
 
@@ -100,7 +104,7 @@ export async function deleteAvatar() {
 
   if (error) return { error: error.message }
 
-  revalidatePath('/dashboard/profile')
+  revalidatePublicProfile(profile.id)
   return { success: true }
 }
 

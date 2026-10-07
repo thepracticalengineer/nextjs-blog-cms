@@ -4,12 +4,12 @@ import type { CommentWithAuthor, CommentWithAuthorAndPost } from './types'
 
 const COMMENT_SELECT = `
   *,
-  author:profiles!comments_author_id_fkey(id, full_name, avatar_url)
+  author:public_author_profiles!comments_author_id_fkey(id, full_name, avatar_url)
 `
 
 const COMMENT_WITH_POST_SELECT = `
   *,
-  author:profiles!comments_author_id_fkey(id, full_name, avatar_url),
+  author:public_author_profiles!comments_author_id_fkey(id, full_name, avatar_url),
   post:posts!comments_post_id_fkey(id, title, slug)
 `
 

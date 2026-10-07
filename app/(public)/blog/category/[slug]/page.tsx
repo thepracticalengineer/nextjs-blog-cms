@@ -51,7 +51,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
     .from('posts')
     .select(`
       *,
-      author:profiles!posts_author_id_fkey(id, full_name, email, avatar_url),
+      author:public_author_profiles!posts_author_id_fkey(id, full_name, avatar_url),
       category:categories(id, name, slug),
       tags:post_tags(tag:tags(id, name, slug))
     `)

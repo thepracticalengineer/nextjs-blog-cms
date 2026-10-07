@@ -6,7 +6,7 @@ import type { Metadata } from 'next'
 import { getPostBySlug, getAllPublishedSlugs } from '@/features/posts/queries'
 import { EditorContent } from '@/components/editor/EditorContent'
 import { Badge } from '@/components/ui/badge'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import { BackToTopButton } from '@/components/BackToTopButton'
 import { CommentSection } from '@/features/comments/components/CommentSection'
 import { ShareButton } from '@/components/ShareButton'
@@ -48,10 +48,6 @@ export default async function PostPage({ params }: PostPageProps) {
   const post = await getPostBySlug(slug)
   if (!post) notFound()
 
-  const initials = post.author?.full_name
-    ? post.author.full_name.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2)
-    : post.author?.email?.[0]?.toUpperCase() ?? '?'
-
   const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
 
   const jsonLd = {
@@ -91,11 +87,8 @@ export default async function PostPage({ params }: PostPageProps) {
 
         <h1 className="text-4xl font-bold mb-4">{post.title}</h1>
 
-        <div className="flex items-center gap-3 mb-8 text-sm text-muted-foreground">
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
-          <span>{post.author?.full_name ?? post.author?.email}</span>
+        <div className="flex flex-wrap items-center gap-3 mb-8 text-sm text-muted-foreground">
+          <AuthorByline author={post.author} showAvatar />
           {post.published_at && (
             <>
               <span>·</span>

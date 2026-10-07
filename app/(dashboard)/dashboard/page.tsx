@@ -1,3 +1,4 @@
+import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
 import type { Metadata } from 'next'
 import { FileText, Users, Eye, TrendingUp, PenLine, ArrowUpRight } from 'lucide-react'
@@ -22,7 +23,7 @@ export default async function DashboardPage() {
   ])
 
   const { count: totalUsers } = isAdmin
-    ? await supabase.from('profiles').select('*', { count: 'exact', head: true })
+    ? await createServiceClient().from('profiles').select('*', { count: 'exact', head: true })
     : { count: null }
 
   const draftCount = (totalPosts ?? 0) - (publishedPosts ?? 0)

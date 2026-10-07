@@ -35,6 +35,8 @@ export default defineConfig({
         'lib/notifications/user-confirmed.ts',
         // features
         'features/posts/components/**/*.{ts,tsx}',
+        'features/authors/**/*.{ts,tsx}',
+        'app/(public)/authors/[id]/page.tsx',
         'features/comments/components/CommentCard.tsx',
         'features/comments/components/CommentForm.tsx',
         'features/comments/components/CommentList.tsx',
@@ -46,7 +48,6 @@ export default defineConfig({
         // components
         'components/dashboard/RoleBadge.tsx',
         'components/dashboard/PostTable/utils.ts',
-        'components/AuthorAvatar.tsx',
         // api routes
         'app/api/posts/route.ts',
         'app/api/posts/create/route.ts',

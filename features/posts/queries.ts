@@ -1,14 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import type { PostWithRelations } from './types'
 
-const POST_SELECT = `
+export const POST_SELECT = `
   *,
-  author:profiles!posts_author_id_fkey(id, full_name, email, avatar_url),
+  author:public_author_profiles!posts_author_id_fkey(id, full_name, avatar_url),
   category:categories(id, name, slug),
   tags:post_tags(tag:tags(id, name, slug))
 `
 
-function normalizeTags(raw: PostWithRelations): PostWithRelations {
+export function normalizePost(raw: PostWithRelations): PostWithRelations {
   return {
     ...raw,
     // @ts-expect-error nested join shape
@@ -30,7 +30,7 @@ export async function getPublishedPosts(page = 1, limit = 10) {
 
   if (error) throw error
   return {
-    posts: (data ?? []).map(normalizeTags) as PostWithRelations[],
+    posts: (data ?? []).map(normalizePost) as PostWithRelations[],
     total: count ?? 0,
   }
 }
@@ -45,7 +45,7 @@ export async function getPostBySlug(slug: string) {
     .single()
 
   if (error) return null
-  return normalizeTags(data as PostWithRelations)
+  return normalizePost(data as PostWithRelations)
 }
 
 export async function getAllPostsForDashboard(authorId?: string) {
@@ -61,7 +61,7 @@ export async function getAllPostsForDashboard(authorId?: string) {
 
   const { data, error } = await query
   if (error) throw error
-  return (data ?? []).map(normalizeTags) as PostWithRelations[]
+  return (data ?? []).map(normalizePost) as PostWithRelations[]
 }
 
 export async function getPostById(id: string) {
@@ -73,7 +73,7 @@ export async function getPostById(id: string) {
     .single()
 
   if (error) return null
-  return normalizeTags(data as PostWithRelations)
+  return normalizePost(data as PostWithRelations)
 }
 
 export async function getPostsByCategory(categorySlug: string, page = 1, limit = 10) {
@@ -91,7 +91,7 @@ export async function getPostsByCategory(categorySlug: string, page = 1, limit =
 
   if (error) throw error
   return {
-    posts: (data ?? []).map(normalizeTags) as PostWithRelations[],
+    posts: (data ?? []).map(normalizePost) as PostWithRelations[],
     total: count ?? 0,
   }
 }

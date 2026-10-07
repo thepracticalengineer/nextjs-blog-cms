@@ -31,7 +31,7 @@ const basePost: PostWithRelations = {
   category_id: null,
   seo_title: null,
   seo_description: null,
-  author: { id: 'author-1', full_name: 'Jane Doe', email: 'jane@example.com', avatar_url: null },
+  author: { id: 'author-1', full_name: 'Jane Doe', avatar_url: null },
   category: null,
   tags: [],
 }
@@ -49,13 +49,13 @@ describe('PostCard', () => {
 
   it('renders author full name', () => {
     render(<PostCard post={basePost} />)
-    expect(screen.getByText('Jane Doe')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Jane Doe' })).toHaveAttribute('href', '/authors/author-1')
   })
 
-  it('renders author email when full_name is null', () => {
+  it('uses a public fallback when full_name is null', () => {
     const post = { ...basePost, author: { ...basePost.author!, full_name: null } }
     render(<PostCard post={post} />)
-    expect(screen.getByText('jane@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Author' })).toHaveAttribute('href', '/authors/author-1')
   })
 
   it('renders "Unknown" when author is null', () => {
@@ -97,4 +97,9 @@ describe('PostCard', () => {
     render(<PostCard post={basePost} />)
     expect(screen.getByRole('link', { name: 'Hello World' })).toHaveAttribute('href', '/blog/hello-world')
   })
+})
+
+it('includes relevant tag links when requested by an author listing', () => {
+  render(<PostCard post={{ ...basePost, tags: [{ id: 'tag', name: 'Engineering', slug: 'engineering', created_at: '2026-10-07T00:00:00Z' }] }} showTags />)
+  expect(screen.getByRole('link', { name: '#Engineering' })).toHaveAttribute('href', '/blog/tag/engineering')
 })
