@@ -6,7 +6,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { hashApiKey } from '@/features/api-keys/apiKeyService'
 
 const POST_LIST_SELECT = `
-  id, title, slug, excerpt, status, cover_image, created_at, updated_at, published_at,
+  id, title, slug, excerpt, status, cover_image, cover_image_alt, created_at, updated_at, published_at,
   category:categories(name),
   tags:post_tags(tag:tags(name))
 `
@@ -17,6 +17,7 @@ type RawPostRow = {
   slug: string
   excerpt: string | null
   status: string
+  cover_image_alt: string
   cover_image: string | null
   created_at: string | null
   updated_at: string | null
@@ -36,6 +37,7 @@ function normalizeListPost(raw: RawPostRow) {
     category: raw.category?.name ?? null,
     tags: (raw.tags ?? []).map((pt) => pt.tag?.name).filter(Boolean) as string[],
     image_url: raw.cover_image,
+    image_alt: raw.cover_image_alt,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
     published_at: raw.published_at,

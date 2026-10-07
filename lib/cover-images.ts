@@ -7,5 +7,8 @@ export function isCoverImageAllowed(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true
   if (typeof value !== 'string') return false
   if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return true
-  try { return hasRemoteMatch([], getImageRemotePatterns(), new URL(value)) } catch { return false }
+  try {
+    const url = new URL(value)
+    return !url.username && !url.password && hasRemoteMatch([], getImageRemotePatterns(), url)
+  } catch { return false }
 }

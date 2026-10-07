@@ -1,14 +1,17 @@
 'use client'
 
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback, useState } from 'react'
 import { useEditor, EditorContent as TipTapContent } from '@tiptap/react'
 import { extensions } from './extensions'
 import { Toolbar } from './Toolbar'
+import { ImageDialog } from './ImageDialog'
+import type { ImageValue } from '@/features/posts/media/validation'
 
 interface EditorProps {
   value: string
   onChange: (value: string) => void
   className?: string
+  editorId?: string
 }
 
 /** Returns parsed TipTap JSON object when value is JSON, otherwise returns the
@@ -21,7 +24,8 @@ export function parseEditorContent(value: string): object | string {
   }
 }
 
-export function Editor({ value, onChange, className }: EditorProps) {
+export function Editor({ value, onChange, className, editorId }: EditorProps) {
+  const [imageDialog, setImageDialog] = useState<{ file?: File; initial?: ImageValue; position: number; editing: boolean }>()
   const isInternalUpdate = useRef(false)
   const lastEmittedValue = useRef<string | null>(null)
 
@@ -42,6 +46,18 @@ export function Editor({ value, onChange, className }: EditorProps) {
     content: value ? parseEditorContent(value) : '',
     onUpdate: handleUpdate,
     editorProps: {
+      handlePaste: (view, event) => {
+        const file = Array.from(event.clipboardData?.files ?? [])[0]
+        if (!file || !editorId) return false
+        event.preventDefault()
+        setImageDialog({ file, position: view.state.selection.from, editing: false })
+        return true
+      },
+      handleDrop: (_view, event) => {
+        // Do not let files become browser-local blob/data URLs in the document.
+        if (event.dataTransfer?.files.length) { event.preventDefault(); return true }
+        return false
+      },
       attributes: {
         class: 'prose prose-sm sm:prose-base max-w-none focus:outline-hidden min-h-[300px] p-4',
       },
@@ -62,11 +78,23 @@ export function Editor({ value, onChange, className }: EditorProps) {
     isInternalUpdate.current = false
   }, [editor, value])
 
+  useEffect(() => {
+    if (!editor) return
+    editor.setEditable(!imageDialog, false)
+  }, [editor, imageDialog])
+
   if (!editor) return null
 
   return (
     <div className={`border rounded-md overflow-hidden ${className ?? ''}`}>
-      <Toolbar editor={editor} />
+      <Toolbar editor={editor} onImage={() => editorId && setImageDialog({ position: editor.state.selection.from, editing: editor.isActive('image'), initial: editor.isActive('image') ? editor.getAttributes('image') as ImageValue : undefined })} />
+      {imageDialog && editorId && <ImageDialog editorId={editorId} initial={imageDialog.initial} initialFile={imageDialog.file}
+        onClose={() => setImageDialog(undefined)} onSave={image => {
+          // No document mutation occurs until upload, URL validation and metadata succeed.
+          editor.setEditable(true, false)
+          if (imageDialog.editing) editor.chain().focus().setNodeSelection(imageDialog.position).updateAttributes('image', image).run()
+          else editor.chain().focus().setTextSelection(imageDialog.position).setImage(image).run()
+        }} />}
       <TipTapContent editor={editor} />
       <div className="px-4 py-1.5 border-t text-xs text-muted-foreground text-right select-none">
         {editor.storage.characterCount?.words() ?? 0} words

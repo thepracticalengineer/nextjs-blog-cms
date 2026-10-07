@@ -53,6 +53,7 @@ export async function saveWorkingCopy(input: SaveWorkingCopyInput): Promise<Draf
     : auth.client.from('post_working_copies').insert(row)
   const { data, error } = await query.select('*').single()
   if (!error && data) return { data: { ...data, values } as WorkingCopy }
+  if (error?.code === '23514' && error.message.includes('abandoned image')) return { error: `${error.message} Your writing is kept on this device.` }
   // An acknowledgement can be lost after a successful write. Repeating the same
   // request token must acknowledge it instead of reporting a false conflict.
   const current = await loadWorkingCopy(documentId, postId, editorId)

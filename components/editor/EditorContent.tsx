@@ -1,3 +1,5 @@
+import { imageDimension } from '@/features/posts/media/validation'
+
 interface TipTapMark {
   type: string
   attrs?: Record<string, string | number | boolean | null>
@@ -133,7 +135,10 @@ function renderNode(node: TipTapNode): string {
       if (!src) return ''
       const safeSrc = src.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
       const safeAlt = String(node.attrs?.alt ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
-      return `<img src="${safeSrc}" alt="${safeAlt}" class="max-w-full rounded-sm my-4" />`
+      const width = imageDimension(node.attrs?.width)
+      const height = imageDimension(node.attrs?.height)
+      const dimensions = width && height ? ` width="${width}" height="${height}"` : ''
+      return `<img src="${safeSrc}" alt="${safeAlt}"${dimensions} loading="lazy" decoding="async" class="max-w-full h-auto rounded-sm my-4" />`
     }
     default: return inner
   }

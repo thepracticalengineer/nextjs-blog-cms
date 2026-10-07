@@ -1,4 +1,4 @@
-import { getImageRemotePatterns } from './lib/image-config.mjs'
+import { getImageRemotePatterns, allowLocalImageOptimization } from './lib/image-config.mjs'
 
 
 /** @type {import('next').NextConfig} */
@@ -13,6 +13,7 @@ const nextConfig = {
     // Uploaded images are served by Supabase. External cover URLs can be added
     // explicitly via a comma-separated hostname allowlist in each environment.
     remotePatterns: getImageRemotePatterns(),
+    dangerouslyAllowLocalIP: allowLocalImageOptimization(),
   },
 }
 

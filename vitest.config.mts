@@ -36,6 +36,7 @@ export default defineConfig({
         // features
         'features/posts/components/**/*.{ts,tsx}',
         'features/posts/actions.ts',
+        'features/posts/media/**/*.{ts,tsx}',
         'features/posts/drafts/**/*.{ts,tsx}',
         'features/posts/publication.ts',
         'features/posts/slugs.ts',
@@ -56,6 +57,7 @@ export default defineConfig({
         // api routes
         'app/api/posts/route.ts',
         'app/api/posts/create/route.ts',
+        'app/api/post-media/route.ts',
         'app/api/posts/[id]/route.ts',
         'app/api/ai-assistant/generate/route.ts',
         'app/api/ai-assistant/books/route.ts',

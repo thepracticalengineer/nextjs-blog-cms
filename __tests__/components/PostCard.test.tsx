@@ -22,7 +22,7 @@ const basePost: PostWithRelations = {
   slug: 'hello-world',
   content: '<p>Content</p>',
   excerpt: 'A short excerpt',
-  cover_image: null,
+  cover_image: null, cover_image_alt: '',
   status: 'published',
   published_at: '2024-06-01T00:00:00Z',
   created_at: '2024-06-01T00:00:00Z',
@@ -102,4 +102,12 @@ describe('PostCard', () => {
 it('includes relevant tag links when requested by an author listing', () => {
   render(<PostCard post={{ ...basePost, tags: [{ id: 'tag', name: 'Engineering', slug: 'engineering', created_at: '2026-10-07T00:00:00Z' }] }} showTags />)
   expect(screen.getByRole('link', { name: '#Engineering' })).toHaveAttribute('href', '/blog/tag/engineering')
+})
+
+
+describe('cover image metadata', () => {
+  it('uses the editor-provided cover description', () => {
+    render(<PostCard post={{ ...basePost, cover_image: 'https://images.example.com/board.webp', cover_image_alt: 'A blue circuit board with labeled test points' }} />)
+    expect(screen.getByAltText('A blue circuit board with labeled test points')).toBeInTheDocument()
+  })
 })

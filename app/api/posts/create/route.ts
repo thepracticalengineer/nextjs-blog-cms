@@ -23,6 +23,7 @@ function buildPostPayload(body: PostApiBody, slug: string, categoryId: string | 
     content: body.content ?? '',
     excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
     cover_image: typeof body.image_url === 'string' ? body.image_url : null,
+    cover_image_alt: body.image_alt?.trim() ?? '',
     status: postStatus,
     author_id: userId,
     category_id: categoryId,

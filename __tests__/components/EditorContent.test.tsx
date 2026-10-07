@@ -176,3 +176,23 @@ describe('EditorContent — table', () => {
     expect(container.querySelector('td')).not.toBeNull()
   })
 })
+
+
+describe('inline image layout metadata', () => {
+  it('preserves escaped alt text and safe intrinsic dimensions with lazy loading', () => {
+    const content = doc([{ type: 'image', attrs: { src: 'https://images.example.com/circuit.webp', alt: 'Ports labeled "A" & "B"', width: 800, height: 600 } }])
+    const { container } = render(<EditorContent content={content} />)
+    const image = container.querySelector('img')!
+    expect(image).toHaveAttribute('alt', 'Ports labeled "A" & "B"')
+    expect(image).toHaveAttribute('width', '800')
+    expect(image).toHaveAttribute('height', '600')
+    expect(image).toHaveAttribute('loading', 'lazy')
+    expect(image).toHaveAttribute('decoding', 'async')
+  })
+  it('drops malformed dimensions', () => {
+    const content = doc([{ type: 'image', attrs: { src: 'https://images.example.com/circuit.webp', width: '8" onerror="alert(1)', height: -1 } }])
+    const { container } = render(<EditorContent content={content} />)
+    expect(container.querySelector('img')).not.toHaveAttribute('width')
+    expect(container.querySelector('img')).not.toHaveAttribute('height')
+  })
+})

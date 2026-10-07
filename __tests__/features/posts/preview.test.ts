@@ -45,6 +45,11 @@ describe('private unsaved reader preview', () => {
     expect(result.content).toContain('<p>Article</p>')
     expect(result.content).not.toMatch(/script|onclick|onerror|iframe|javascript:/)
   })
+  it('keeps intrinsic image dimensions and lazy loading in the reader preview', async () => {
+    const result = await previewPost(JSON.stringify({ type: 'doc', content: [{ type: 'image', attrs: { src: 'https://images.example.com/circuit.webp', alt: 'A circuit board', width: 800, height: 600 } }] }))
+    expect(result.content).toContain('width="800" height="600" loading="lazy" decoding="async"')
+    expect(result.content).toContain('alt="A circuit board"')
+  })
   it('rejects unsupported cover images before rendering', async () => {
     expect((await previewPost('Body', 'author-a', undefined, 'https://unconfigured.invalid/cover.jpg')).error).toContain('configured HTTPS')
     expect(createClient).not.toHaveBeenCalled()

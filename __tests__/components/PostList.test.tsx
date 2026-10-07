@@ -22,7 +22,7 @@ const makePost = (id: string, title: string): PostWithRelations => ({
   slug: `post-${id}`,
   content: '<p>Content</p>',
   excerpt: null,
-  cover_image: null,
+  cover_image: null, cover_image_alt: '',
   status: 'published',
   published_at: null,
   created_at: '2024-01-01T00:00:00Z',
