@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { UseFormReturn } from 'react-hook-form'
 import { loadWorkingCopy, saveWorkingCopy, discardWorkingCopy } from './actions'
-import { snapshot, type DraftValues } from './schema'
+import { snapshot, draftTooLarge, DRAFT_TOO_LARGE, type DraftValues } from './schema'
 import { readRecovery, recoveryKey, recoverySchema, type Recovery } from './storage'
 import { installNavigationGuard } from './navigation'
 
@@ -36,6 +36,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
     let ownKey = recoveryKey(recordIdentity)
     let recoveryPostId = postId
     const original = snapshot(getValues())
+    let latestSnapshot = original
     let safeSnapshot = original
     let baseUpdatedAt = updatedAt
     let revision: string | null = null
@@ -45,10 +46,12 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
     let candidates: Candidate[] = []
     let restored: { key: string; snapshot: string } | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
+    let localTimer: ReturnType<typeof setTimeout> | undefined
+    let lastLocalWrite = 0
     let inFlight: Promise<void> | undefined
     let request: { snapshot: string; revision: string } | undefined
     const update = (patch: Partial<State>) => { if (!disposed) setState(previous => ({ ...previous, ...patch })) }
-    const currentSnapshot = () => snapshot(getValues())
+    const currentSnapshot = () => latestSnapshot
     const unsafe = () => currentSnapshot() !== safeSnapshot || candidates.some(candidate => candidate.localKey)
     function removeLocal(key: string, expectedSnapshot?: string) {
       try {
@@ -60,8 +63,10 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
       } catch { update({ storageError: 'Local recovery is unavailable. Keep this tab open until saving succeeds.' }) }
     }
     function persistLocal() {
-      const values = getValues()
-      if (snapshot(values) === safeSnapshot) return true
+      clearTimeout(localTimer)
+      if (latestSnapshot === safeSnapshot) return true
+      const values = JSON.parse(latestSnapshot) as DraftValues
+      lastLocalWrite = Date.now()
       const record: Recovery = { version: 1, ...recordIdentity, postId: recoveryPostId, values, baseUpdatedAt, savedAt: Date.now() }
       try { localStorage.setItem(ownKey, JSON.stringify(record)); update({ storageError: undefined }); return true }
       catch { update({ storageError: 'Local recovery is unavailable. Keep this tab open until saving succeeds.' }); return false }
@@ -74,9 +79,11 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
     }
     async function autosave() {
       if (paused || disposed || inFlight || candidates.length) return
-      const values = getValues()
-      const submitted = snapshot(values)
+      persistLocal()
+      const submitted = latestSnapshot
+      const values = JSON.parse(submitted) as DraftValues
       if (submitted === safeSnapshot) return
+      if (draftTooLarge(submitted)) { update({ status: 'failed', error: DRAFT_TOO_LARGE }); return }
       if (request?.snapshot !== submitted) request = { snapshot: submitted, revision: crypto.randomUUID() }
       const requestRevision = request.revision
       update({ status: 'saving', error: undefined })
@@ -112,7 +119,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
         const result = await loadWorkingCopy(documentId!, postId, userId!)
         if (disposed) return
         revision = result.data?.revision ?? null
-        candidates = local.filter(entry => entry.record.documentId === documentId && entry.record.postId === postId && entry.key !== ownKey && snapshot(entry.record.values) !== original)
+        candidates = local.filter(entry => entry.record.documentId === documentId && (entry.record.postId === postId || (postId === documentId && entry.record.postId === null)) && entry.key !== ownKey && snapshot(entry.record.values) !== original)
           .map(entry => ({ id: entry.key, localKey: entry.key, values: entry.record.values, baseUpdatedAt: entry.record.baseUpdatedAt, label: `On this device · ${new Date(entry.record.savedAt).toLocaleString()}` }))
         if (result.data && snapshot(result.data.values) !== original) {
           candidates.push({ id: 'server', revision: result.data.revision, values: result.data.values, baseUpdatedAt: result.data.base_updated_at, label: `Server working copy · ${new Date(result.data.updated_at).toLocaleString()}` })
@@ -126,7 +133,15 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
       }
     }
     let syncNavigation = () => {}
-    const subscription = watch(() => { persistLocal(); syncNavigation(); schedule() })
+    const subscription = watch(() => {
+      latestSnapshot = snapshot(getValues())
+      clearTimeout(localTimer)
+      const remaining = 300 - (Date.now() - lastLocalWrite)
+      if (remaining <= 0) persistLocal()
+      else localTimer = setTimeout(persistLocal, remaining)
+      syncNavigation()
+      schedule()
+    })
     const navigationGuard = installNavigationGuard(() => !unsafe() || window.confirm('Some writing is not saved to the server. Leave this editor? Recovery will remain on this device.'), unsafe)
     syncNavigation = navigationGuard.sync
     const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -187,7 +202,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
         safeSnapshot = currentSnapshot()
         return true
       },
-      beginSave: async () => { paused = true; clearTimeout(timer); await inFlight; return baseUpdatedAt },
+      beginSave: async () => { persistLocal(); paused = true; clearTimeout(timer); await inFlight; return baseUpdatedAt },
       finishSave: async (values, newUpdatedAt, createdPostId) => {
         try {
           if (values) {
@@ -211,7 +226,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
               recordIdentity.documentId = createdPostId
               recoveryPostId = createdPostId
               ownKey = recoveryKey(recordIdentity)
-              if (persistLocal()) removeLocal(previousKey)
+              if (persistLocal() && previousKey !== ownKey) removeLocal(previousKey)
             }
           }
         } catch { update({ storageError: 'Recovery cleanup failed. Your writing is still available on this device.' }) }
@@ -222,7 +237,9 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
     }
     void initialize()
     return () => {
+      persistLocal()
       disposed = true
+      clearTimeout(localTimer)
       clearTimeout(timer)
       subscription.unsubscribe()
       navigationGuard.dispose()

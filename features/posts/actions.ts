@@ -2,7 +2,8 @@
 
 import { redirect } from 'next/navigation'
 import slugify from 'slugify'
-import { randomUUID } from 'crypto'
+import { z } from 'zod'
+import { randomUUID } from 'node:crypto'
 import { validatePublication, type FieldErrors } from './publication'
 import { refreshPostPaths, refreshDraftPaths } from './cache'
 import { cancelNewsletterSend } from '@/features/newsletter/actions'
@@ -34,7 +35,7 @@ async function generateUniqueSlug(title: string, excludeId?: string): Promise<st
   return slug
 }
 
-export async function createPost(values: PostFormValues, editorId?: string): Promise<PostMutationResult> {
+export async function createPost(values: PostFormValues, editorId?: string, documentId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:create')) {
     return { error: 'Unauthorized' }
@@ -42,11 +43,13 @@ export async function createPost(values: PostFormValues, editorId?: string): Pro
 
   if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
+  if (documentId && !z.uuid().safeParse(documentId).success) return { error: 'Invalid draft identity.' }
   const slug = values.slug || await generateUniqueSlug(values.title)
 
   const { data: post, error } = await supabase
     .from('posts')
     .insert({
+      ...(documentId ? { id: documentId } : {}),
       title: values.title,
       slug,
       excerpt: values.excerpt || null,
@@ -61,7 +64,13 @@ export async function createPost(values: PostFormValues, editorId?: string): Pro
     .select()
     .single()
 
-  if (error) return { error: error.message }
+  if (error) {
+    if (documentId && error.code === '23505') {
+      const { data: existing } = await supabase.from('posts').select('id, author_id').eq('id', documentId).single()
+      if (existing?.author_id === profile.id) return { error: 'This draft was already created. Reopen it from All Posts to compare your writing before saving.' }
+    }
+    return { error: error.message }
+  }
 
   // Handle tags
   if (values.tag_ids?.length > 0) {

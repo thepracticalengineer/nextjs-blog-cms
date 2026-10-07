@@ -49,6 +49,23 @@ beforeEach(() => {
 })
 
 describe('private working copy actions', () => {
+  it('recreates a discarded copy without overwriting an existing competing revision', async () => {
+    await saveWorkingCopy(input())
+    await discardWorkingCopy(documentId, null, revision1, userId)
+    expect((await saveWorkingCopy(input({ expectedRevision: revision1, revision: revision2 }))).data?.revision).toBe(revision2)
+    expect(rows).toHaveLength(1)
+    expect((await saveWorkingCopy(input({ expectedRevision: revision1 }))).conflict).toBe(true)
+    expect(rows[0].revision).toBe(revision2)
+  })
+  it('loads a leftover new-document copy after that document becomes an owned post', async () => {
+    await saveWorkingCopy(input({ documentId: postId }))
+    expect((await loadWorkingCopy(postId, postId, userId)).data?.values.content).toBe('Private writing')
+  })
+  it('enforces UTF-8 bytes for multibyte drafts before attempting a write', async () => {
+    const result = await saveWorkingCopy(input({ values: { ...draftValues(), content: '界'.repeat(250_001) } }))
+    expect(result.error).toContain('too large')
+    expect(writes).toEqual([])
+  })
   it('creates new-document working copies and reloads every form field', async () => {
     expect((await saveWorkingCopy(input())).data?.values.content).toBe('Private writing')
     expect((await loadWorkingCopy(documentId, null, userId)).data?.revision).toBe(revision1)

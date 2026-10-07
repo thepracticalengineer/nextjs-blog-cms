@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { getProfile } from '@/lib/auth/session'
 import { can, type Role } from '@/lib/permissions'
 import { createClient } from '@/lib/supabase/server'
-import { draftValuesSchema, type WorkingCopy } from './schema'
+import { draftValuesSchema, draftTooLarge, DRAFT_TOO_LARGE, type WorkingCopy } from './schema'
 
 const identity = z.object({ documentId: z.uuid(), postId: z.uuid().nullable(), editorId: z.uuid() })
 const saveSchema = identity.extend({
@@ -16,7 +16,7 @@ export type DraftResult = { data?: WorkingCopy; error?: string; conflict?: boole
 
 async function context(documentId: string, postId: string | null, editorId: string) {
   const profile = await getProfile()
-  if (!profile || profile.id !== editorId || !can(profile.role as Role, 'posts:create')) return null
+  if (profile?.id !== editorId || !can(profile.role as Role, 'posts:create')) return null
   if (postId && documentId !== postId) return null
   const client = await createClient()
   if (postId) {
@@ -34,7 +34,7 @@ export async function loadWorkingCopy(documentId: string, postId: string | null,
     .eq('user_id', auth.userId).eq('document_id', documentId).maybeSingle()
   if (error) return { error: 'Draft recovery is unavailable. Your writing will be kept on this device.' }
   if (!data) return {}
-  if (data.post_id !== postId) return { error: 'This recovery copy belongs to a different document.' }
+  if (data.post_id !== postId && !(postId === documentId && data.post_id === null)) return { error: 'This recovery copy belongs to a different document.' }
   const values = draftValuesSchema.safeParse(data.values)
   if (!values.success) return { error: 'The saved working copy could not be read.' }
   return { data: { ...data, values: values.data } as WorkingCopy }
@@ -42,7 +42,8 @@ export async function loadWorkingCopy(documentId: string, postId: string | null,
 
 export async function saveWorkingCopy(input: SaveWorkingCopyInput): Promise<DraftResult> {
   const parsed = saveSchema.safeParse(input)
-  if (!parsed.success || JSON.stringify(parsed.data.values).length > 2_000_000) return { error: 'The draft could not be saved. Check its size and fields.' }
+  if (!parsed.success) return { error: 'The draft could not be saved. Check its fields.' }
+  if (draftTooLarge(JSON.stringify(parsed.data.values))) return { error: DRAFT_TOO_LARGE }
   const { documentId, postId, editorId, values, revision, expectedRevision, baseUpdatedAt } = parsed.data
   const auth = await context(documentId, postId, editorId)
   if (!auth) return { error: 'Your session expired, the account changed, or this post is no longer editable. Sign in with the account that opened this editor, then retry; your writing is kept on this device.' }
@@ -56,6 +57,11 @@ export async function saveWorkingCopy(input: SaveWorkingCopyInput): Promise<Draf
   // request token must acknowledge it instead of reporting a false conflict.
   const current = await loadWorkingCopy(documentId, postId, editorId)
   if (current.data?.revision === revision) return current
+  if (expectedRevision && error?.code === 'PGRST116' && !current.error && !current.data) {
+    // A discarded row can be recreated. A concurrent insert is still protected
+    // by the primary key; never upsert over another tab's revision.
+    return saveWorkingCopy({ ...parsed.data, expectedRevision: null })
+  }
   if (current.data || error?.code === '23505' || error?.code === 'PGRST116') {
     return { error: 'Another tab changed this working copy. Your writing is kept locally. Reopen the editor to compare and restore a copy.', conflict: true }
   }

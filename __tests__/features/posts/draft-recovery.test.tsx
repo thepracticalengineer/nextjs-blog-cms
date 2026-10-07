@@ -34,7 +34,33 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('draft recovery and safe autosave', () => {
-  it('persists each edit immediately and offers restoration after interruption', async () => {
+  it('throttles repeated storage writes and flushes the latest text on unmount', async () => {
+    const hook = mount(); await ready(hook)
+    vi.useFakeTimers()
+    const writes = vi.spyOn(Storage.prototype, 'setItem')
+    type(hook, 'First'); type(hook, 'Second'); type(hook, 'Third')
+    expect(writes).toHaveBeenCalledTimes(1)
+    await act(async () => { await vi.advanceTimersByTimeAsync(300) })
+    expect(writes).toHaveBeenCalledTimes(2)
+    expect(readRecovery(identity.userId)[0].record.values.content).toBe('Third')
+    type(hook, 'Final'); hook.unmount()
+    expect(readRecovery(identity.userId)[0].record.values.content).toBe('Final')
+  })
+  it('preserves oversized Unicode writing locally without sending an impossible autosave', async () => {
+    const hook = mount(); await ready(hook)
+    type(hook, '界'.repeat(250_001)); await retry(hook)
+    expect(saveWorkingCopy).not.toHaveBeenCalled()
+    expect(hook.result.current.recovery.error).toContain('too large')
+    expect(readRecovery(identity.userId)[0].record.values.content).toHaveLength(250_001)
+    type(hook, 'Shorter'); await retry(hook)
+    expect(hook.result.current.recovery.status).toBe('saved')
+  })
+  it('offers interrupted new-post writing when reopening its already-created post', async () => {
+    const first = mount(); await ready(first); type(first, 'Lost create acknowledgement'); first.unmount()
+    const edit = mount(identity, identity.documentId, '2026-10-07T00:10:00Z'); await ready(edit)
+    expect(edit.result.current.recovery.candidates).toHaveLength(1)
+  })
+  it('persists initial edits immediately and offers restoration after interruption', async () => {
     const first = mount(); await ready(first)
     type(first, 'Interrupted writing')
     expect(readRecovery(identity.userId)[0].record.values.content).toBe('Interrupted writing')
@@ -114,7 +140,7 @@ describe('draft recovery and safe autosave', () => {
     const a = mount(); await ready(a); type(a, 'Tab A')
     const b = mount(); await ready(b)
     act(() => b.result.current.recovery.restore(b.result.current.recovery.candidates[0].id))
-    type(b, 'Tab B')
+    type(b, 'Tab B'); window.dispatchEvent(new Event('pagehide'))
     expect(readRecovery(identity.userId)).toHaveLength(2)
     await retry(a)
     expect(readRecovery(identity.userId)).toHaveLength(1)
@@ -128,7 +154,7 @@ describe('draft recovery and safe autosave', () => {
     const a = mount(); await ready(a); type(a, 'Original tab snapshot')
     const b = mount(); await ready(b)
     act(() => b.result.current.recovery.restore(b.result.current.recovery.candidates[0].id))
-    type(a, 'Newer text in original tab')
+    type(a, 'Newer text in original tab'); window.dispatchEvent(new Event('pagehide'))
     await retry(b)
     expect(readRecovery(identity.userId)).toHaveLength(1)
     expect(readRecovery(identity.userId)[0].record.values.content).toBe('Newer text in original tab')
@@ -156,15 +182,15 @@ describe('draft recovery and safe autosave', () => {
     expect(closeEvent().defaultPrevented).toBe(true)
     expect(discardWorkingCopy).toHaveBeenCalledWith(identity.documentId, null, 'revision-1', identity.userId)
   })
-  it('carries newer writing to an existing post identity after slow creation', async () => {
+  it.each(['new-post', identity.documentId])('carries newer writing to post %s after slow creation', async createdId => {
     const hook = mount(); await ready(hook); type(hook, 'Created text')
     await hook.result.current.recovery.beginSave()
     const submitted = hook.result.current.form.getValues()
     type(hook, 'Typed during creation')
-    await act(async () => { await hook.result.current.recovery.finishSave(submitted, '2026-10-07T00:10:00Z', 'new-post') })
-    expect(readRecovery(identity.userId)[0].record).toMatchObject({ documentId: 'new-post', postId: 'new-post', values: { content: 'Typed during creation' } })
-    type(hook, 'Typed while the edit route loads')
-    expect(readRecovery(identity.userId)[0].record).toMatchObject({ documentId: 'new-post', values: { content: 'Typed while the edit route loads' } })
+    await act(async () => { await hook.result.current.recovery.finishSave(submitted, '2026-10-07T00:10:00Z', createdId) })
+    expect(readRecovery(identity.userId)[0].record).toMatchObject({ documentId: createdId, postId: createdId, values: { content: 'Typed during creation' } })
+    type(hook, 'Typed while the edit route loads'); window.dispatchEvent(new Event('pagehide'))
+    expect(readRecovery(identity.userId)[0].record).toMatchObject({ documentId: createdId, values: { content: 'Typed while the edit route loads' } })
   })
   it('warns before internal navigation and permits explicit discard only after confirmation', async () => {
     const hook = mount(); await ready(hook); type(hook, 'Unsaved')

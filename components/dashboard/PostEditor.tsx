@@ -126,7 +126,7 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
       const expectedUpdatedAt = await recovery.beginSave()
       const result = post
         ? await updatePost(post.id, values, false, expectedUpdatedAt, draftIdentity?.userId)
-        : await createPost(values, draftIdentity?.userId)
+        : await createPost(values, draftIdentity?.userId, draftIdentity?.documentId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')

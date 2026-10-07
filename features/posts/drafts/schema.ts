@@ -27,3 +27,11 @@ export function draftValues(post?: PostWithRelations): DraftValues {
 export function snapshot(values: DraftValues): string {
   return JSON.stringify(draftValuesSchema.parse(values))
 }
+
+// Leave room for Server Action framing and JSONB whitespace within the 1 MB
+// request limit and 2 MB database constraint. Count UTF-8 bytes, not characters.
+export const MAX_DRAFT_BYTES = 750_000
+export const DRAFT_TOO_LARGE = 'This draft is too large to autosave (750 KB limit). Shorten it before retrying. Your writing is preserved on this device.'
+export function draftTooLarge(serialized: string): boolean {
+  return new TextEncoder().encode(serialized).byteLength > MAX_DRAFT_BYTES
+}

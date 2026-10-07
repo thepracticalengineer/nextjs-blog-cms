@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto'
+import { randomUUID } from 'node:crypto'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { requirePermission } from '@/lib/auth/session'
@@ -15,6 +15,10 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   const { draft } = await searchParams
   if (!draft || !z.uuid().safeParse(draft).success) redirect(`/dashboard/posts/new?draft=${randomUUID()}`)
   const supabase = await createClient()
+  // The document UUID is also the created post UUID. An old recovery link can
+  // only reopen that post, even if cleanup or the create acknowledgement failed.
+  const { data: created } = await supabase.from('posts').select('id, author_id').eq('id', draft).maybeSingle()
+  if (created?.author_id === profile.id) redirect(`/dashboard/posts/${draft}/edit`)
   const [{ data: categories }, { data: tags }, { data: workingCopies }] = await Promise.all([
     supabase.from('categories').select('*').order('name'),
     supabase.from('tags').select('*').order('name'),

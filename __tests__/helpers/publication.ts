@@ -37,7 +37,11 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
             const send = payload as Row
             if (!sends.some(row => row.post_id === send.post_id)) sends.push({ sending_started_at: null, sent_at: null, ...send })
           } else if (operation === 'insert') {
-            rows = (Array.isArray(payload) ? payload : [payload]).map(row => ({ ...validPost, ...row, id: 'created-post' }))
+            const incoming = Array.isArray(payload) ? payload : [payload]
+            if (table === 'posts' && incoming.some(row => posts.some(post => post.id === row.id))) {
+              return { data: null, error: { code: '23505', message: 'Duplicate post ID' } }
+            }
+            rows = incoming.map(row => ({ ...validPost, id: 'created-post', ...row }))
             if (table === 'posts') posts.push(...rows)
           } else if (operation === 'update') {
             for (const row of rows) Object.assign(row, payload)
