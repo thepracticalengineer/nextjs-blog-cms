@@ -3,6 +3,7 @@ import { test, expect } from '../fixtures'
 import { readyArticle } from '../publication-fixture'
 
 test('dispatch failure before provider handoff releases real claims and allows republish', async ({ request, apiKey }) => {
+  // Skip outside isolated provider-disabled stacks: this test must never send real emails.
   test.skip(!!process.env.RESEND_API_KEY || !process.env.WEBHOOK_SECRET, 'Requires an isolated stack with email delivery disabled and a webhook secret.')
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false, autoRefreshToken: false } })
   const headers = { Authorization: `Bearer ${apiKey}` }

@@ -152,14 +152,8 @@ async function processClaimedSends(
     if (!postData) continue // Request cleanup releases this unstarted claim.
 
     // Deliver the validated snapshot consistently, even if a reviewed live edit occurs.
-    const { failures, stopped } = await sendInBatches(activeSubscribers, postData, async () => {
-      const [currentPost, currentSend] = await Promise.all([
-        supabase.from('posts').select('status').eq('id', send.post_id).single(),
-        supabase.from('newsletter_sends').select('status, dispatch_token').eq('id', send.id).single(),
-      ])
-      return !currentPost.error && !currentSend.error && currentPost.data?.status === 'published' &&
-        currentSend.data?.status === 'sending' && currentSend.data?.dispatch_token === dispatchToken
-    }, async () => {
+    const { failures, stopped } = await sendInBatches(activeSubscribers, postData,
+      () => canContinueDelivery(supabase, send, dispatchToken), async () => {
       // Persist possible handoff before the first provider call. A canceled,
       // restored or recovered row no longer belongs to this worker.
       const { data, error } = await supabase.from('newsletter_sends')
@@ -206,4 +200,17 @@ async function getDeliverablePost(supabase: ReturnType<typeof createServiceClien
     return null
   }
   return post
+}
+
+async function canContinueDelivery(
+  supabase: ReturnType<typeof createServiceClient>,
+  send: { id: string; post_id: string },
+  dispatchToken: string
+): Promise<boolean> {
+  const [currentPost, currentSend] = await Promise.all([
+    supabase.from('posts').select('status').eq('id', send.post_id).single(),
+    supabase.from('newsletter_sends').select('status, dispatch_token').eq('id', send.id).single(),
+  ])
+  return !currentPost.error && !currentSend.error && currentPost.data?.status === 'published' &&
+    currentSend.data?.status === 'sending' && currentSend.data?.dispatch_token === dispatchToken
 }
