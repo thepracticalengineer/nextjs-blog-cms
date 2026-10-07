@@ -43,6 +43,12 @@ function makeSupabase({
   editedPost = null as typeof post | null,
 } = {}) {
   const fromMock = vi.fn()
+  let dispatchToken: string
+
+  fromMock.mockReturnValueOnce({
+    update: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), is: vi.fn().mockReturnThis(),
+    lt: vi.fn().mockResolvedValue({ error: null }),
+  })
 
   // Call 1: stuck-sending recovery (.update.eq.lt)
   fromMock.mockReturnValueOnce({
@@ -61,7 +67,7 @@ function makeSupabase({
 
   // Call 3: claim sends (.update.in.eq.select)
   fromMock.mockReturnValueOnce({
-    update: vi.fn().mockReturnThis(),
+    update: vi.fn().mockImplementation(function (this: unknown, payload: { dispatch_token: string }) { dispatchToken = payload.dispatch_token; return this }),
     in: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockResolvedValue({ data: claimError ? null : claimedSends, error: claimError }),
@@ -73,8 +79,10 @@ function makeSupabase({
   fromMock.mockReturnValue({
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    is: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
-    single: vi.fn().mockImplementation(async () => ({ data: { status: sendStatuses[Math.min(statusRead++, sendStatuses.length - 1)] }, error: null })),
+    single: vi.fn().mockImplementation(async () => ({ data: { status: sendStatuses[Math.min(statusRead++, sendStatuses.length - 1)], dispatch_token: dispatchToken }, error: null })),
     then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [pendingSend], error: null }).then(resolve),
   })
 
@@ -89,6 +97,8 @@ function makeSupabase({
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('WEBHOOK_SECRET', WEBHOOK_SECRET)
+  vi.stubEnv('RESEND_API_KEY', 'mock-key')
+  vi.stubEnv('RESEND_FROM_EMAIL', 'mock@example.com')
 })
 
 describe('POST /api/newsletter/send', () => {

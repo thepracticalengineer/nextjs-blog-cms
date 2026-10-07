@@ -18,7 +18,7 @@ type Row = Record<string, unknown>
 // Stateful query double: assert actual attempted writes and preservation, rather
 // than mocking readiness or merely checking that the validator was called.
 export function postClient(initialPosts: Row[] = [], authorName: string | null = 'Frank Mendez', initialSends: Row[] = [], initialRoutes: Row[] = [], initialSubscribers: Row[] = []) {
-  const sends = initialSends.map(row => ({ ...row }))
+  const sends: Row[] = initialSends.map(row => ({ delivery_started_at: null, dispatch_token: null, ...row }))
   const posts = initialPosts.map(row => ({ ...row }))
   const writes: { table: string; operation: string; payload?: unknown }[] = []
   const requests = new Map<string, { fingerprint: string; post: Row }>()
@@ -26,6 +26,7 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
   let race = false
   let slugRaces = 0
   const queryFailures: { table: string; operation: string; message: string }[] = []
+  let queryObserver: ((query: { table: string; operation: string; payload: Row | Row[] }) => void) | undefined
   const routes: Row[] = [...initialRoutes.map(row => ({ ...row })), ...posts.map(row => ({ slug: row.slug, post_id: row.id, was_published: row.status === 'published' }))]
   const reserveRoute = (row: Row, oldSlug?: unknown) => {
     const route = routes.find(route => route.slug === row.slug)
@@ -57,6 +58,7 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
       const filters: ((row: Row) => boolean)[] = []
       let rowLimit = Infinity
       const execute = () => {
+        queryObserver?.({ table, operation, payload })
         const failureIndex = queryFailures.findIndex(failure => failure.table === table && failure.operation === operation)
         if (failureIndex >= 0) return { data: null, error: { message: queryFailures.splice(failureIndex, 1)[0].message } }
         let rows: Row[] = table === 'post_creation_requests' ? Array.from(requests.entries()).map(([key, value]) => ({ actor_id: key.split(':')[0], request_key: key.slice(key.indexOf(':') + 1), fingerprint: value.fingerprint, post_id: value.post.id })) : table === 'post_slug_routes' ? routes : table === 'newsletter_sends' ? sends : table === 'newsletter_subscriptions' ? initialSubscribers : table === 'posts' ? posts : table === 'profiles' ? [{ id: 'user-1', full_name: authorName }] : []
@@ -70,7 +72,7 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
           if (race && table === 'posts') return { data: null, error: { code: '40001', message: 'Concurrent update' } }
           if (operation === 'upsert' && table === 'newsletter_sends') {
             const send = payload as Row
-            if (!sends.some(row => row.post_id === send.post_id)) sends.push({ id: `send-${sends.length + 1}`, sending_started_at: null, sent_at: null, ...send })
+            if (!sends.some(row => row.post_id === send.post_id)) sends.push({ id: `send-${sends.length + 1}`, sending_started_at: null, delivery_started_at: null, dispatch_token: null, sent_at: null, ...send })
           } else if (operation === 'insert') {
             const incoming = Array.isArray(payload) ? payload : [payload]
             if (table === 'posts' && incoming.some(row => posts.some(post => post.id === row.id))) {
@@ -116,5 +118,5 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
       return chain
     }),
   } as unknown as ReturnType<typeof createServiceClient>
-  return { client, posts, sends, routes, writes, failQuery: (table: string, operation: string, message = 'Database unavailable') => { queryFailures.push({ table, operation, message }) }, failAtomic: (message = 'Tag operation failed') => { atomicError = { code: '23503', message } }, clearAtomicFailure: () => { atomicError = null }, simulateSlugRace: (count = 1) => { slugRaces = count }, simulateRace: () => { race = true } }
+  return { client, posts, sends, routes, writes, observeQueries: (observer: typeof queryObserver) => { queryObserver = observer }, failQuery: (table: string, operation: string, message = 'Database unavailable') => { queryFailures.push({ table, operation, message }) }, failAtomic: (message = 'Tag operation failed') => { atomicError = { code: '23503', message } }, clearAtomicFailure: () => { atomicError = null }, simulateSlugRace: (count = 1) => { slugRaces = count }, simulateRace: () => { race = true } }
 }

@@ -199,7 +199,7 @@ export async function PATCH(
       newsletterWarning = 'Post unpublished, but newsletter cancellation could not be confirmed. Delivery checks block new batches while unpublished.'
     }
   } else if (candidate.status === 'published' && existing.status !== 'published') {
-    try { await scheduleNewsletterSend(id) } catch (err) {
+    try { await scheduleNewsletterSend(id, { resetPendingDelay: true }) } catch (err) {
       console.error('[API] Newsletter scheduling failed:', err)
       newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status in the dashboard before retrying.'
     }

@@ -163,7 +163,7 @@ describe('PATCH /api/posts/[id]', () => {
     const res = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))
     expect(res.status).toBe(200)
     expect(db.posts[0]).toMatchObject({ status: 'published', published_at: expect.any(String) })
-    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1', { resetPendingDelay: true })
   })
   it('preserves the original publication timestamp and does not requeue live edits', async () => {
     const db = postClient([{ ...validPost, status: 'published', published_at: '2026-01-01T00:00:00Z' }])

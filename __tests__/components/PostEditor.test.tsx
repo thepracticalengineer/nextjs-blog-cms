@@ -104,7 +104,7 @@ describe('newsletter visibility and scheduling recovery', () => {
     expect(screen.queryByRole('button', { name: 'Retry newsletter scheduling' })).not.toBeInTheDocument()
   })
   it.each(['pending', 'sending', 'sent', 'failed'] as const)('shows %s queue status and forbids retries after delivery starts', status => {
-    render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, send: { ...send, status, sending_started_at: '2026-10-07T00:00:00Z' } }} />)
+    render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, send: { ...send, status, sending_started_at: '2026-10-07T00:00:00Z', delivery_started_at: '2026-10-07T00:00:00Z' } }} />)
     expect(screen.getByRole('region', { name: 'Newsletter notification' })).toHaveTextContent({ pending: 'Queued', sending: 'Sending', sent: 'Sent', failed: 'Failed' }[status])
     expect(screen.queryByRole('button', { name: 'Retry newsletter scheduling' })).not.toBeInTheDocument()
   })
@@ -118,6 +118,15 @@ describe('newsletter visibility and scheduling recovery', () => {
     expect(toast.success).toHaveBeenCalledWith('Post saved and published!')
     expect(toast.warning).toHaveBeenCalledWith(warning)
     expect(screen.getByLabelText('Post title')).toHaveValue('My Reviewed Engineering Article')
+  })
+  it('distinguishes preparing from provider handoff and permits a failed preparation retry', () => {
+    const claimed = { ...send, sending_started_at: '2026-10-07T00:00:00Z', delivery_started_at: null }
+    const { rerender } = render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, send: { ...claimed, status: 'sending' } }} />)
+    expect(screen.getByRole('region', { name: 'Newsletter notification' })).toHaveTextContent('Preparing')
+    expect(screen.getByText('No emails have been handed off yet.', { exact: false })).toBeVisible()
+    rerender(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, send: { ...claimed, status: 'failed' } }} />)
+    expect(screen.getByRole('button', { name: 'Retry newsletter scheduling' })).toBeVisible()
+    expect(screen.queryByText(/Delivery may have started/)).not.toBeInTheDocument()
   })
   it('retries only newsletter scheduling without saving or publishing unsaved editor input', async () => {
     vi.mocked(retryNewsletterScheduling).mockResolvedValueOnce({})

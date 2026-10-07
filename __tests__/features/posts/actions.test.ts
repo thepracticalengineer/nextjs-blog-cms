@@ -78,7 +78,7 @@ describe('dashboard publication actions', () => {
     expect((await publishPost('post-1', values)).error).toBeUndefined()
     expect(db.posts[0]).toMatchObject({ status: 'published', content: values.content })
     expect(db.writes.filter(write => write.table === 'posts')).toHaveLength(1)
-    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1', { resetPendingDelay: true })
     expect(refreshPostPaths).toHaveBeenCalledWith(validPost.slug, values.slug)
   })
   it('rejects concurrent edits without newsletter side effects', async () => {
@@ -135,9 +135,15 @@ describe('newsletter scheduling retry authorization', () => {
     expect(await retryNewsletterScheduling('post-1')).toEqual({})
     expect(scheduleNewsletterSend).toHaveBeenCalledOnce()
   })
+  it('allows a claimed failure to be retried if there was no provider handoff', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    db.sends.push({ post_id: 'post-1', status: 'failed', sending_started_at: '2026-01-01T00:00:00Z', delivery_started_at: null, sent_at: null })
+    expect(await retryNewsletterScheduling('post-1')).toEqual({})
+    expect(scheduleNewsletterSend).toHaveBeenCalledOnce()
+  })
   it.each(['pending', 'sending', 'sent', 'failed'])('refuses retries of queued or previously claimed %s sends', async status => {
     const db = useDb([{ ...validPost, status: 'published' }])
-    db.sends.push({ post_id: 'post-1', status, sending_started_at: status === 'pending' ? null : '2026-01-01T00:00:00Z' })
+    db.sends.push({ post_id: 'post-1', status, sending_started_at: status === 'pending' ? null : '2026-01-01T00:00:00Z', delivery_started_at: status === 'pending' ? null : '2026-01-01T00:00:00Z' })
     expect((await retryNewsletterScheduling('post-1')).error).toContain('duplicate')
     expect(scheduleNewsletterSend).not.toHaveBeenCalled()
   })

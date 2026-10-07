@@ -1,32 +1,48 @@
--- Run only in an isolated migrated test database. All fixtures are rolled back.
+-- PostgreSQL constraint/update-semantics checks, not execution of the TS queries.
+-- App query drift is covered by Vitest and Playwright against a migrated test DB.
+-- Run only in an isolated migrated database. All fixtures are rolled back.
 begin;
-insert into auth.users (id, email) values ('00000000-0000-4000-8000-000000000081', 'newsletter-test@example.com');
-insert into public.profiles (id, email, role) values ('00000000-0000-4000-8000-000000000081', 'newsletter-test@example.com', 'author') on conflict (id) do nothing;
-insert into public.posts (id, title, slug, author_id, status) values ('00000000-0000-4000-8000-000000000082', 'Newsletter queue test', 'newsletter-queue-test', '00000000-0000-4000-8000-000000000081', 'published');
+do $$
+declare
+  actor_id constant uuid := '00000000-0000-4000-8000-000000000081';
+  test_post_id constant uuid := '00000000-0000-4000-8000-000000000082';
+  old_token constant uuid := gen_random_uuid();
+  new_token constant uuid := gen_random_uuid();
+  pending constant text := 'pending';
+  preparing constant text := 'sending';
+  failed constant text := 'failed';
+  sent constant text := 'sent';
+  deadline constant timestamptz := '2026-01-01Z';
+  touched integer;
+begin
+  insert into auth.users (id, email) values (actor_id, 'newsletter-test@example.com');
+  insert into public.profiles (id, email, role) values (actor_id, 'newsletter-test@example.com', 'author') on conflict (id) do nothing;
+  insert into public.posts (id, title, slug, author_id, status) values (test_post_id, 'Newsletter queue test', 'newsletter-queue-test', actor_id, 'published');
 
--- Retrying insertion must retain a single row and its original deadline.
-insert into public.newsletter_sends (post_id, scheduled_at) values ('00000000-0000-4000-8000-000000000082', '2026-01-01Z') on conflict (post_id) do nothing;
-insert into public.newsletter_sends (post_id, scheduled_at) values ('00000000-0000-4000-8000-000000000082', '2026-02-01Z') on conflict (post_id) do nothing;
-do $$ begin
-  if (select count(*) from public.newsletter_sends where post_id = '00000000-0000-4000-8000-000000000082') <> 1 then raise exception 'Duplicate queue row'; end if;
-  if (select scheduled_at from public.newsletter_sends where post_id = '00000000-0000-4000-8000-000000000082') <> '2026-01-01Z'::timestamptz then raise exception 'Retry changed pending deadline'; end if;
-end $$;
+  -- The unique constraint preserves a single queue row and original deadline.
+  insert into public.newsletter_sends (post_id, scheduled_at) values (test_post_id, deadline) on conflict (post_id) do nothing;
+  insert into public.newsletter_sends (post_id, scheduled_at) values (test_post_id, deadline + interval '1 day') on conflict (post_id) do nothing;
+  if (select count(*) from public.newsletter_sends where post_id = test_post_id) <> 1 then raise exception 'Duplicate queue row'; end if;
+  if (select scheduled_at from public.newsletter_sends where post_id = test_post_id) <> deadline then raise exception 'Retry changed pending deadline'; end if;
 
--- A canceled, never-claimed notification gets a new deadline on republish.
-update public.posts set status = 'draft' where id = '00000000-0000-4000-8000-000000000082';
-update public.newsletter_sends set status = 'failed' where post_id = '00000000-0000-4000-8000-000000000082' and status in ('pending', 'sending');
-update public.posts set status = 'published' where id = '00000000-0000-4000-8000-000000000082';
-update public.newsletter_sends set status = 'pending', scheduled_at = now() + interval '60 minutes' where post_id = '00000000-0000-4000-8000-000000000082' and status = 'failed' and sending_started_at is null and sent_at is null;
-do $$ begin
-  if not exists (select 1 from public.newsletter_sends where post_id = '00000000-0000-4000-8000-000000000082' and status = 'pending' and scheduled_at > now()) then raise exception 'Canceled send not restored'; end if;
-end $$;
+  -- Claimed preparation can be canceled/restored before any provider handoff.
+  update public.newsletter_sends set status = preparing, sending_started_at = now(), dispatch_token = old_token where post_id = test_post_id;
+  update public.newsletter_sends set status = failed where post_id = test_post_id;
+  update public.newsletter_sends set status = pending, scheduled_at = now() + interval '60 minutes', sending_started_at = null, dispatch_token = null
+    where post_id = test_post_id and status = failed and delivery_started_at is null and sent_at is null;
+  if not exists (select 1 from public.newsletter_sends where post_id = test_post_id and status = pending and scheduled_at > now() and dispatch_token is null) then raise exception 'Undelivered send not restored'; end if;
 
--- A claimed/canceled send cannot be restarted or overwritten by completion.
-update public.newsletter_sends set status = 'sending', sending_started_at = now() where post_id = '00000000-0000-4000-8000-000000000082' and status = 'pending';
-update public.newsletter_sends set status = 'failed' where post_id = '00000000-0000-4000-8000-000000000082' and status in ('pending', 'sending');
-update public.newsletter_sends set status = 'pending' where post_id = '00000000-0000-4000-8000-000000000082' and status = 'failed' and sending_started_at is null and sent_at is null;
-update public.newsletter_sends set status = 'sent', sent_at = now() where post_id = '00000000-0000-4000-8000-000000000082' and status = 'sending';
-do $$ begin
-  if not exists (select 1 from public.newsletter_sends where post_id = '00000000-0000-4000-8000-000000000082' and status = 'failed' and sent_at is null and sending_started_at is not null) then raise exception 'Claimed cancellation restarted or overwritten'; end if;
+  -- A revoked worker cannot record handoff against the new worker's claim.
+  update public.newsletter_sends set status = preparing, sending_started_at = now(), dispatch_token = new_token where post_id = test_post_id;
+  update public.newsletter_sends set delivery_started_at = now() where post_id = test_post_id and status = preparing and dispatch_token = old_token;
+  get diagnostics touched = row_count;
+  if touched <> 0 then raise exception 'Revoked worker recorded handoff'; end if;
+
+  -- Possible provider handoff forbids replay; cancellation survives completion.
+  update public.newsletter_sends set delivery_started_at = now() where post_id = test_post_id and dispatch_token = new_token;
+  update public.newsletter_sends set status = failed where post_id = test_post_id;
+  update public.newsletter_sends set status = pending where post_id = test_post_id and status = failed and delivery_started_at is null and sent_at is null;
+  update public.newsletter_sends set status = sent, sent_at = now() where post_id = test_post_id and status = preparing and dispatch_token = new_token;
+  if not exists (select 1 from public.newsletter_sends where post_id = test_post_id and status = failed and sent_at is null and delivery_started_at is not null) then raise exception 'Possible delivery replayed or cancellation overwritten'; end if;
 end $$;
 rollback;

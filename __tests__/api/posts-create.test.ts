@@ -60,7 +60,7 @@ describe('POST /api/posts/create', () => {
     const res = await POST(request({ ...validApiPost, status: 'published', editorial_reviewed: true }))
     expect(res.status).toBe(201)
     expect(db.posts[0]).toMatchObject({ status: 'published', title: validPost.title })
-    expect(scheduleNewsletterSend).toHaveBeenCalledWith('created-post')
+    expect(scheduleNewsletterSend).toHaveBeenCalledWith('created-post', { resetPendingDelay: true })
   })
   it('returns creation success and a separate newsletter warning after scheduling failure', async () => {
     const db = postClient()

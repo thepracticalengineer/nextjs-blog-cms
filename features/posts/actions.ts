@@ -106,7 +106,7 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
 
   let newsletterWarning: string | undefined
   if (publish && existing.status !== 'published') {
-    try { await scheduleNewsletterSend(id) } catch (err) {
+    try { await scheduleNewsletterSend(id, { resetPendingDelay: true }) } catch (err) {
       console.error('[updatePost] Newsletter scheduling failed:', err)
       newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check the newsletter status and retry scheduling if available.'
     }
@@ -159,7 +159,7 @@ export async function retryNewsletterScheduling(id: string, editorId?: string): 
   if (post.status !== 'published') return { error: 'Publish this post before scheduling its newsletter.' }
   const state = await getPostNewsletterState(id)
   if (state.error) return { error: state.error }
-  if (state.send && (state.send.status !== 'failed' || state.send.sending_started_at || state.send.sent_at)) {
+  if (state.send && (state.send.status !== 'failed' || state.send.delivery_started_at || state.send.sent_at)) {
     return { error: 'This newsletter is already queued or delivery has started. It will not be restarted to avoid duplicate emails.' }
   }
   try {

@@ -315,13 +315,17 @@ Readers subscribe via a widget at the bottom of every blog post. When a post is 
 
 The post editor shows whether publishing will notify active subscribers, the configured delay (60 minutes by default), and the current notification status. **Refresh status** reads the latest queue state. The delay is the earliest eligible send time; actual delivery starts on a later dispatcher run.
 
+`NEWSLETTER_DELAY_MINUTES` accepts a non-negative integer number of minutes. Missing, empty, negative, fractional, or malformed values fall back to 60; suffixes such as `30m` are not accepted.
+
 Unpublishing cancels pending or in-progress notifications while retaining their queue row. The dispatcher checks publication and queue status before each batch of up to 10 recipients. Emails already handed off cannot be recalled; withdrawing publication stops later batches.
 
-Republishing a canceled notification that was **never claimed** restores the same row with a fresh delay. Previously claimed, partially failed, or completed notifications are never restarted, even on republish. This conservative policy prevents duplicate emails when provider handoff is uncertain. The unique `post_id` constraint and conditional queue updates also protect concurrent scheduling and dispatch attempts.
+Republishing an undelivered notification restores the same row with a fresh delay, including pending or preparing rows left behind by a failed cancellation. Ordinary scheduling retries preserve an existing pending deadline. A dispatcher claim (`sending_started_at`) means preparation; `delivery_started_at` is persisted immediately before the first provider attempt. Failures before that handoff remain retryable. Notifications with possible provider handoff, partial failures, or completed delivery are never restarted. Each claim owns a `dispatch_token`; restore and recovery revoke it so an old worker cannot send or overwrite a newer claim.
 
-Publication remains successful if newsletter scheduling fails. The editor shows a separate warning and offers **Retry newsletter scheduling** only for published posts with a missing notification or a never-claimed failed notification. The server checks ownership, publication readiness, and queue state again; retries do not save unsaved editor input. Queue read failures block retries until status can be read. REST create/update responses also include `newsletter_warning` when scheduling or cancellation cannot be confirmed, while preserving the successful post response. Provider-returned errors mark delivery as failed rather than sent.
+Publication remains successful if newsletter scheduling fails. The editor shows a separate warning and offers **Retry newsletter scheduling** only for published posts with a missing notification or a failed notification without provider handoff. The server checks ownership, publication readiness, and queue state again; retries do not save unsaved editor input. Queue read failures block retries until status can be read. The dispatcher releases unprocessed claims on errors; stale preparation is recovered after ten minutes without replaying possible deliveries. REST create/update responses also include `newsletter_warning` when scheduling or cancellation cannot be confirmed, while preserving the successful post response. Provider-returned errors mark delivery as failed rather than sent.
 
-Verification: run the Vitest newsletter/editor suites with isolated recipients and a mocked provider. Run `psql -v ON_ERROR_STOP=1 -f database/tests/newsletter_queue.sql` only against an isolated migrated database to check queue deduplication, republish, and claimed-cancellation invariants; fixtures roll back.
+Upgrade: pause the newsletter dispatcher, apply `20261007121102_newsletter_delivery_handoff.sql`, deploy the updated application, then resume dispatch. Historical claim timestamps are backfilled as possible handoff because prior deliveries cannot be determined safely.
+
+Verification: Vitest executes the scheduling and dispatch implementation with isolated recipients and a mocked provider. Playwright verifies real application/database writes, including pre-handoff failure recovery. `database/tests/newsletter_queue.sql` checks PostgreSQL constraints and conditional-update semantics with rolled-back fixtures; it does not execute TypeScript or detect application query drift. Run it only against an isolated migrated database.
 
 ### Unsubscribe
 
@@ -601,7 +605,7 @@ Publication writes compare the fetched post's timestamp and status to prevent a
 concurrent change between validation and saving from bypassing checks. Reload and
 review again after a conflict. Published edits do not requeue newsletters. Unpublishing
 marks pending/claimed notifications failed; the sender also refuses missing, draft
-or unready articles. Dispatch rechecks publication state and queue cancellation between batches. Reviewed live edits preserve the validated email snapshot for the remaining recipients. Canceled sends can be rescheduled on republish only if they were never claimed; sent or potentially partial sends retain deduplication. An email already handed to the provider cannot be recalled.
+or unready articles. Dispatch rechecks publication state and queue cancellation between batches. Reviewed live edits preserve the validated email snapshot for the remaining recipients. Canceled sends can be rescheduled on republish if no provider handoff occurred; sent or potentially partial sends retain deduplication. An email already handed to the provider cannot be recalled.
 
 Public cache invalidation covers the root layout (home, blog, author and taxonomy
 pages), affected old/new article URLs and the sitemap. Changing a slug is deliberate;

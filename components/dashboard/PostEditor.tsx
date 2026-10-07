@@ -132,6 +132,13 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
     }
   }
 
+  function syncSavedSlug(savedSlug: string, submittedSlug: string) {
+    if (getValues('slug') !== submittedSlug) return
+    setValue('slug', savedSlug)
+    setSlugChangeConfirmed(false)
+    setAllowSlugChange(false)
+  }
+
   async function onSubmit(values: PostFormValues) {
     if (recoveryPending) return
     setPublicationFieldErrors({})
@@ -147,11 +154,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
         await recovery.finishSave()
       } else {
         const savedValues = { ...values, slug: result.data.slug }
-        if (getValues('slug') === values.slug) {
-          setValue('slug', result.data.slug)
-          setSlugChangeConfirmed(false)
-          setAllowSlugChange(false)
-        }
+        syncSavedSlug(result.data.slug, values.slug)
         await recovery.finishSave(savedValues, result.data.updated_at, !post ? result.data.id : undefined)
         if (post) router.refresh()
         toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
@@ -174,7 +177,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
         ? await unpublishPost(post.id, draftIdentity?.userId)
         : await publishPost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, expectedUpdatedAt, draftIdentity?.userId)
       if (result.error || !result.data) {
-        setPublicationFieldErrors('fieldErrors' in result ? result.fieldErrors ?? {} : {})
+        setPublicationFieldErrors(result.fieldErrors ?? {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
         await recovery.finishSave()
       } else {
@@ -182,11 +185,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
           recovery.updateBase(result.data.updated_at)
           await recovery.finishSave()
         } else {
-          if (getValues('slug') === values.slug) {
-            setValue('slug', result.data.slug)
-            setSlugChangeConfirmed(false)
-            setAllowSlugChange(false)
-          }
+          syncSavedSlug(result.data.slug, values.slug)
           await recovery.finishSave({ ...values, slug: result.data.slug }, result.data.updated_at)
         }
         toast.success(isPublished ? 'Post unpublished' : 'Post saved and published!')
@@ -318,26 +317,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
           </div>
         </div>
 
-        {draftIdentity && (
-          <div className="mb-5 space-y-3 text-sm" aria-live="polite">
-            <p>{!recovery.ready ? 'Checking draft recovery…' : recovery.status === 'saving' ? 'Saving working copy…' : recovery.status === 'saved' ? 'Working copy saved' : recovery.status === 'failed' ? 'Autosave failed' : recovery.status === 'pending' ? 'Unsaved changes' : 'Changes will autosave as a private working copy.'}</p>
-            {recovery.error && <div role="alert"><p>{recovery.error}</p><a className="mr-3 underline" href="/login" target="_blank" rel="noopener noreferrer">Sign in in another tab</a><Button type="button" variant="outline" size="sm" onClick={recovery.retry}>Retry autosave</Button></div>}
-            {recovery.storageError && <p role="alert">{recovery.storageError}</p>}
-            {recovery.candidates.length > 0 && (
-              <section aria-label="Draft recovery" className="rounded-lg border p-4 space-y-3">
-                <h2 className="font-semibold">Recover interrupted writing</h2>
-                <p>Choose a copy to restore, or discard it. Published content stays unchanged until you save reviewed changes.</p>
-                {recovery.candidates.map(candidate => (
-                  <div key={candidate.id} className="flex flex-wrap items-center gap-2">
-                    <span>{candidate.values.title || 'Untitled post'} — {candidate.label}</span>
-                    <Button type="button" variant="outline" size="sm" onClick={() => recovery.restore(candidate.id)}>Restore</Button>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => void recovery.discardCandidate(candidate.id)}>Discard copy</Button>
-                  </div>
-                ))}
-              </section>
-            )}
-          </div>
-        )}
+        {draftIdentity && <DraftRecoveryNotice recovery={recovery} />}
 
         {/* ── Main layout ─────────────────────────────────────────── */}
         <div className="grid gap-8 lg:grid-cols-[1fr_292px]">
@@ -438,7 +418,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
 
             {newsletter && (
               <SidebarCard icon={Send} title="Newsletter">
-                <PostNewsletter key={`${post?.updated_at}:${newsletter.send?.status}:${newsletter.send?.scheduled_at}:${newsletter.error}`} state={newsletter} postId={post?.id} editorId={draftIdentity?.userId} published={isPublished} disabled={saving || publishing || recoveryPending} warning={newsletterWarning} onScheduled={() => setNewsletterWarning(null)} />
+                <PostNewsletter key={`${post?.updated_at}:${newsletter.send?.status}:${newsletter.send?.scheduled_at}:${newsletter.send?.delivery_started_at}:${newsletter.error}`} state={newsletter} postId={post?.id} editorId={draftIdentity?.userId} published={isPublished} disabled={saving || publishing || recoveryPending} warning={newsletterWarning} onScheduled={() => setNewsletterWarning(null)} />
               </SidebarCard>
             )}
 
@@ -623,4 +603,38 @@ function SidebarCard({
 
 function FieldError({ name, errors }: { name: string; errors: FieldErrors }) {
   return errors[name]?.length ? <p id={`${name}-error`} role="alert" className="text-xs text-destructive">{errors[name].join(' ')}</p> : null
+}
+
+function getRecoveryMessage(recovery: ReturnType<typeof useDraftRecovery>): string {
+  if (!recovery.ready) return 'Checking draft recovery…'
+  switch (recovery.status) {
+    case 'saving': return 'Saving working copy…'
+    case 'saved': return 'Working copy saved'
+    case 'failed': return 'Autosave failed'
+    case 'pending': return 'Unsaved changes'
+    default: return 'Changes will autosave as a private working copy.'
+  }
+}
+
+function DraftRecoveryNotice({ recovery }: { readonly recovery: ReturnType<typeof useDraftRecovery> }) {
+  return (
+    <div className="mb-5 space-y-3 text-sm" aria-live="polite">
+      <p>{getRecoveryMessage(recovery)}</p>
+      {recovery.error && <div role="alert"><p>{recovery.error}</p><a className="mr-3 underline" href="/login" target="_blank" rel="noopener noreferrer">Sign in in another tab</a><Button type="button" variant="outline" size="sm" onClick={recovery.retry}>Retry autosave</Button></div>}
+      {recovery.storageError && <p role="alert">{recovery.storageError}</p>}
+      {recovery.candidates.length > 0 && (
+        <section aria-label="Draft recovery" className="rounded-lg border p-4 space-y-3">
+          <h2 className="font-semibold">Recover interrupted writing</h2>
+          <p>Choose a copy to restore, or discard it. Published content stays unchanged until you save reviewed changes.</p>
+          {recovery.candidates.map(candidate => (
+            <div key={candidate.id} className="flex flex-wrap items-center gap-2">
+              <span>{candidate.values.title || 'Untitled post'} — {candidate.label}</span>
+              <Button type="button" variant="outline" size="sm" onClick={() => recovery.restore(candidate.id)}>Restore</Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => void recovery.discardCandidate(candidate.id)}>Discard copy</Button>
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
+  )
 }

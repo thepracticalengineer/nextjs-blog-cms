@@ -35,8 +35,8 @@ describe('newsletter scheduling', () => {
     expect(db.sends[0].status).toBe('pending')
     expect(Date.parse(db.sends[0].scheduled_at as string)).toBeGreaterThan(Date.now())
   })
-  it.each(['sending', 'failed', 'sent'])('never requeues a previously claimed %s send', async status => {
-    const send = { post_id: 'post-1', status, sending_started_at: '2026-01-01T00:00:00Z', sent_at: status === 'sent' ? '2026-01-01T00:01:00Z' : null }
+  it.each(['sending', 'failed', 'sent'])('never requeues a possibly delivered %s send', async status => {
+    const send = { post_id: 'post-1', status, sending_started_at: '2026-01-01T00:00:00Z', delivery_started_at: '2026-01-01T00:00:00Z', dispatch_token: null, sent_at: status === 'sent' ? '2026-01-01T00:01:00Z' : null }
     const db = postClient([{ ...validPost, status: 'published' }], 'Frank Mendez', [send])
     vi.mocked(createServiceClient).mockReturnValue(db.client)
     if (status === 'sending') await cancelNewsletterSend('post-1')
@@ -58,6 +58,20 @@ describe('newsletter scheduling', () => {
     vi.stubEnv('NEWSLETTER_DELAY_MINUTES', '120')
     await scheduleNewsletterSend('post-1')
     expect(db.sends[0].scheduled_at).toBe(deadline)
+  })
+  it.each(['pending', 'sending'])('republish resets an undelivered %s send after cancellation fails', async status => {
+    const db = postClient([{ ...validPost, status: 'published' }], undefined, [{ post_id: 'post-1', status, scheduled_at: '2020-01-01T00:00:00Z', sending_started_at: status === 'sending' ? '2026-01-01T00:00:00Z' : null, delivery_started_at: null, dispatch_token: 'old-worker', sent_at: null }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    await scheduleNewsletterSend('post-1', { resetPendingDelay: true })
+    expect(db.sends).toHaveLength(1)
+    expect(db.sends[0]).toMatchObject({ status: 'pending', sending_started_at: null, dispatch_token: null })
+    expect(Date.parse(db.sends[0].scheduled_at as string)).toBeGreaterThan(Date.now())
+  })
+  it('restores a claimed failure when no provider handoff occurred', async () => {
+    const db = postClient([{ ...validPost, status: 'published' }], undefined, [{ post_id: 'post-1', status: 'failed', sending_started_at: '2026-01-01T00:00:00Z', delivery_started_at: null, dispatch_token: 'old-worker', sent_at: null }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    await scheduleNewsletterSend('post-1')
+    expect(db.sends[0]).toMatchObject({ status: 'pending', sending_started_at: null, dispatch_token: null })
   })
   it.each(['select', 'upsert', 'update'])('reports a %s failure instead of silently succeeding', async operation => {
     const db = postClient([{ ...validPost, status: 'published' }])

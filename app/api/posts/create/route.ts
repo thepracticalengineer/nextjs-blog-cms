@@ -99,7 +99,7 @@ export async function POST(request: Request) {
 
   let newsletterWarning: string | undefined
   if (post?.status === 'published' && !replayed) {
-    try { await scheduleNewsletterSend(post.id) } catch (err) {
+    try { await scheduleNewsletterSend(post.id, { resetPendingDelay: true }) } catch (err) {
       console.error('[API] Newsletter scheduling failed:', err)
       newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status in the dashboard before retrying.'
     }

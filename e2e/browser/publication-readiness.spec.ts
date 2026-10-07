@@ -43,9 +43,9 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     expect(JSON.parse(storedContent).type).toBe('doc')
 
     await page.getByLabel('Post title').fill('hello this is for test')
-    // A known pre-claim failure can be retried without publishing unsaved input.
+    // A claimed failure before provider handoff can be retried without saving input.
     const queuedSend = (await admin().from('newsletter_sends').select('id').eq('post_id', id).single()).data
-    expect((await admin().from('newsletter_sends').update({ status: 'failed' }).eq('post_id', id)).error).toBeNull()
+    expect((await admin().from('newsletter_sends').update({ status: 'failed', sending_started_at: new Date().toISOString(), dispatch_token: '00000000-0000-4000-8000-000000000086' }).eq('post_id', id)).error).toBeNull()
     await newsletter.getByRole('button', { name: 'Refresh status' }).click()
     await expect(newsletter).toContainText('Failed')
     await newsletter.getByRole('button', { name: 'Retry newsletter scheduling' }).click()

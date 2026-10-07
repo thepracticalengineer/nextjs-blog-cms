@@ -9,7 +9,7 @@ export async function getPostNewsletterState(postId?: string): Promise<PostNewsl
   if (!postId) return { delayMinutes, send: null }
   try {
     const { data, error } = await createServiceClient().from('newsletter_sends')
-      .select('id, post_id, status, scheduled_at, sending_started_at, sent_at, created_at')
+      .select('id, post_id, status, scheduled_at, sending_started_at, delivery_started_at, sent_at, created_at')
       .eq('post_id', postId).maybeSingle()
     if (error) throw error
     return { delayMinutes, send: data as NewsletterSend | null }

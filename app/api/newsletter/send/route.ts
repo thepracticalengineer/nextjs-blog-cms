@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto'
+import { randomUUID, timingSafeEqual } from 'crypto'
 import { validatePublication } from '@/features/posts/publication'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -18,12 +18,14 @@ function secureCompare(a: string, b: string): boolean {
 async function sendInBatches(
   subscribers: NewsletterSubscription[],
   post: PostEmailData,
-  canContinue: () => Promise<boolean>
+  canContinue: () => Promise<boolean>,
+  markDeliveryStarted: () => Promise<boolean>
 ): Promise<{ failures: number; stopped: boolean }> {
   let failures = 0
   for (let i = 0; i < subscribers.length; i += EMAIL_BATCH_SIZE) {
     // Unpublishing or cancellation may happen while a batch is in flight.
     if (!await canContinue()) return { failures, stopped: true }
+    if (i === 0 && !await markDeliveryStarted()) return { failures, stopped: true }
     const batch = subscribers.slice(i, i + EMAIL_BATCH_SIZE)
     const results = await Promise.allSettled(batch.map((sub) => sendNewsletterEmail(sub, post)))
     failures += results.filter((r) => r.status === 'rejected').length
@@ -46,8 +48,14 @@ export async function POST(req: NextRequest) {
 
   const supabase = createServiceClient()
 
-  // Recovery: mark sends stuck in 'sending' for >10 minutes as failed
+  // Stale preparation is retryable. Revoke ownership before another worker claims it.
+  // A persisted handoff marker must never be retried automatically.
   const stuckCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  const { error: preparationError } = await supabase.from('newsletter_sends')
+    .update({ status: 'pending', sending_started_at: null, dispatch_token: null })
+    .eq('status', 'sending').is('delivery_started_at', null).is('sent_at', null)
+    .lt('sending_started_at', stuckCutoff)
+  if (preparationError) return NextResponse.json({ error: 'DB error' }, { status: 500 })
   const { error: recoveryError } = await supabase
     .from('newsletter_sends')
     .update({ status: 'failed' })
@@ -78,10 +86,11 @@ export async function POST(req: NextRequest) {
 
   const candidateIds = pendingSends.map((s) => s.id)
 
+  const dispatchToken = randomUUID()
   // Claim only rows still in 'pending'; .select() returns rows actually updated
   const { data: claimedSends, error: claimError } = await supabase
     .from('newsletter_sends')
-    .update({ status: 'sending', sending_started_at: new Date().toISOString() })
+    .update({ status: 'sending', sending_started_at: new Date().toISOString(), dispatch_token: dispatchToken })
     .in('id', candidateIds)
     .eq('status', 'pending')
     .select('id, post_id')
@@ -95,6 +104,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ dispatched: 0 })
   }
 
+  let response: NextResponse
+  try {
+    response = await processClaimedSends(supabase, claimedSends, dispatchToken)
+  } catch (error) {
+    console.error('[newsletter/send] Dispatch failed:', error)
+    response = NextResponse.json({ error: 'Dispatch failed' }, { status: 500 })
+  }
+  // Release all unprocessed/pre-handoff rows even on an early return or exception.
+  // Ownership + handoff filters prevent stale workers from clearing a newer claim.
+  const { error: releaseError } = await supabase.from('newsletter_sends')
+    .update({ status: 'failed', sending_started_at: null, dispatch_token: null })
+    .eq('dispatch_token', dispatchToken).in('status', ['sending', 'failed'])
+    .is('delivery_started_at', null).is('sent_at', null)
+  if (releaseError) {
+    console.error('[newsletter/send] Failed to release unstarted claims:', releaseError.message)
+    return NextResponse.json({ error: 'DB error' }, { status: 500 })
+  }
+  return response
+}
+
+async function processClaimedSends(
+  supabase: ReturnType<typeof createServiceClient>,
+  claimedSends: { id: string; post_id: string }[],
+  dispatchToken: string
+): Promise<NextResponse> {
   // Fetch active subscribers once for all sends in this batch
   const { data: subscribers, error: subError } = await supabase
     .from('newsletter_subscriptions')
@@ -107,35 +141,32 @@ export async function POST(req: NextRequest) {
   }
 
   const activeSubscribers = (subscribers ?? []) as NewsletterSubscription[]
+  if (activeSubscribers.length && (!process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL)) {
+    throw new Error('Newsletter email provider is not configured')
+  }
   let dispatched = 0
 
   for (const send of claimedSends) {
-    const { data: postData, error: postError } = await supabase
-      .from('posts')
-      .select('*')
-      .eq('id', send.post_id)
-      .single()
-
-    const fieldErrors = postData?.status === 'published'
-      ? await validatePublication(supabase, postData, true, send.post_id) : {}
-    if (postError || !postData || postData.status !== 'published' || Object.keys(fieldErrors).length > 0) {
-      const reason = postError || !postData ? 'post unavailable'
-        : postData.status !== 'published' ? 'post unpublished' : 'publication validation failed'
-      console.error(`[newsletter/send] Skipping post ${send.post_id}: ${reason}`, fieldErrors)
-      const { error } = await supabase.from('newsletter_sends').update({ status: 'failed' })
-        .eq('id', send.id).eq('status', 'sending')
-      if (error) return NextResponse.json({ error: 'DB error' }, { status: 500 })
-      continue
-    }
+    const postData = await getDeliverablePost(supabase, send.post_id)
+    if (!postData) continue // Request cleanup releases this unstarted claim.
 
     // Deliver the validated snapshot consistently, even if a reviewed live edit occurs.
     const { failures, stopped } = await sendInBatches(activeSubscribers, postData, async () => {
       const [currentPost, currentSend] = await Promise.all([
         supabase.from('posts').select('status').eq('id', send.post_id).single(),
-        supabase.from('newsletter_sends').select('status').eq('id', send.id).single(),
+        supabase.from('newsletter_sends').select('status, dispatch_token').eq('id', send.id).single(),
       ])
       return !currentPost.error && !currentSend.error && currentPost.data?.status === 'published' &&
-        currentSend.data?.status === 'sending'
+        currentSend.data?.status === 'sending' && currentSend.data?.dispatch_token === dispatchToken
+    }, async () => {
+      // Persist possible handoff before the first provider call. A canceled,
+      // restored or recovered row no longer belongs to this worker.
+      const { data, error } = await supabase.from('newsletter_sends')
+        .update({ delivery_started_at: new Date().toISOString() })
+        .eq('id', send.id).eq('dispatch_token', dispatchToken).eq('status', 'sending')
+        .is('delivery_started_at', null).select('id')
+      if (error) throw error
+      return !!data?.length
     })
 
     if (stopped) {
@@ -147,7 +178,7 @@ export async function POST(req: NextRequest) {
     const sent = !stopped && failures === 0
     const { data: completed, error: completionError } = await supabase.from('newsletter_sends')
       .update(sent ? { status: 'sent', sent_at: new Date().toISOString() } : { status: 'failed' })
-      .eq('id', send.id).eq('status', 'sending').select('id')
+      .eq('id', send.id).eq('dispatch_token', dispatchToken).eq('status', 'sending').select('id')
     if (completionError) {
       console.error('[newsletter/send] Failed to record delivery outcome:', completionError.message)
       return NextResponse.json({ error: 'DB error' }, { status: 500 })
@@ -156,4 +187,22 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ dispatched })
+}
+
+async function getDeliverablePost(supabase: ReturnType<typeof createServiceClient>, postId: string): Promise<PostEmailData | null> {
+  const { data: post, error } = await supabase.from('posts').select('*').eq('id', postId).single()
+  if (error || !post) {
+    console.error(`[newsletter/send] Skipping post ${postId}: post unavailable`)
+    return null
+  }
+  if (post.status !== 'published') {
+    console.error(`[newsletter/send] Skipping post ${postId}: post unpublished`)
+    return null
+  }
+  const fieldErrors = await validatePublication(supabase, post, true, postId)
+  if (Object.keys(fieldErrors).length) {
+    console.error(`[newsletter/send] Skipping post ${postId}: publication validation failed`, fieldErrors)
+    return null
+  }
+  return post
 }
