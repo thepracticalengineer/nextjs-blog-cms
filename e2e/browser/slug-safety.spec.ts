@@ -23,9 +23,17 @@ test('preserves custom slugs and redirects deliberate published URL changes', as
   await page.getByLabel('Post title').blur()
   await expect(page.getByLabel('Slug')).toHaveValue(slug)
 
-  await expect(page.getByRole('button', { name: 'Discard', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: 'Discard', exact: true }).click()
-  await expect(page).toHaveURL(/\/dashboard\/posts$/)
+  await page.getByLabel('Slug').fill('   ')
+  await page.getByRole('button', { name: 'Create Post', exact: true }).click()
+  await expect(page).toHaveURL(/\/dashboard\/posts\/[^/]+\/edit$/)
+  const draftId = new URL(page.url()).pathname.split('/').at(-2)!
+  try {
+    const saved = await request.get(`/api/posts/${draftId}`, { headers })
+    expect(saved.status()).toBe(200)
+    expect((await saved.json()).data.slug).toMatch(/^integration-testing-at-service-boundaries(?:-\d+)?$/)
+  } finally {
+    await request.delete(`/api/posts/${draftId}`, { headers })
+  }
 
   const created = await request.post('/api/posts/create', { headers, data: { ...readyArticle, slug, status: 'published', editorial_reviewed: true } })
   expect(created.status()).toBe(201)

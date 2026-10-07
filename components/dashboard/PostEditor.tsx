@@ -104,6 +104,8 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
   const reviewText = useWatch({ control, name: ['title', 'excerpt', 'content'] })
   const flaggedForReview = reviewText.some(text => /\b(?:TODO|TBD)\b|coming soon|work in progress/i.test(text ?? ''))
   const title = useWatch({ control, name: 'title' })
+  const slug = useWatch({ control, name: 'slug' })
+  const normalizedSlug = slugify(slug ?? '', { lower: true, strict: true })
   const coverImage = useWatch({ control, name: 'cover_image' })
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
@@ -134,7 +136,7 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
       const expectedUpdatedAt = await recovery.beginSave()
       const result = post
         ? await updatePost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, false, expectedUpdatedAt, draftIdentity?.userId)
-        : await createPost({ ...values, auto_slug: !manuallyEditedSlug && values.slug === generatedSlug }, draftIdentity?.userId, draftIdentity?.documentId)
+        : await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
@@ -375,6 +377,9 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
               />
             </div>
 
+            {normalizedSlug && slug !== normalizedSlug && (
+              <p className="text-xs text-muted-foreground" aria-live="polite">URL preview: /blog/{normalizedSlug}</p>
+            )}
             {isPublished && !allowSlugChange && (
               <Button type="button" variant="outline" size="sm" onClick={() => setAllowSlugChange(true)}>
                 Change published URL

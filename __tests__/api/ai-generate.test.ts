@@ -12,7 +12,6 @@ vi.mock('@/features/ai-assistant/llmService', () => ({
 vi.mock('@/features/api-keys/apiKeyService', () => ({
   resolveTagIds: vi.fn().mockResolvedValue([]),
   resolveCategoryId: vi.fn().mockResolvedValue(null),
-  generateUniqueSlugForApi: vi.fn().mockResolvedValue('generated-slug'),
   hashApiKey: vi.fn().mockReturnValue('hashed'),
 }))
 

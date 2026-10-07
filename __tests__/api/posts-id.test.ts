@@ -9,7 +9,6 @@ vi.mock('@/lib/rateLimit', () => ({ checkRateLimit: vi.fn().mockReturnValue({ al
 vi.mock('@/features/api-keys/apiKeyService', () => ({
   resolveTagIds: vi.fn().mockResolvedValue([]),
   resolveCategoryId: vi.fn().mockResolvedValue(null),
-  generateUniqueSlugForApi: vi.fn().mockResolvedValue('new-slug'),
   hashApiKey: vi.fn().mockReturnValue('hashed-key'),
 }))
 

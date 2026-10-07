@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/features/api-keys/apiKeyService', () => ({
   validateApiKey: vi.fn(), resolveTagIds: vi.fn().mockResolvedValue([]),
-  resolveCategoryId: vi.fn().mockResolvedValue(null), generateUniqueSlugForApi: vi.fn().mockResolvedValue('new-article'),
+  resolveCategoryId: vi.fn().mockResolvedValue(null),
 }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn(), refreshDraftPaths: vi.fn() }))

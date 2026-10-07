@@ -159,3 +159,8 @@ describe('slug safety', () => {
     expect(db.writes).toHaveLength(1)
   })
 })
+
+it('creates a draft with an automatic URL after a manually edited slug is cleared', async () => {
+  useDb([])
+  expect((await createPost({ ...values, title: 'Cleared Slug Draft', slug: '   ', auto_slug: false })).data?.slug).toBe('cleared-slug-draft')
+})

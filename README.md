@@ -155,7 +155,8 @@ WEBHOOK_SECRET=               # shared secret used to authenticate the /api/news
 
 ### 4. Set up the database
 
-- Run `database/schema.sql` in the Supabase SQL editor
+- Run `database/schema.sql` in the Supabase SQL editor, then run
+  `supabase/migrations/20261007055822_post_slug_routes.sql` to install URL reservations and redirects
 - Apply RLS policies from `database/policies/`
 - Optionally seed with `database/seed.sql`
 

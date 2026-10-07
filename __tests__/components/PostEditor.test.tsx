@@ -192,3 +192,17 @@ it('preserves slug edits made while creation is in flight', async () => {
   await act(async () => finish({ data: { ...editorPost, slug: 'first-engineering-title-2' } }))
   expect(screen.getByLabelText('Slug')).toHaveValue('newer-custom-url')
 })
+
+it('generates a new URL on save after an author edits and clears the slug', async () => {
+  vi.clearAllMocks()
+  vi.mocked(createPost).mockResolvedValueOnce({ data: { ...editorPost, slug: 'useful-engineering-title' } })
+  render(<PostEditor {...minimalProps} />)
+  fireEvent.change(screen.getByLabelText('Post title'), { target: { value: 'Useful Engineering Title' } })
+  fireEvent.blur(screen.getByLabelText('Post title'))
+  fireEvent.change(screen.getByLabelText('Slug'), { target: { value: ' My Custom URL ' } })
+  expect(screen.getByText('URL preview: /blog/my-custom-url')).toBeVisible()
+  fireEvent.change(screen.getByLabelText('Slug'), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Create Post' }))
+  await waitFor(() => expect(createPost).toHaveBeenCalledWith(expect.objectContaining({ slug: '', auto_slug: true }), undefined, undefined))
+  await waitFor(() => expect(screen.getByLabelText('Slug')).toHaveValue('useful-engineering-title'))
+})

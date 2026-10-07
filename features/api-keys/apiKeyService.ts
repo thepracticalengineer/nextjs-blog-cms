@@ -1,4 +1,3 @@
-import { planSlug, SLUG_WRITE_ATTEMPTS, SLUG_CONFLICT } from '@/features/posts/slugs'
 import crypto from 'crypto'
 import slugify from 'slugify'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -148,18 +147,4 @@ export async function resolveCategoryId(
     .single()
 
   return byName?.id ?? null
-}
-
-export async function generateUniqueSlugForApi(
-  title: string,
-  supabase: ReturnType<typeof createServiceClient>
-): Promise<string> {
-  const base = planSlug('', title).slug
-  for (let attempt = 0; attempt < SLUG_WRITE_ATTEMPTS; attempt++) {
-    const slug = attempt === 0 ? base : `${base}-${attempt + 1}`
-    const { data, error } = await supabase.from('post_slug_routes').select('post_id').eq('slug', slug)
-    if (error) throw new Error('Could not verify URL reservations. Try again.')
-    if (!data?.length) return slug
-  }
-  throw new Error(SLUG_CONFLICT)
 }

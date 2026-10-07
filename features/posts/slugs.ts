@@ -10,9 +10,10 @@ export type SlugPlan = { slug: string; automatic: boolean; error?: string }
 
 export function planSlug(input: unknown, title: string, automatic?: boolean, existingSlug?: string): SlugPlan {
   if (input !== undefined && typeof input !== 'string') return { slug: '', automatic: false, error: 'Slug must be text.' }
-  automatic ??= !input?.trim()
   // Clearing an existing URL must never regenerate it from a changed title.
   if (!input?.trim() && existingSlug) return { slug: existingSlug, automatic: false }
+  // Empty new-post input requests generation even after a manual slug edit.
+  automatic = !input?.trim() || automatic === true
   const normalized = slugify(automatic ? title : input ?? '', { lower: true, strict: true })
   if (automatic) return { slug: normalized.slice(0, SLUG_MAX_LENGTH - 4).replace(/-+$/, '') || `draft-${randomUUID()}`, automatic: true }
   if (!normalized || normalized.length > SLUG_MAX_LENGTH) return { slug: normalized, automatic: false, error: 'Use a slug with 1–200 letters, numbers and hyphens.' }

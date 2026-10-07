@@ -27,3 +27,11 @@ describe('slug writes', () => {
 it('returns a field error for malformed runtime slug types', () => {
   for (const input of [null, 123, {}, []]) expect(planSlug(input, 'Title').error).toBe('Slug must be text.')
 })
+
+it('generates an empty new slug after manual editing while preserving existing URLs', () => {
+  for (const input of ['', '   ']) {
+    expect(planSlug(input, 'Useful Engineering Title', false)).toMatchObject({ slug: 'useful-engineering-title', automatic: true })
+    expect(planSlug(input, '!!!', false).slug).toMatch(/^draft-[0-9a-f-]{36}$/)
+    expect(planSlug(input, 'Changed Title', false, 'saved-url')).toEqual({ slug: 'saved-url', automatic: false })
+  }
+})
