@@ -56,8 +56,8 @@ describe('shared accessible image workflow', () => {
     fireEvent.change(screen.getByLabelText('Image file'), { target: { files: [new File(['<svg/>'], 'image.svg', { type: 'image/svg+xml' })] } })
     expect(screen.getByRole('alert')).toHaveTextContent('not supported')
     expect(screen.getByRole('button', { name: 'Upload image / retry' })).toBeDisabled()
-    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [new File([new Uint8Array(10 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })] } })
-    expect(screen.getByRole('alert')).toHaveTextContent('exceeds 10 MB')
+    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })] } })
+    expect(screen.getByRole('alert')).toHaveTextContent('exceeds 4 MB')
     expect(uploadImage).not.toHaveBeenCalled()
   })
   it('allows deliberate decorative inline images but requires cover descriptions', async () => {

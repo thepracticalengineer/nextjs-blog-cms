@@ -24,12 +24,14 @@ its thumbnail and reader preview enforce the configured host policy.
 
 ## Validation and storage
 
-JPEG, PNG and WebP files must be non-empty and at most **10 MiB**. The server decodes
+JPEG, PNG and WebP files must be non-empty and at most **4 MiB**. The server decodes
 the actual bytes, checks the MIME type against the decoded format, rejects animation
 and inputs over **40 megapixels**, normalizes orientation, strips metadata, and
 encodes WebP at quality 82. Images are resized proportionally to at most **2400 pixels**
 on each side without enlargement; the output must fit within **2 MiB**. SVG and GIF
-are unsupported. Immutable object names use `<uploader UUID>/<random UUID>.webp`.
+are unsupported. The 4 MiB input limit leaves room for multipart framing under
+[Vercel's 4.5 MB function payload limit](https://vercel.com/docs/functions/limitations#request-body-size).
+Immutable object names use `<uploader UUID>/<random UUID>.webp`.
 
 `POST /api/post-media` requires a same-origin authenticated author/admin session
 and the editor's original account ID. Only the server can upload objects or access

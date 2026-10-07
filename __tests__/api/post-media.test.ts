@@ -96,8 +96,8 @@ describe('owned, decoded post image upload', () => {
     expect(response.status).toBe(413)
     expect(upload).not.toHaveBeenCalled()
   })
-  it('rejects files over 10 MB and decoded images over 40 megapixels', async () => {
-    await expect(optimizeImage(new File([new Uint8Array(MAX_IMAGE_BYTES + 1)], 'large.png', { type: 'image/png' }))).rejects.toThrow('10 MB')
+  it('rejects files over 4 MB and decoded images over 40 megapixels', async () => {
+    await expect(optimizeImage(new File([new Uint8Array(MAX_IMAGE_BYTES + 1)], 'large.png', { type: 'image/png' }))).rejects.toThrow('4 MB')
     const pixels = await sharp({ create: { width: 6500, height: 6500, channels: 3, background: '#000' } }).png().toBuffer()
     await expect(optimizeImage(new File([pixels], 'huge.png', { type: 'image/png' }))).rejects.toThrow()
   })

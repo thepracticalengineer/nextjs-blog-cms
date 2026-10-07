@@ -75,7 +75,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
       }}>
         <DialogHeader>
           <DialogTitle>{cover ? 'Cover image' : 'Article image'}</DialogTitle>
-          <DialogDescription>Choose or paste a JPEG, PNG or WebP up to 10 MB, or use a publicly accessible image URL. Uploaded images are public to anyone with their URL.</DialogDescription>
+          <DialogDescription>Choose or paste a JPEG, PNG or WebP up to 4 MB, or use a publicly accessible image URL. Uploaded images are public to anyone with their URL.</DialogDescription>
         </DialogHeader>
         <div className="space-y-2">
           <Label htmlFor={`${id}-file`}>Image file</Label>

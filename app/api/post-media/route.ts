@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       length += value.byteLength
       if (length > MAX_IMAGE_BYTES + 64 * 1024) {
         await reader.cancel()
-        return failure('This image exceeds 10 MB. Choose a smaller file.', 413)
+        return failure('This image exceeds 4 MB. Choose a smaller file.', 413)
       }
       chunks.push(value)
     }
