@@ -39,7 +39,7 @@ describe('POST /api/posts/create', () => {
   it.each([
     {}, { title: '   ', content: '   ' }, { title: 'hello this is for test', content: '<p><br></p>' },
     { title: validPost.title, content: '<p>' + 'lorem ipsum '.repeat(200) + '</p>' },
-    { ...validApiPost, slug: 'INVALID SLUG' }, { ...validApiPost, editorial_reviewed: false },
+    { ...validApiPost, slug: '!!!' }, { ...validApiPost, editorial_reviewed: false },
   ])('blocks an incomplete or placeholder publication before any writes', async fields => {
     const db = postClient()
     vi.mocked(createServiceClient).mockReturnValue(db.client)
@@ -78,4 +78,35 @@ describe('POST /api/posts/create', () => {
     expect((await res.json()).details.field_errors.slug).toBeDefined()
     expect(db.writes).toEqual([])
   })
+})
+
+it('normalizes a custom draft URL and returns 409 for a duplicate without suffixing it', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const created = await POST(request({ title: 'Draft', slug: ' Custom Draft URL ' }))
+  expect(created.status).toBe(201)
+  expect(db.posts[0].slug).toBe('custom-draft-url')
+  const duplicate = await POST(request({ title: 'Duplicate', slug: 'custom-draft-url' }))
+  expect(duplicate.status).toBe(409)
+  expect((await duplicate.json()).details.field_errors.slug[0]).toContain('Choose another')
+  expect(db.posts).toHaveLength(1)
+})
+it('retries automatic slugs after a uniqueness race and supports punctuation-only titles', async () => {
+  const db = postClient()
+  db.simulateSlugRace()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  expect((await POST(request({ title: 'Concurrent Draft' }))).status).toBe(201)
+  expect(db.posts[0].slug).toBe('concurrent-draft-2')
+  expect((await POST(request({ title: '!!!' }))).status).toBe(201)
+  expect(db.posts[1].slug).toMatch(/^draft-[0-9a-f-]{36}$/)
+})
+it('blocks malformed custom draft slugs before writes', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  for (const slug of ['!!!', 'x'.repeat(201)]) {
+    const result = await POST(request({ title: 'Draft', slug }))
+    expect(result.status).toBe(422)
+    expect((await result.json()).details.field_errors.slug).toBeDefined()
+  }
+  expect(db.writes).toHaveLength(0)
 })

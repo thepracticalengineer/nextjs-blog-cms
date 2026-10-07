@@ -38,6 +38,7 @@ export default defineConfig({
         'features/posts/actions.ts',
         'features/posts/drafts/**/*.{ts,tsx}',
         'features/posts/publication.ts',
+        'features/posts/slugs.ts',
         'features/newsletter/actions.ts',
         'features/authors/**/*.{ts,tsx}',
         'app/(public)/authors/[id]/page.tsx',

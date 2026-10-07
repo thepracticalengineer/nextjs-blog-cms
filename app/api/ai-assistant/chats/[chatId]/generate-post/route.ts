@@ -1,10 +1,12 @@
+import type { Post } from '@/features/posts/types'
+import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { NextRequest, NextResponse } from 'next/server'
 import sanitizeHtml from 'sanitize-html'
 import { createClient } from '@/lib/supabase/server'
 import { getMessages, getChat, getBookById } from '@/features/ai-assistant/chatService'
 import { generateBlogPost } from '@/features/ai-assistant/llmService'
 import { getDecryptedApiKey } from '@/features/ai-assistant/llmKeyService'
-import { resolveTagIds, resolveCategoryId, generateUniqueSlugForApi } from '@/features/api-keys/apiKeyService'
+import { resolveTagIds, resolveCategoryId } from '@/features/api-keys/apiKeyService'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { LLMProvider } from '@/features/ai-assistant/types'
 
@@ -75,10 +77,9 @@ export async function POST(_req: NextRequest, props: Params) {
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
   const serviceClient = createServiceClient()
-  const [tagIds, categoryId, slug] = await Promise.all([
+  const [tagIds, categoryId] = await Promise.all([
     resolveTagIds(postData.tags ?? [], serviceClient),
     resolveCategoryId(postData.category ?? '', serviceClient),
-    generateUniqueSlugForApi(postData.title, serviceClient),
   ])
 
   const safeContent = postData.content
@@ -96,7 +97,7 @@ export async function POST(_req: NextRequest, props: Params) {
       })
     : null
 
-  const { data: post, error: postError } = await supabase
+  const { data: post, error: postError } = await writeWithSlug<Post>(planSlug('', postData.title), slug => supabase
     .from('posts')
     .insert({
       title: postData.title,
@@ -111,10 +112,10 @@ export async function POST(_req: NextRequest, props: Params) {
       cover_image: null,
     })
     .select()
-    .single()
+    .single())
 
   if (postError || !post) {
-    return NextResponse.json({ error: postError?.message ?? 'Failed to create post' }, { status: 500 })
+    return NextResponse.json({ error: isSlugConflict(postError) ? SLUG_CONFLICT : 'Failed to create post' }, { status: isSlugConflict(postError) ? 409 : 500 })
   }
 
   if (tagIds.length > 0) {

@@ -104,11 +104,11 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
 }
 
 export async function validatePublication(
-  client: ReturnType<typeof createServiceClient>, input: PublicationInput, editorialReviewed: unknown, excludeId?: string
+  client: ReturnType<typeof createServiceClient>, input: PublicationInput, editorialReviewed: unknown, excludeId?: string, automaticSlug = false
 ): Promise<FieldErrors> {
   const { data: author, error: authorError } = await client.from('profiles').select('full_name').eq('id', input.author_id).maybeSingle()
   const errors = publicationErrors(input, authorError ? null : author?.full_name, editorialReviewed)
-  if (!errors.slug) {
+  if (!errors.slug && !automaticSlug) {
     let query = client.from('posts').select('id').eq('slug', input.slug)
     if (excludeId) query = query.neq('id', excludeId)
     const { data: conflict, error } = await query.maybeSingle()
@@ -125,6 +125,7 @@ export const postApiSchema = z.object({
   excerpt: z.string().nullable().optional(), meta_title: z.string().nullable().optional(),
   meta_description: z.string().nullable().optional(), image_url: z.string().nullable().optional(),
   status: z.enum(['draft', 'published']).optional(), category: z.string().nullable().optional(),
+  confirm_slug_change: z.boolean().optional(),
   tags: z.array(z.string()).optional(), editorial_reviewed: z.boolean().optional(),
 })
 

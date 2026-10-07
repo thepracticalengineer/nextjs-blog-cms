@@ -168,6 +168,12 @@ export type Database = {
           },
         ]
       }
+      post_slug_routes: {
+        Row: { slug: string; post_id: string; was_published: boolean }
+        Insert: { slug: string; post_id: string; was_published?: boolean }
+        Update: { slug?: string; post_id?: string; was_published?: boolean }
+        Relationships: [{ foreignKeyName: "post_slug_routes_post_id_fkey"; columns: ["post_id"]; isOneToOne: false; referencedRelation: "posts"; referencedColumns: ["id"] }]
+      }
       posts: {
         Row: {
           author_id: string | null
