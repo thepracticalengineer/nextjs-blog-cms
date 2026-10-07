@@ -1,3 +1,4 @@
+import { savePostAtomic } from '@/features/posts/persistence'
 import { type NextRequest } from 'next/server'
 import { postApiSchema, validatePublication } from '@/features/posts/publication'
 import { planSlug, isSlugConflict, SLUG_CONFLICT, SLUG_CHANGE_CONFIRMATION } from '@/features/posts/slugs'
@@ -8,7 +9,6 @@ import { apiSuccess, apiError } from '@/lib/apiHelpers'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { createServiceClient } from '@/lib/supabase/service'
 import {
-  resolveTagIds,
   resolveCategoryId,
   hashApiKey,
 } from '@/features/api-keys/apiKeyService'
@@ -180,37 +180,16 @@ export async function PATCH(
       : null
   }
 
-  const { data: updated, error: updateError } = await supabase
-    .from('posts')
-    .update(updatePayload)
-    .eq('id', id)
-    .eq('author_id', auth.userId)
-    .eq('updated_at', existing.updated_at)
-    .eq('status', existing.status)
-    .select(POST_FULL_SELECT)
-    .single()
+  const { data: saved, error: updateError } = await savePostAtomic({ actorId: auth.userId,
+    postId: id, payload: updatePayload, expectedUpdatedAt: existing.updated_at,
+    expectedStatus: existing.status, tagNames: body.tags,
+  })
+  const updated = saved?.post
 
   if (isSlugConflict(updateError)) return apiError(SLUG_CONFLICT, 409, { field_errors: { slug: [SLUG_CONFLICT] } })
   if (updateError || !updated) {
     console.error('[PATCH /api/posts/[id]] Update failed:', updateError?.message)
-    return apiError('The post changed or could not be saved. Reload before trying again.', 409)
-  }
-
-  // Handle tags update if provided
-  if (Array.isArray(body.tags)) {
-    await supabase.from('post_tags').delete().eq('post_id', id)
-    if (body.tags.length > 0) {
-      const tagNames = body.tags.filter((t) => typeof t === 'string' && t.trim())
-      const tagIds = await resolveTagIds(tagNames, supabase)
-      if (tagIds.length > 0) {
-        const { error: tagsError } = await supabase
-          .from('post_tags')
-          .insert(tagIds.map((tag_id) => ({ post_id: id, tag_id })))
-        if (tagsError) {
-          console.error('[PATCH /api/posts/[id]] Tag update failed:', tagsError.message)
-        }
-      }
-    }
+    return apiError(updateError?.code === '40001' ? 'The post changed. Reload before trying again.' : 'The post and tags could not be saved. No changes were applied. Try again.', updateError?.code === '40001' ? 409 : 500)
   }
 
   if (candidate.status === 'draft' && existing.status === 'published') {
@@ -220,7 +199,8 @@ export async function PATCH(
   }
   if (existing.status === 'published' || candidate.status === 'published') refreshPostPaths(existing.slug, updated.slug)
   else refreshDraftPaths()
-  return apiSuccess({ data: normalizeFullPost(updated as unknown as RawPostFull) })
+  const { data: fullPost } = await supabase.from('posts').select(POST_FULL_SELECT).eq('id', id).single()
+  return apiSuccess({ data: normalizeFullPost((fullPost ?? updated) as unknown as RawPostFull) })
 }
 
 export async function DELETE(

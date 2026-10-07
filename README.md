@@ -641,3 +641,11 @@ then inspect `newsletter_sends` for pending or claimed notifications before allo
 mail dispatch. Verify the old URL, home/blog navigation, relevant tag/category pages
 and sitemap in production after deployment. When there is no reviewed replacement,
 leave the old URL at 404 rather than publishing filler to fill the gap.
+
+### Atomic post saves and creation retries
+
+Apply `20261007110518_atomic_post_mutations.sql` before deploying the application changes. Dashboard, REST, and AI saves use the server-only `save_post_atomic` RPC: post fields, tag resolution/replacement, URL reservations, publication state, and the AI chat link commit together. A failed operation rolls back the entire save. Existing publication readiness validation runs before the RPC; browser roles cannot execute it. Newsletter scheduling and cache refresh occur after persistence succeeds.
+
+REST creation supports `Idempotency-Key`. Reusing a key with the same parsed input returns the original post without scheduling another newsletter; changed input returns 409. Without a key, identical parsed input shares a retry identity. Use a different explicit key to intentionally create another post with identical input. AI generation defaults to the chat/message snapshot as its retry identity and supports the same header. Receipts last until the post is deleted. Dashboard recovery retains its existing document UUID and duplicate-draft warning. Updates retain optimistic concurrency checks; omitted REST tags preserve relationships and an empty array clears them.
+
+Database rollback verification: run `psql -v ON_ERROR_STOP=1 -f database/tests/atomic_posts.sql` against an isolated migrated test database. The script rolls back all fixtures and injects tag insert/delete and AI-link failures. Do not run it against production.

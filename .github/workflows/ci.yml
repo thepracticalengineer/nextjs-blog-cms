@@ -137,6 +137,9 @@ jobs:
       - name: Verify URL reservation constraints and privacy
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_slug_routes.sql
 
+      - name: Verify atomic post rollback and retry contracts
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/atomic_posts.sql
+
       - name: Run API and browser tests
         run: pnpm run test:e2e
 

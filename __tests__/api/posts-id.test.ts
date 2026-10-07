@@ -258,3 +258,12 @@ it('requires explicit URL confirmation even when publication review is confirmed
   expect((await response.json()).details.field_errors.slug[0]).toContain('Confirm')
   expect(db.writes).toHaveLength(0)
 })
+
+it('returns an error and preserves draft publication state after an atomic tag failure', async () => {
+  const db = postClient([validPost]); db.failAtomic()
+  mockCreateServiceClient.mockReturnValue(db.client)
+  const response = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true, tags: ['new-tag'] }), makeParams(validPost.id))
+  expect(response.status).toBe(500)
+  expect(db.posts[0]).toEqual(validPost)
+  expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+})

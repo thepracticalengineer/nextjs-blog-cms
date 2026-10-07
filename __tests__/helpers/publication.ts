@@ -21,6 +21,8 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
   const sends = initialSends.map(row => ({ ...row }))
   const posts = initialPosts.map(row => ({ ...row }))
   const writes: { table: string; operation: string; payload?: unknown }[] = []
+  const requests = new Map<string, { fingerprint: string; post: Row }>()
+  let atomicError: { code: string; message: string } | null = null
   let race = false
   let slugRaces = 0
   const routes: Row[] = [...initialRoutes.map(row => ({ ...row })), ...posts.map(row => ({ slug: row.slug, post_id: row.id, was_published: row.status === 'published' }))]
@@ -34,12 +36,26 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
     }
   }
   const client = {
+    rpc: vi.fn(async (_name: string, args: Record<string, unknown>) => {
+      if (atomicError) return { data: null, error: atomicError }
+      const key = `${args.p_actor_id}:${args.p_request_key}`
+      const prior = args.p_request_key ? requests.get(key) : undefined
+      if (prior) return prior.fingerprint === args.p_fingerprint
+        ? { data: { post: prior.post, replayed: true }, error: null }
+        : { data: null, error: { code: '22023', message: 'Creation key already used' } }
+      const result = args.p_expected_status
+        ? await client.from('posts').update(args.p_payload as Row).eq('id', args.p_post_id).eq('updated_at', args.p_expected_updated_at).eq('status', args.p_expected_status).select().single()
+        : await client.from('posts').insert({ ...(args.p_post_id ? { id: args.p_post_id } : {}), ...args.p_payload as Row }).select().single()
+      if (result.error) return result
+      if (args.p_request_key) requests.set(key, { fingerprint: args.p_fingerprint as string, post: result.data })
+      return { data: { post: result.data, replayed: false }, error: null }
+    }),
     from: vi.fn((table: string) => {
       let operation = 'select'
       let payload: Row | Row[] = {}
       const filters: ((row: Row) => boolean)[] = []
       const execute = () => {
-        let rows = table === 'post_slug_routes' ? routes : table === 'newsletter_sends' ? sends : table === 'posts' ? posts : table === 'profiles' ? [{ id: 'user-1', full_name: authorName }] : []
+        let rows: Row[] = table === 'post_creation_requests' ? Array.from(requests.entries()).map(([key, value]) => ({ actor_id: key.split(':')[0], request_key: key.slice(key.indexOf(':') + 1), fingerprint: value.fingerprint, post_id: value.post.id })) : table === 'post_slug_routes' ? routes : table === 'newsletter_sends' ? sends : table === 'posts' ? posts : table === 'profiles' ? [{ id: 'user-1', full_name: authorName }] : []
         rows = rows.filter(row => filters.every(filter => filter(row)))
         if (operation !== 'select') {
           writes.push({ table, operation, payload })
@@ -47,7 +63,7 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
             slugRaces--
             return { data: null, error: { code: '23505', message: 'duplicate key violates posts_slug_key' } }
           }
-          if (race && table === 'posts') return { data: null, error: { message: 'Concurrent update' } }
+          if (race && table === 'posts') return { data: null, error: { code: '40001', message: 'Concurrent update' } }
           if (operation === 'upsert' && table === 'newsletter_sends') {
             const send = payload as Row
             if (!sends.some(row => row.post_id === send.post_id)) sends.push({ sending_started_at: null, sent_at: null, ...send })
@@ -93,5 +109,5 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
       return chain
     }),
   } as unknown as ReturnType<typeof createServiceClient>
-  return { client, posts, sends, routes, writes, simulateSlugRace: (count = 1) => { slugRaces = count }, simulateRace: () => { race = true } }
+  return { client, posts, sends, routes, writes, failAtomic: (message = 'Tag operation failed') => { atomicError = { code: '23503', message } }, clearAtomicFailure: () => { atomicError = null }, simulateSlugRace: (count = 1) => { slugRaces = count }, simulateRace: () => { race = true } }
 }

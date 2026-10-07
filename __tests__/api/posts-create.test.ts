@@ -110,3 +110,35 @@ it('blocks malformed custom draft slugs before writes', async () => {
   }
   expect(db.writes).toHaveLength(0)
 })
+
+it('rolls back tag failures and permits retry after failure', async () => {
+  const failed = postClient(); failed.failAtomic()
+  vi.mocked(createServiceClient).mockReturnValue(failed.client)
+  expect((await POST(request(validApiPost))).status).toBe(500)
+  expect(failed.posts).toHaveLength(0)
+  expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  failed.clearAtomicFailure()
+  expect((await POST(request(validApiPost))).status).toBe(201)
+  expect(failed.posts).toHaveLength(1)
+})
+it('replays successful publication before duplicate-slug validation and schedules once', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const body = { ...validApiPost, status: 'published', editorial_reviewed: true }
+  expect((await POST(request(body))).status).toBe(201)
+  expect((await POST(request(body))).status).toBe(201)
+  expect(db.posts).toHaveLength(1)
+  expect(scheduleNewsletterSend).toHaveBeenCalledTimes(1)
+})
+it('rejects reusing an explicit creation key with different input', async () => {
+  const db = postClient()
+  vi.mocked(createServiceClient).mockReturnValue(db.client)
+  const keyed = (title: string) => {
+    const req = request({ title })
+    req.headers.set('Idempotency-Key', 'operation-71')
+    return req
+  }
+  expect((await POST(keyed('First draft'))).status).toBe(201)
+  expect((await POST(keyed('Changed draft'))).status).toBe(409)
+  expect(db.posts).toHaveLength(1)
+})

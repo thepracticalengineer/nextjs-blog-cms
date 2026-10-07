@@ -1,3 +1,4 @@
+import { savePostAtomic, creationIdentity, findCreatedPost } from '@/features/posts/persistence'
 import type { Post } from '@/features/posts/types'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { NextRequest, NextResponse } from 'next/server'
@@ -6,7 +7,7 @@ import { createClient } from '@/lib/supabase/server'
 import { getMessages, getChat, getBookById } from '@/features/ai-assistant/chatService'
 import { generateBlogPost } from '@/features/ai-assistant/llmService'
 import { getDecryptedApiKey } from '@/features/ai-assistant/llmKeyService'
-import { resolveTagIds, resolveCategoryId } from '@/features/api-keys/apiKeyService'
+import { resolveCategoryId } from '@/features/api-keys/apiKeyService'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { LLMProvider } from '@/features/ai-assistant/types'
 
@@ -33,6 +34,11 @@ export async function POST(_req: NextRequest, props: Params) {
   if (messages.length === 0) {
     return NextResponse.json({ error: 'Chat has no messages' }, { status: 400 })
   }
+
+  const identity = creationIdentity('ai', { chatId, messages }, _req.headers.get('Idempotency-Key'))
+  const previous = await findCreatedPost(user.id, identity)
+  if (previous.error) return NextResponse.json({ error: previous.error }, { status: 409 })
+  if (previous.post) return NextResponse.json({ post_id: previous.post.id, post_slug: previous.post.slug })
 
   let apiKey: string
   try {
@@ -77,10 +83,7 @@ export async function POST(_req: NextRequest, props: Params) {
   if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
 
   const serviceClient = createServiceClient()
-  const [tagIds, categoryId] = await Promise.all([
-    resolveTagIds(postData.tags ?? [], serviceClient),
-    resolveCategoryId(postData.category ?? '', serviceClient),
-  ])
+  const categoryId = await resolveCategoryId(postData.category ?? '', serviceClient)
 
   const safeContent = postData.content
     ? sanitizeHtml(postData.content, {
@@ -97,51 +100,26 @@ export async function POST(_req: NextRequest, props: Params) {
       })
     : null
 
-  const { data: post, error: postError } = await writeWithSlug<Post>(planSlug('', postData.title), slug => supabase
-    .from('posts')
-    .insert({
-      title: postData.title,
-      slug,
-      excerpt: postData.excerpt ?? null,
-      content: safeContent,
-      seo_title: postData.meta_title ?? null,
-      seo_description: postData.meta_description ?? null,
-      author_id: profile.id,
-      status: 'draft',
-      category_id: categoryId,
-      cover_image: null,
+  const { data: post, error: postError } = await writeWithSlug<Post>(planSlug('', postData.title), async slug => {
+    const { data, error } = await savePostAtomic({ actorId: user.id, tagNames: postData.tags ?? [],
+      chatId, ...identity, payload: {
+        title: postData.title,
+        slug,
+        excerpt: postData.excerpt ?? null,
+        content: safeContent,
+        seo_title: postData.meta_title ?? null,
+        seo_description: postData.meta_description ?? null,
+        author_id: profile.id,
+        status: 'draft',
+        category_id: categoryId,
+        cover_image: null,
+      },
     })
-    .select()
-    .single())
+    return { data: data?.post ?? null, error }
+  })
 
   if (postError || !post) {
-    return NextResponse.json({ error: isSlugConflict(postError) ? SLUG_CONFLICT : 'Failed to create post' }, { status: isSlugConflict(postError) ? 409 : 500 })
-  }
-
-  if (tagIds.length > 0) {
-    const { error: postTagsError } = await supabase
-      .from('post_tags')
-      .insert(tagIds.map((tag_id) => ({ post_id: post.id, tag_id })))
-
-    if (postTagsError) {
-      await supabase.from('posts').delete().eq('id', post.id)
-      return NextResponse.json(
-        { error: postTagsError.message ?? 'Failed to create post tags' },
-        { status: 500 }
-      )
-    }
-  }
-
-  const { error: aiGeneratedPostError } = await supabase
-    .from('ai_generated_posts')
-    .insert({ chat_id: chatId, post_id: post.id })
-
-  if (aiGeneratedPostError) {
-    await supabase.from('posts').delete().eq('id', post.id)
-    return NextResponse.json(
-      { error: aiGeneratedPostError.message ?? 'Failed to link generated post to chat' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: isSlugConflict(postError) ? SLUG_CONFLICT : postError?.code === '22023' ? postError.message : 'The post and tags could not be saved. No changes were applied.' }, { status: isSlugConflict(postError) || postError?.code === '22023' ? 409 : 500 })
   }
 
   return NextResponse.json({ post_id: post.id, post_slug: post.slug })

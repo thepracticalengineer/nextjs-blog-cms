@@ -1,5 +1,6 @@
 'use server'
 
+import { savePostAtomic } from './persistence'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { validatePublication, type FieldErrors } from './publication'
@@ -28,23 +29,24 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
   const plan = planSlug(values.slug, values.title, values.auto_slug)
   if (plan.error) return { error: plan.error, fieldErrors: { slug: [plan.error] } }
 
-  const { data: post, error } = await writeWithSlug<Post>(plan, slug => supabase
-    .from('posts')
-    .insert({
-      ...(documentId ? { id: documentId } : {}),
-      title: values.title,
-      slug,
-      excerpt: values.excerpt || null,
-      content: values.content || null,
-      cover_image: values.cover_image || null,
-      category_id: values.category_id || null,
-      seo_title: values.seo_title || null,
-      seo_description: values.seo_description || null,
-      author_id: profile.id,
-      status: 'draft',
+  const result = await writeWithSlug<Post>(plan, async slug => {
+    const { data, error } = await savePostAtomic({ actorId: profile.id, postId: documentId,
+      tagIds: values.tag_ids ?? [], payload: {
+        title: values.title,
+        slug,
+        excerpt: values.excerpt || null,
+        content: values.content || null,
+        cover_image: values.cover_image || null,
+        category_id: values.category_id || null,
+        seo_title: values.seo_title || null,
+        seo_description: values.seo_description || null,
+        author_id: profile.id,
+        status: 'draft',
+      },
     })
-    .select()
-    .single())
+    return { data: data?.post ?? null, error }
+  })
+  const { data: post, error } = result
 
   if (error) {
     if (documentId && error.code === '23505') {
@@ -55,13 +57,6 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
     return { error: error.message }
   }
   if (!post) return { error: 'The post could not be saved. Try again.' }
-
-  // Handle tags
-  if (values.tag_ids?.length > 0) {
-    await supabase.from('post_tags').insert(
-      values.tag_ids.map((tag_id) => ({ post_id: post.id, tag_id }))
-    )
-  }
 
   refreshDraftPaths()
   return { data: post }
@@ -91,9 +86,9 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
     if (Object.keys(fieldErrors).length) return { error: 'Publication blocked. Review the highlighted fields.', fieldErrors }
   }
 
-  const { data: post, error } = await supabase
-    .from('posts')
-    .update({
+  const { data: saved, error } = await savePostAtomic({ actorId: profile.id, postId: id,
+    expectedUpdatedAt: existing.updated_at, expectedStatus: existing.status, allowAdmin: true,
+    tagIds: values.tag_ids ?? [], payload: {
       ...(publish ? { status: 'published', published_at: existing.published_at || new Date().toISOString() } : {}),
       title: values.title,
       slug,
@@ -103,23 +98,11 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
       category_id: values.category_id || null,
       seo_title: values.seo_title || null,
       seo_description: values.seo_description || null,
-    })
-    .eq('id', id)
-    .eq('updated_at', existing.updated_at)
-    .eq('status', existing.status)
-    .select()
-    .single()
+    } })
+  const post = saved?.post
 
   if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
-  if (error || !post) return { error: 'The post changed or could not be saved. Your input is preserved; reload before trying again.' }
-
-  // Replace tags
-  await supabase.from('post_tags').delete().eq('post_id', id)
-  if (values.tag_ids?.length > 0) {
-    await supabase.from('post_tags').insert(
-      values.tag_ids.map((tag_id) => ({ post_id: id, tag_id }))
-    )
-  }
+  if (error || !post) return { error: error?.code === '40001' ? 'The post changed. Your input is preserved; reload before trying again.' : 'The post and tags could not be saved. No changes were applied. Try again.' }
 
   if (publish && existing.status !== 'published') {
     try { await scheduleNewsletterSend(id) } catch (err) { console.error('[updatePost] Newsletter scheduling failed:', err) }
