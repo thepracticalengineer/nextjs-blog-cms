@@ -45,6 +45,10 @@ describe('private unsaved reader preview', () => {
     expect(result.content).toContain('<p>Article</p>')
     expect(result.content).not.toMatch(/script|onclick|onerror|iframe|javascript:/)
   })
+  it('rejects unsupported cover images before rendering', async () => {
+    expect((await previewPost('Body', 'author-a', undefined, 'https://unconfigured.invalid/cover.jpg')).error).toContain('configured HTTPS')
+    expect(createClient).not.toHaveBeenCalled()
+  })
   it('rejects oversized input without persistence', async () => {
     expect((await previewPost('a'.repeat(500_001))).error).toContain('too large')
     expect(createClient).not.toHaveBeenCalled()

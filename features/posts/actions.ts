@@ -28,6 +28,17 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
   if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
   if (documentId && !z.uuid().safeParse(documentId).success) return { error: 'Invalid draft identity.' }
+  const actorId = profile.id
+  async function existingDocumentError() {
+    if (!documentId) return undefined
+    const { data: existing } = await supabase.from('posts').select('id, author_id, status').eq('id', documentId).single()
+    if (existing?.author_id !== actorId) return undefined
+    return existing.status === 'published'
+      ? 'This post was already published. Reload this editor to see the saved post and newsletter status, and compare your current writing before saving.'
+      : 'This draft was already created. Reload this editor to compare your writing before saving.'
+  }
+  const existingError = await existingDocumentError()
+  if (existingError) return { error: existingError }
   const plan = planSlug(values.slug, values.title, values.auto_slug)
   if (plan.error) return { error: plan.error, fieldErrors: { slug: [plan.error] } }
 
@@ -57,11 +68,11 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
   const { data: post, error } = result
 
   if (error) {
-    if (Object.keys(fieldErrors).length) return { error: error.message, fieldErrors }
-    if (documentId && error.code === '23505') {
-      const { data: existing } = await supabase.from('posts').select('id, author_id').eq('id', documentId).single()
-      if (existing?.author_id === profile.id) return { error: 'This draft was already created. Reopen it from All Posts to compare your writing before saving.' }
+    if (documentId) {
+      const existingError = await existingDocumentError()
+      if (existingError) return { error: existingError }
     }
+    if (Object.keys(fieldErrors).length) return { error: error.message, fieldErrors }
     if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
     return { error: error.message }
   }

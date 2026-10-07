@@ -1,3 +1,4 @@
+import { getImageRemotePatterns } from './lib/image-config.mjs'
 
 
 /** @type {import('next').NextConfig} */
@@ -11,13 +12,7 @@ const nextConfig = {
   images: {
     // Uploaded images are served by Supabase. External cover URLs can be added
     // explicitly via a comma-separated hostname allowlist in each environment.
-    remotePatterns: [
-      ...(process.env.NEXT_PUBLIC_SUPABASE_URL
-        ? [{ protocol: 'https', hostname: new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname, pathname: '/storage/v1/object/public/**' }]
-        : []),
-      ...(process.env.IMAGE_REMOTE_HOSTS || '').split(',').map((host) => host.trim()).filter(Boolean)
-        .map((hostname) => ({ protocol: 'https', hostname })),
-    ],
+    remotePatterns: getImageRemotePatterns(),
   },
 }
 

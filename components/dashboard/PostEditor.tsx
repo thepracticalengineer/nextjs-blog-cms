@@ -87,6 +87,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [newsletterWarning, setNewsletterWarning] = useState<string | null>(null)
+  const [publicationError, setPublicationError] = useState<string>()
   const [publicationFieldErrors, setPublicationFieldErrors] = useState<FieldErrors>({})
   const [showBackToTop, setShowBackToTop] = useState(false)
 
@@ -161,6 +162,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
   async function onSubmit(values: PostFormValues, publish = false) {
     if (recoveryPending) return
     setPublicationFieldErrors({})
+    setPublicationError(undefined)
     setSaving(!publish)
     setPublishing(publish)
     try {
@@ -172,6 +174,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
           : await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
+        setPublicationError(result.error ?? 'The post could not be saved. Your input is preserved.')
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
         await recovery.finishSave()
       } else {
@@ -188,6 +191,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
         setReviewOpen(false)
       }
     } catch {
+      setPublicationError('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
       toast.error('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
       await recovery.finishSave()
     } finally { setSaving(false); setPublishing(false) }
@@ -197,6 +201,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
     if (!post || recoveryPending) return
     setPublishing(true)
     setPublicationFieldErrors({})
+    setPublicationError(undefined)
     const values = getValues()
     try {
       const expectedUpdatedAt = await recovery.beginSave()
@@ -205,6 +210,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
         : await publishPost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, expectedUpdatedAt, draftIdentity?.userId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
+        setPublicationError(result.error ?? 'The post could not be saved. Your input is preserved.')
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
         await recovery.finishSave()
       } else {
@@ -224,6 +230,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
         router.refresh()
       }
     } catch {
+      setPublicationError('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
       toast.error('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
       await recovery.finishSave()
     } finally { setPublishing(false) }
@@ -234,7 +241,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
     const values = getValues()
     setPreviewing(true)
     try {
-      const result = await previewPost(values.content, draftIdentity?.userId, post?.id)
+      const result = await previewPost(values.content, draftIdentity?.userId, post?.id, values.cover_image)
       if (result.error || result.content === undefined) toast.error(result.error ?? 'Preview unavailable.')
       else setPreview({ ...values, renderedContent: result.content })
     } catch { toast.error('Preview failed. Check your connection and retry.') }
@@ -596,7 +603,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
               <AuthorByline author={post?.author ?? initialPost?.author ?? (draftIdentity ? { id: draftIdentity.userId, full_name: authorName ?? null, avatar_url: null } : null)} showAvatar />
               {categories.find(category => category.id === preview.category_id) && <Badge className="rounded-full px-3 text-xs">{categories.find(category => category.id === preview.category_id)?.name}</Badge>}
             </div>
-            <PostBody unoptimizedCover title={preview.title} coverImage={/^https?:\/\//i.test(preview.cover_image) ? preview.cover_image : null} excerpt={preview.excerpt} content={preview.renderedContent} />
+            <PostBody title={preview.title} coverImage={preview.cover_image} excerpt={preview.excerpt} content={preview.renderedContent} />
             <div className="mt-12 flex flex-wrap gap-2">{tags.filter(tag => preview.tag_ids.includes(tag.id)).map(tag => <Badge key={tag.id} variant="secondary" className="rounded-full px-3 text-xs">#{tag.name}</Badge>)}</div>
           </article>}
         </DialogContent>
@@ -609,12 +616,13 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
           <p className="text-sm text-muted-foreground">{newsletter?.send?.delivery_started_at || newsletter?.send?.sent_at ? 'The newsletter may already have been delivered; publishing again will not resend it.' : `Publishing queues a newsletter for active subscribers after the configured ${newsletter?.delayMinutes ?? 30}-minute delay. Unpublishing cancels a queued send.`}</p>
           <p className="text-xs text-muted-foreground">The readiness checklist requires a descriptive title, unique slug, at least 200 readable body words, an accurate excerpt and a named author. Failed checks preserve your writing and send no newsletter.</p>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" checked={editorialReviewed} onChange={event => setValue('editorial_reviewed', event.target.checked)} />
+            <input type="checkbox" disabled={saving || publishing} checked={editorialReviewed} onChange={event => setValue('editorial_reviewed', event.target.checked)} />
             I have reviewed this article for accuracy, usefulness, attribution, taxonomy and SEO metadata.
           </label>
+          {publicationError && <div role="alert" className="space-y-2 text-sm text-destructive"><p>{publicationError}</p>{Object.entries(publicationFieldErrors).map(([field, messages]) => <p key={field}>{messages.join(' ')}</p>)}</div>}
           <DialogFooter>
             <Button type="button" variant="outline" disabled={saving || publishing} onClick={() => setReviewOpen(false)}>Keep editing</Button>
-            <Button type="button" disabled={saving || publishing || recoveryPending} onClick={() => { setReviewOpen(false); if (post) void handlePublishToggle(); else void handleSubmit(values => onSubmit(values, true))() }}>{saving || publishing ? 'Publishing…' : 'Confirm publication'}</Button>
+            <Button type="button" disabled={saving || publishing || recoveryPending} onClick={() => { if (post) void handlePublishToggle(); else void handleSubmit(values => onSubmit(values, true))() }}>{saving || publishing ? 'Publishing…' : 'Confirm publication'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -648,8 +656,10 @@ function SidebarCard({
   readonly title: string
   readonly children: React.ReactNode
 }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null)
+  useEffect(() => { if (forceOpen && detailsRef.current) detailsRef.current.open = true }, [forceOpen])
   if (expandable) return (
-    <details key={String(forceOpen)} open={forceOpen || undefined} className="rounded-xl border border-border/70 bg-card shadow-xs overflow-hidden">
+    <details ref={detailsRef} className="rounded-xl border border-border/70 bg-card shadow-xs overflow-hidden">
       <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-widest bg-muted/20">{title}</summary>
       <div className="p-4 space-y-4">{children}</div>
     </details>

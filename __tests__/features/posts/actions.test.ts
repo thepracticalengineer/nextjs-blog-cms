@@ -40,6 +40,19 @@ describe('dashboard publication actions', () => {
     expect(db.posts).toHaveLength(1)
     expect(db.posts[0].content).toBe(values.content)
   })
+  it.each([false, true])('reports an already published recovery document before slug validation (auto slug: %s)', async auto_slug => {
+    const db = useDb([])
+    const documentId = '00000000-0000-4000-8000-000000000004'
+    expect((await createPost({ ...values, auto_slug }, 'user-1', documentId, true)).data?.status).toBe('published')
+    const writes = db.writes.length
+    const retry = await createPost({ ...values, auto_slug, content: 'Newer unsaved writing' }, 'user-1', documentId, true)
+    expect(retry.error).toContain('already published')
+    expect(retry.error).toContain('newsletter status')
+    expect(retry.fieldErrors).toBeUndefined()
+    expect(db.writes).toHaveLength(writes)
+    expect(db.posts[0].content).toBe(values.content)
+    expect(scheduleNewsletterSend).toHaveBeenCalledOnce()
+  })
   it('creates incomplete drafts', async () => {
     const db = useDb([])
     expect((await createPost({ ...values, title: '', content: '', excerpt: '', slug: '' })).error).toBeUndefined()
