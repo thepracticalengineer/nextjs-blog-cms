@@ -52,7 +52,7 @@ const anchors = file => {
 }
 for (const file of files) {
   const content = withoutCodeBlocks(readFileSync(file, 'utf8')).replace(/`[^`\n]+`/g, '')
-  const links = [...content.matchAll(/!?\[[^\]]*\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g), ...content.matchAll(/^\[[^\]]+\]:\s+(\S+)/gm)]
+  const links = [...content.matchAll(/!?\[[^[\]]*\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g), ...content.matchAll(/^\[[^\]]+\]:\s+(\S+)/gm)]
   for (const match of links) {
     const link = match[1].replace(/^<|>$/g, '')
     if (/^[a-z][a-z\d+.-]*:/i.test(link)) continue

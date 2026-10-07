@@ -56,3 +56,10 @@ for (const kind of ['missing', 'copied', 'broken', 'wrong']) {
     assert.match(result.stderr, /Claude skill/)
   }))
 }
+
+test('nested label delimiters do not hide a broken inner link', () => fixture((root, check) => {
+  writeFileSync(path.join(root, 'README.md'), '# Overview\n[outer [inner](absent.md)]\n')
+  const result = check()
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /missing target: absent.md/)
+}))
