@@ -27,9 +27,15 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     await expect(page.getByRole('checkbox')).not.toBeChecked()
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     await page.getByRole('button', { name: 'Confirm publication', exact: true }).click()
-    await expect(page.locator('#editorial_reviewed-error')).toContainText('human editor')
+    const review = page.getByRole('dialog', { name: 'Review publication' })
+    await expect(review).toBeVisible()
+    await expect(review.getByRole('alert')).toContainText('human editor')
     expect((await admin().from('posts').select('status').eq('id', id).single()).data?.status).toBe('draft')
     expect((await admin().from('newsletter_sends').select('id').eq('post_id', id)).data).toEqual([])
+
+    await review.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(review).not.toBeVisible()
+    await expect(page.locator('#editorial_reviewed-error')).toContainText('human editor')
 
     // Exercise the editor's serialized JSON format and immediate form sync.
     await page.locator('[contenteditable="true"]').fill(readyArticle.content.replace(/<[^>]+>/g, ' '))
