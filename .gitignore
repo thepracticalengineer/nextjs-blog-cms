@@ -34,3 +34,7 @@
 /playwright-report/
 
 .env.e2e
+
+# Interactive Playwright CLI configuration, browser sessions and snapshots
+/.playwright/
+/.playwright-cli/
