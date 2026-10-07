@@ -22,6 +22,13 @@ export async function scheduleNewsletterSend(postId: string): Promise<void> {
     console.error('[scheduleNewsletterSend] DB error:', error.message)
     throw new Error(`[scheduleNewsletterSend] DB error: ${error.message}`)
   }
+  // Only a canceled, never-claimed send is safe to restore. Once claimed,
+  // provider handoff may have happened; retain that row to prevent duplicates.
+  const { error: restoreError } = await supabase.from('newsletter_sends')
+    .update({ status: 'pending', scheduled_at: scheduledAt })
+    .eq('post_id', postId).eq('status', 'failed')
+    .is('sending_started_at', null).is('sent_at', null)
+  if (restoreError) throw new Error(`[scheduleNewsletterSend] Restore failed: ${restoreError.message}`)
 }
 
 export async function cancelNewsletterSend(postId: string): Promise<void> {

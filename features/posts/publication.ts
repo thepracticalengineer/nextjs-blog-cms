@@ -79,7 +79,6 @@ function hasPlaceholderImage(value: unknown): boolean {
 
 const placeholderTitle = /^(?:hello this is for test|test(?: post| article)?|e2e(?: .*)?|untitled(?: post| article)?|sample(?: post| article)?|placeholder(?: .*)?)[.!]*$/i
 const filler = /hello this is for test|\blorem ipsum\b|\b(?:insert|add|write) (?:your )?(?:title|content|text|excerpt) here\b|\[(?:insert|add|your) [^\]]+\]/i
-const unfinished = /\b(?:TODO|TBD)\b|coming soon|work in progress/i
 
 export function publicationErrors(input: PublicationInput, authorName: unknown, editorialReviewed: unknown): FieldErrors {
   const errors: FieldErrors = {}
@@ -96,7 +95,6 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
   for (const field of ['title', 'content', 'excerpt', 'seo_title', 'seo_description'] as const) {
     const text = field === 'content' ? content : readableText(input[field])
     if (field !== 'title' && filler.test(text)) add(field, 'Remove filler or unfinished template text before publishing.')
-    if (unfinished.test(text) && editorialReviewed !== true) add(field, 'This text may be unfinished. Complete it or have a human editor review its context before publishing.')
   }
   if (typeof authorName !== 'string' || !authorName.trim() || !input.author_id) add('author_id', 'Assign an author with a display name in their profile.')
   if (isPlaceholderImage(input.cover_image)) add('cover_image', 'Replace the placeholder cover image or remove it.')

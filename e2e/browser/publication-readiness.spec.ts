@@ -50,6 +50,16 @@ test('author reviews, publishes, corrects a rejected live edit and unpublishes s
     await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible()
     expect((await admin().from('newsletter_sends').select('status').eq('post_id', id).single()).data?.status).toBe('failed')
     expect((await request.get(`/blog/${slug}`)).status()).toBe(404)
+    // A withdrawn pending notification must be restored once the corrected article is reviewed.
+    const previousSend = (await admin().from('newsletter_sends').select('id').eq('post_id', id).single()).data
+    await page.getByLabel('Post title').fill(readyArticle.title)
+    await page.getByRole('checkbox').check()
+    await page.getByRole('button', { name: 'Publish', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
+    const restored = await admin().from('newsletter_sends').select('id, status, scheduled_at, sending_started_at').eq('post_id', id).single()
+    expect(restored.data).toMatchObject({ id: previousSend?.id, status: 'pending', sending_started_at: null })
+    expect(Date.parse(restored.data!.scheduled_at)).toBeGreaterThan(Date.now())
+    expect((await request.get(`/blog/${slug}`)).status()).toBe(200)
   } finally {
     await admin().from('posts').delete().eq('id', id)
   }

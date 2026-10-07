@@ -5,7 +5,7 @@ vi.mock('@/features/api-keys/apiKeyService', () => ({
   resolveCategoryId: vi.fn().mockResolvedValue(null), generateUniqueSlugForApi: vi.fn().mockResolvedValue('new-article'),
 }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
-vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn() }))
+vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn(), refreshDraftPaths: vi.fn() }))
 vi.mock('@/features/newsletter/actions', () => ({ scheduleNewsletterSend: vi.fn() }))
 
 import { POST } from '@/app/api/posts/create/route'

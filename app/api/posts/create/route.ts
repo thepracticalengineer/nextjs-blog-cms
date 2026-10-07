@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'crypto'
 import { postApiSchema, validatePublication, type PostApiBody } from '@/features/posts/publication'
-import { refreshPostPaths } from '@/features/posts/cache'
+import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend } from '@/features/newsletter/actions'
 import {
   validateApiKey,
@@ -118,6 +118,7 @@ export async function POST(request: Request) {
   if (post?.status === 'published') {
     try { await scheduleNewsletterSend(post.id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
   }
-  refreshPostPaths(post?.slug)
+  if (post?.status === 'published') refreshPostPaths(post.slug)
+  else refreshDraftPaths()
   return NextResponse.json({ success: true, data: { post } }, { status: 201 })
 }

@@ -92,6 +92,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
       },
     })
 
+  const reviewText = useWatch({ control, name: ['title', 'excerpt', 'content'] })
+  const flaggedForReview = reviewText.some(text => /\b(?:TODO|TBD)\b|coming soon|work in progress/i.test(text ?? ''))
   const title = useWatch({ control, name: 'title' })
   const coverImage = useWatch({ control, name: 'cover_image' })
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
@@ -365,6 +367,11 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               </ul>
               <p className="text-xs text-muted-foreground">Author: {post?.author?.full_name || 'Your profile display name (required)'}</p>
               <FieldError name="author_id" errors={publicationFieldErrors} />
+              {flaggedForReview && (
+                <p role="status" className="text-xs text-amber-700 dark:text-amber-400">
+                  Review flagged text: TODO, TBD, coming soon or work in progress may indicate unfinished content. Confirm that these terms are appropriate in context before publishing.
+                </p>
+              )}
               <label className="flex items-start gap-2 text-xs leading-relaxed">
                 <input type="checkbox" {...register('editorial_reviewed')} aria-describedby="editorial_reviewed-error" className="mt-0.5" />
                 I have reviewed this article for accuracy, usefulness, attribution, taxonomy and SEO metadata.

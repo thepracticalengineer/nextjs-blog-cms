@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/auth/session', () => ({ getProfile: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
-vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn() }))
+vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn(), refreshDraftPaths: vi.fn() }))
 vi.mock('@/features/newsletter/actions', () => ({ scheduleNewsletterSend: vi.fn(), cancelNewsletterSend: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
 import { createPost, publishPost, updatePost, unpublishPost } from '@/features/posts/actions'
 import { getProfile } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { refreshDraftPaths, refreshPostPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'
 import { validPost, postClient } from '../../helpers/publication'
 import type { PostFormValues } from '@/features/posts/types'
@@ -31,6 +32,14 @@ describe('dashboard publication actions', () => {
     const db = useDb([])
     expect((await createPost({ ...values, title: '', content: '', excerpt: '', slug: '' })).error).toBeUndefined()
     expect(db.posts[0]).toMatchObject({ title: '', content: null, status: 'draft' })
+    expect(refreshDraftPaths).toHaveBeenCalledOnce()
+    expect(refreshPostPaths).not.toHaveBeenCalled()
+  })
+  it('saves incomplete drafts without invalidating public pages', async () => {
+    useDb()
+    expect((await updatePost('post-1', { ...values, content: '' })).error).toBeUndefined()
+    expect(refreshDraftPaths).toHaveBeenCalledOnce()
+    expect(refreshPostPaths).not.toHaveBeenCalled()
   })
   it('preserves a draft when publication fails and does not queue notifications', async () => {
     const db = useDb()
@@ -58,6 +67,7 @@ describe('dashboard publication actions', () => {
     expect(db.posts[0]).toMatchObject({ status: 'published', content: values.content })
     expect(db.writes.filter(write => write.table === 'posts')).toHaveLength(1)
     expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
+    expect(refreshPostPaths).toHaveBeenCalledWith(validPost.slug, values.slug)
   })
   it('rejects concurrent edits without newsletter side effects', async () => {
     const db = useDb(); db.simulateRace()

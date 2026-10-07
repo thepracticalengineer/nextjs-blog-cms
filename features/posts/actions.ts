@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 import slugify from 'slugify'
 import { randomUUID } from 'crypto'
 import { validatePublication, type FieldErrors } from './publication'
-import { refreshPostPaths } from './cache'
+import { refreshPostPaths, refreshDraftPaths } from './cache'
 import { cancelNewsletterSend } from '@/features/newsletter/actions'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -69,7 +69,7 @@ export async function createPost(values: PostFormValues): Promise<PostMutationRe
     )
   }
 
-  refreshPostPaths()
+  refreshDraftPaths()
   return { data: post }
 }
 
@@ -122,7 +122,8 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   if (publish && existing.status !== 'published') {
     try { await scheduleNewsletterSend(id) } catch (err) { console.error('[updatePost] Newsletter scheduling failed:', err) }
   }
-  refreshPostPaths(existing.slug, slug)
+  if (targetPublished) refreshPostPaths(existing.slug, slug)
+  else refreshDraftPaths()
   return { data: post }
 }
 

@@ -54,7 +54,7 @@ describe('publication readiness', () => {
   })
   it('requires human review for ambiguous unfinished-content flags', () => {
     const content = validPost.content + '<p>The test detects TODO comments in source code.</p>'
-    expect(errors({ content }, false)).toHaveProperty('content')
+    expect(errors({ content }, false)).toHaveProperty('editorial_reviewed')
     expect(errors({ content }, true)).toEqual({})
   })
   it('blocks unfinished templates even after review', () => {

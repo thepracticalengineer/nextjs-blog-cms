@@ -40,6 +40,7 @@ function makeSupabase({
   fetchPendingError = null as { message: string } | null,
   claimError = null as { message: string } | null,
   sendStatuses = ['sending'],
+  editedPost = null as typeof post | null,
 } = {}) {
   const fromMock = vi.fn()
 
@@ -67,6 +68,7 @@ function makeSupabase({
   })
 
   let statusRead = 0
+  let postRead = 0
   // Subsequent status checks and completion writes.
   fromMock.mockReturnValue({
     update: vi.fn().mockReturnThis(),
@@ -78,7 +80,7 @@ function makeSupabase({
   return { from: vi.fn((table: string) => {
     if (table === 'newsletter_subscriptions') return { select: vi.fn().mockReturnThis(), is: vi.fn().mockResolvedValue({ data: subscribers, error: null }) }
     if (table === 'profiles') return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: { full_name: 'Frank Mendez' }, error: null }) }
-    if (table === 'posts') return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), neq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: postData, error: postData ? null : { message: 'not found' } }), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }
+    if (table === 'posts') return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), neq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: postRead++ > 0 && editedPost ? editedPost : postData, error: postData ? null : { message: 'not found' } }), maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) }
     return fromMock()
   }) } as unknown as ReturnType<typeof createServiceClient>
 }
@@ -143,6 +145,18 @@ describe('POST /api/newsletter/send', () => {
     const res = await POST(makeReq(WEBHOOK_SECRET))
     expect((await res.json()).dispatched).toBe(0)
     expect(mockSendNewsletterEmail).toHaveBeenCalledTimes(10)
+  })
+
+  it('finishes every batch using the reviewed snapshot after a live edit', async () => {
+    mockSendNewsletterEmail.mockResolvedValue(undefined)
+    mockCreateServiceClient.mockReturnValue(makeSupabase({
+      subscribers: Array.from({ length: 12 }, () => subscriber),
+      editedPost: { ...post, title: 'Reviewed correction to an integration article', updated_at: '2026-10-07T00:00:00Z' },
+    }))
+    const res = await POST(makeReq(WEBHOOK_SECRET))
+    expect((await res.json()).dispatched).toBe(1)
+    expect(mockSendNewsletterEmail).toHaveBeenCalledTimes(12)
+    for (const call of mockSendNewsletterEmail.mock.calls) expect(call[1]).toEqual(post)
   })
 
   it('returns 500 when DB fetch fails', async () => {

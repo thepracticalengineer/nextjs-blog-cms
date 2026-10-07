@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
 import { test, expect, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { readyArticle } from '../publication-fixture'
 
 test.describe.configure({ mode: 'serial' })
 
@@ -89,20 +90,20 @@ test('author can edit, save, reload, publish and read an article', async ({ page
   // TipTap's client-only surface confirms that the form has hydrated.
   await expect(page.locator('.ProseMirror')).toBeVisible()
   await page.getByPlaceholder('Post title…').fill('Browser Migration Article')
-  await page.locator('.ProseMirror').fill('Saved editor content after the dependency migration.')
-  // Blur flushes React Hook Form's slug generation; editor changes debounce for 300ms.
+  await page.locator('.ProseMirror').fill(readyArticle.content.replace(/<[^>]+>/g, ' '))
+  await page.getByLabel('Excerpt', { exact: true }).fill(readyArticle.excerpt)
   await page.getByPlaceholder('auto-generated-from-title').fill('browser-migration-article')
-  await expect.poll(async () => page.locator('.ProseMirror').innerText()).toContain('Saved editor content')
-  await page.waitForTimeout(350)
+  await expect(page.locator('.ProseMirror')).toContainText('A reliable integration test')
   await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
-  await expect(page.getByText('Draft saved', { exact: true })).toBeVisible()
+  await expect(page.getByText('Post saved as draft', { exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.locator('.ProseMirror')).toContainText('Saved editor content')
+  await expect(page.locator('.ProseMirror')).toContainText('A reliable integration test')
+  await page.getByRole('checkbox').check()
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
   await page.goto('/blog/browser-migration-article')
   await expect(page.getByRole('heading', { name: 'Browser Migration Article', exact: true })).toBeVisible()
-  await expect(page.getByText('Saved editor content after the dependency migration.', { exact: true })).toBeVisible()
+  await expect(page.locator('article')).toContainText('A reliable integration test')
 })
 
 test('profile changes persist across reloads', async ({ page }) => {

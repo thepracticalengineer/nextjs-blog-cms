@@ -17,7 +17,8 @@ export const validPost = {
 type Row = Record<string, unknown>
 // Stateful query double: assert actual attempted writes and preservation, rather
 // than mocking readiness or merely checking that the validator was called.
-export function postClient(initialPosts: Row[] = [], authorName: string | null = 'Frank Mendez') {
+export function postClient(initialPosts: Row[] = [], authorName: string | null = 'Frank Mendez', initialSends: Row[] = []) {
+  const sends = initialSends.map(row => ({ ...row }))
   const posts = initialPosts.map(row => ({ ...row }))
   const writes: { table: string; operation: string; payload?: unknown }[] = []
   let race = false
@@ -27,12 +28,15 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
       let payload: Row | Row[] = {}
       const filters: ((row: Row) => boolean)[] = []
       const execute = () => {
-        let rows = table === 'posts' ? posts : table === 'profiles' ? [{ id: 'user-1', full_name: authorName }] : []
+        let rows = table === 'newsletter_sends' ? sends : table === 'posts' ? posts : table === 'profiles' ? [{ id: 'user-1', full_name: authorName }] : []
         rows = rows.filter(row => filters.every(filter => filter(row)))
         if (operation !== 'select') {
           writes.push({ table, operation, payload })
           if (race && table === 'posts') return { data: null, error: { message: 'Concurrent update' } }
-          if (operation === 'insert') {
+          if (operation === 'upsert' && table === 'newsletter_sends') {
+            const send = payload as Row
+            if (!sends.some(row => row.post_id === send.post_id)) sends.push({ sending_started_at: null, sent_at: null, ...send })
+          } else if (operation === 'insert') {
             rows = (Array.isArray(payload) ? payload : [payload]).map(row => ({ ...validPost, ...row, id: 'created-post' }))
             if (table === 'posts') posts.push(...rows)
           } else if (operation === 'update') {
@@ -50,6 +54,7 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
         update: vi.fn((value: Row) => { operation = 'update'; payload = value; return chain }),
         delete: vi.fn(() => { operation = 'delete'; return chain }),
         eq: vi.fn((field: string, value: unknown) => { filters.push(row => row[field] === value); return chain }),
+        is: vi.fn((field: string, value: unknown) => { filters.push(row => row[field] === value); return chain }),
         neq: vi.fn((field: string, value: unknown) => { filters.push(row => row[field] !== value); return chain }),
         in: vi.fn((field: string, values: unknown[]) => { filters.push(row => values.includes(row[field])); return chain }),
         maybeSingle: vi.fn(async () => { const result = execute(); return { ...result, data: result.data?.[0] ?? null } }),
@@ -59,5 +64,5 @@ export function postClient(initialPosts: Row[] = [], authorName: string | null =
       return chain
     }),
   } as unknown as ReturnType<typeof createServiceClient>
-  return { client, posts, writes, simulateRace: () => { race = true } }
+  return { client, posts, sends, writes, simulateRace: () => { race = true } }
 }

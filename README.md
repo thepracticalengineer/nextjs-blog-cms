@@ -551,7 +551,7 @@ The shared policy in `features/posts/publication.ts` requires:
 - Explicit human editorial review of accuracy, usefulness, attribution, relevant
   taxonomy and consistent SEO metadata. The editor clears the confirmation when
   content changes. Ambiguous flags such as `TODO`, `TBD` or “work in progress” stay
-  in draft until a human reviews their context. Obvious filler still must be removed.
+  visible as non-blocking warnings before and after confirmation so a human can review their context. Obvious filler still must be removed.
 
 These thresholds are minimum readiness checks, not measures of accuracy or quality.
 An editor must assess originality, sources, appropriate examples, category/tags and
@@ -588,7 +588,7 @@ Publication writes compare the fetched post's timestamp and status to prevent a
 concurrent change between validation and saving from bypassing checks. Reload and
 review again after a conflict. Published edits do not requeue newsletters. Unpublishing
 marks pending/claimed notifications failed; the sender also refuses missing, draft
-or unready articles. Dispatch rechecks publication state and queue cancellation between batches, stopping if content changes. An email already handed to the provider cannot be recalled.
+or unready articles. Dispatch rechecks publication state and queue cancellation between batches. Reviewed live edits preserve the validated email snapshot for the remaining recipients. Canceled sends can be rescheduled on republish only if they were never claimed; sent or potentially partial sends retain deduplication. An email already handed to the provider cannot be recalled.
 
 Public cache invalidation covers the root layout (home, blog, author and taxonomy
 pages), affected old/new article URLs and the sitemap. Changing a slug is deliberate;

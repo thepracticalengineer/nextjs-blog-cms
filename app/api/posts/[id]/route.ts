@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { postApiSchema, validatePublication } from '@/features/posts/publication'
-import { refreshPostPaths } from '@/features/posts/cache'
+import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'
 import { requireApiKey } from '@/lib/apiAuth'
 import { apiSuccess, apiError } from '@/lib/apiHelpers'
@@ -209,7 +209,8 @@ export async function PATCH(
   } else if (candidate.status === 'published' && existing.status !== 'published') {
     try { await scheduleNewsletterSend(id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
   }
-  refreshPostPaths(existing.slug, updated.slug)
+  if (existing.status === 'published' || candidate.status === 'published') refreshPostPaths(existing.slug, updated.slug)
+  else refreshDraftPaths()
   return apiSuccess({ data: normalizeFullPost(updated as unknown as RawPostFull) })
 }
 
