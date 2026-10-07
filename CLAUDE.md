@@ -30,7 +30,9 @@ RESEND_API_KEY=
 RESEND_FROM_EMAIL=
 ADMIN_EMAIL=
 SLACK_WEBHOOK_URL=
-WEBHOOK_SECRET=
+CRON_SECRET=       # Vercel GET scheduler (Production)
+WEBHOOK_SECRET=    # optional external POST scheduler
+NEWSLETTER_DELAY_MINUTES=60
 ```
 
 ## Database Setup

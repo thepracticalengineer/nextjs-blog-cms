@@ -33,19 +33,33 @@ async function sendInBatches(
   return { failures, stopped: false }
 }
 
-export async function POST(req: NextRequest) {
-  const secret = req.headers.get('x-webhook-secret')
-  const envSecret = process.env.WEBHOOK_SECRET
-
+function authenticate(secret: string | null, variable: 'CRON_SECRET' | 'WEBHOOK_SECRET'): NextResponse | null {
+  const envSecret = process.env[variable]
   if (!envSecret) {
-    console.error('[newsletter/send] WEBHOOK_SECRET is not configured')
+    console.error(`[newsletter/send] ${variable} is not configured`)
     return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
   }
-
   if (!secret || !secureCompare(secret, envSecret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  return null
+}
 
+// Vercel Cron invokes GET with Authorization: Bearer <CRON_SECRET>.
+export async function GET(req: NextRequest) {
+  const authorization = req.headers.get('authorization')
+  const secret = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null
+  const error = authenticate(secret, 'CRON_SECRET')
+  return error ?? await dispatchNewsletter()
+}
+
+// Retain authenticated POST for existing external schedulers.
+export async function POST(req: NextRequest) {
+  const error = authenticate(req.headers.get('x-webhook-secret'), 'WEBHOOK_SECRET')
+  return error ?? await dispatchNewsletter()
+}
+
+async function dispatchNewsletter() {
   const supabase = createServiceClient()
 
   // Stale preparation is retryable. Revoke ownership before another worker claims it.

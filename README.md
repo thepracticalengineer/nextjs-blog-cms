@@ -150,7 +150,8 @@ LLM_KEY_ENCRYPTION_SECRET=   # 32-character secret for AES-256-GCM key encryptio
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=            # verified sender address, e.g. noreply@yourdomain.com
 NEWSLETTER_DELAY_MINUTES=60   # delay between publish and send (default: 60)
-WEBHOOK_SECRET=               # shared secret used to authenticate the /api/newsletter/send cron call
+CRON_SECRET=                  # Vercel Cron bearer secret (production)
+WEBHOOK_SECRET=               # optional shared secret for external POST schedulers
 ```
 
 ### 4. Set up the database
@@ -342,7 +343,13 @@ Go to **Dashboard → Admin → Newsletter** (admin only) to see:
 
 ### Vercel Cron setup
 
-A `vercel.json` is included at the repo root that configures the cron to fire every minute. The endpoint requires a `x-webhook-secret` header matching `WEBHOOK_SECRET` — add this to your Vercel project environment variables. Vercel Cron sends the header automatically when the secret is configured in the project settings.
+`vercel.json` configures `/api/newsletter/send` daily at `09:00 UTC` (`17:00` in Manila; Hobby may invoke anywhere within `17:00–17:59`). Vercel invokes production cron jobs using GET. Set a strong random `CRON_SECRET` in the Vercel project's **Production** environment; Vercel sends it as `Authorization: Bearer <CRON_SECRET>`, which the GET handler validates before accessing the queue. Redeploy production after changing environment variables. Do not put secrets in `vercel.json` or public environment variables.
+
+The daily schedule is compatible with Vercel Hobby. `NEWSLETTER_DELAY_MINUTES` (default `60`) determines the earliest eligible delivery time, not the cron frequency: each invocation selects at most **10 due post notifications** (not ten recipients), so a larger backlog requires additional daily runs. A due notification is eligible for the next run but is not guaranteed delivery during that run. Failed delivery attempts also require investigation. For frequent dispatch on a plan that supports it, change the schedule to `*/5 * * * *` and redeploy. See [Vercel cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing).
+
+Also configure `RESEND_API_KEY`, `RESEND_FROM_EMAIL` (a verified sender), `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` for production. Check **Settings → Cron Jobs** for the registered job and its invocation logs; check Resend for provider errors. Supabase stores queue/subscriber data and does not trigger this job.
+
+External schedulers may still POST to the endpoint with `x-webhook-secret` matching `WEBHOOK_SECRET`. GET requires `CRON_SECRET` and does not accept that webhook header. Triggering either authenticated endpoint processes due notifications and may send real emails.
 
 ---
 

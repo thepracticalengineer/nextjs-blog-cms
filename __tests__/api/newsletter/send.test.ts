@@ -6,7 +6,7 @@ vi.mock('@/lib/notifications/newsletter', () => ({ sendNewsletterEmail: vi.fn() 
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendNewsletterEmail } from '@/lib/notifications/newsletter'
 import { validPost } from '../../helpers/publication'
-import { POST } from '@/app/api/newsletter/send/route'
+import { GET, POST } from '@/app/api/newsletter/send/route'
 
 const mockCreateServiceClient = vi.mocked(createServiceClient)
 const mockSendNewsletterEmail = vi.mocked(sendNewsletterEmail)
@@ -98,11 +98,58 @@ function makeSupabase({
 beforeEach(() => {
   vi.clearAllMocks()
   vi.stubEnv('WEBHOOK_SECRET', WEBHOOK_SECRET)
+  vi.stubEnv('CRON_SECRET', 'vercel-cron-secret')
   vi.stubEnv('RESEND_API_KEY', 'mock-key')
   vi.stubEnv('RESEND_FROM_EMAIL', 'mock@example.com')
 })
 
+describe('GET /api/newsletter/send (Vercel Cron)', () => {
+  function cronRequest(authorization?: string, webhookSecret?: string) {
+    const headers = new Headers()
+    if (authorization) headers.set('authorization', authorization)
+    if (webhookSecret) headers.set('x-webhook-secret', webhookSecret)
+    return new Request('http://localhost/api/newsletter/send', { headers }) as unknown as import('next/server').NextRequest
+  }
+
+  it.each([undefined, 'Bearer wrong-secret', 'Basic vercel-cron-secret', 'vercel-cron-secret', 'Bearer '])('rejects invalid authorization %s before accessing the database', async authorization => {
+    expect((await GET(cronRequest(authorization))).status).toBe(401)
+    expect(mockCreateServiceClient).not.toHaveBeenCalled()
+  })
+
+  it('does not accept the external webhook secret for GET', async () => {
+    expect((await GET(cronRequest(undefined, WEBHOOK_SECRET))).status).toBe(401)
+    expect(mockCreateServiceClient).not.toHaveBeenCalled()
+  })
+
+  it('fails closed if CRON_SECRET is not configured', async () => {
+    vi.stubEnv('CRON_SECRET', '')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await GET(cronRequest('Bearer vercel-cron-secret'))).status).toBe(500)
+    expect(log).toHaveBeenCalledWith('[newsletter/send] CRON_SECRET is not configured')
+    log.mockRestore()
+    expect(mockCreateServiceClient).not.toHaveBeenCalled()
+  })
+
+  it('dispatches due notifications with the Vercel bearer secret', async () => {
+    mockSendNewsletterEmail.mockResolvedValue(undefined)
+    mockCreateServiceClient.mockReturnValue(makeSupabase())
+    const response = await GET(cronRequest('Bearer vercel-cron-secret'))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ dispatched: 1 })
+    expect(mockSendNewsletterEmail).toHaveBeenCalledWith(subscriber, post)
+  })
+})
+
 describe('POST /api/newsletter/send', () => {
+  it('names WEBHOOK_SECRET when the external scheduler is misconfigured', async () => {
+    vi.stubEnv('WEBHOOK_SECRET', '')
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect((await POST(makeReq(WEBHOOK_SECRET))).status).toBe(500)
+    expect(log).toHaveBeenCalledWith('[newsletter/send] WEBHOOK_SECRET is not configured')
+    expect(mockCreateServiceClient).not.toHaveBeenCalled()
+    log.mockRestore()
+  })
+
   it('returns 401 when webhook secret is missing', async () => {
     mockCreateServiceClient.mockReturnValue(makeSupabase())
     const res = await POST(makeReq())

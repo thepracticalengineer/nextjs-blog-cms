@@ -59,9 +59,10 @@ You can expect an acknowledgement within **72 hours** and a resolution or status
 - Requests to rate-limited endpoints that exceed the limit receive a `429 Too Many Requests` response with a `retry_after` value.
 - **Note:** The current implementation uses a Node.js in-memory `Map`. For endpoints that use this rate limiter, state is not shared across instances in a multi-instance (horizontally scaled) deployment. For production scale, replace it with a distributed store such as Redis/Upstash (see the TODO comment in `lib/rateLimit.ts`).
 
-### Newsletter Webhook Secret
+### Newsletter Scheduler Secrets
 
-- The newsletter send endpoint (`POST /api/newsletter/send`) is called by a Vercel Cron Job and requires an `x-webhook-secret` header matching the `WEBHOOK_SECRET` environment variable.
+- Vercel Cron calls `GET /api/newsletter/send` with `Authorization: Bearer <CRON_SECRET>`. Configure a strong random `CRON_SECRET` in the Production environment and redeploy.
+- Optional external schedulers may call `POST /api/newsletter/send` with `x-webhook-secret` matching `WEBHOOK_SECRET`. The POST secret does not authorize Vercel GET requests.
 - This prevents unauthorized parties from triggering bulk email sends.
 
 ### Content Security
@@ -80,7 +81,8 @@ Before deploying to production, confirm the following:
 - [ ] `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` reference a production project, not a development or test one.
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` is kept **server-side only** and never exposed to the browser.
 - [ ] `LLM_KEY_ENCRYPTION_SECRET` is exactly 32 bytes and stored as a secret environment variable — never committed to source control.
-- [ ] `WEBHOOK_SECRET` is a strong, randomly generated value configured in both your Vercel project settings and your cron scheduler.
+- [ ] `CRON_SECRET` is a strong, randomly generated Production secret and the deployed GET handler validates its bearer header.
+- [ ] If an external POST scheduler is used, `WEBHOOK_SECRET` is configured server-side and sent by that scheduler as `x-webhook-secret`.
 - [ ] All RLS policies from `database/policies/` have been applied to the production Supabase project.
 - [ ] Supabase Auth email confirmations are enabled so that only verified addresses can complete registration.
 - [ ] The Supabase service role key is **not** exposed in client-side code or public environment variables.
