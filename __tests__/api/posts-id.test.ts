@@ -267,3 +267,11 @@ it('returns an error and preserves draft publication state after an atomic tag f
   expect(db.posts[0]).toEqual(validPost)
   expect(scheduleNewsletterSend).not.toHaveBeenCalled()
 })
+
+it('rejects invalid tag names as input errors before persistence', async () => {
+  const db = postClient([validPost]); mockCreateServiceClient.mockReturnValue(db.client)
+  const res = await PATCH(makeReq('PATCH', { tags: ['!!!'] }), makeParams(validPost.id))
+  expect(res.status).toBe(422)
+  expect((await res.json()).details.field_errors.tags).toBeDefined()
+  expect(db.writes).toEqual([])
+})

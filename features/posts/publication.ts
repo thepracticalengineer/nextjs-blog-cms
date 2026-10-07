@@ -1,3 +1,4 @@
+import slugify from 'slugify'
 import sanitizeHtml from 'sanitize-html'
 import { z } from 'zod'
 import type { createServiceClient } from '@/lib/supabase/service'
@@ -126,7 +127,7 @@ export const postApiSchema = z.object({
   meta_description: z.string().nullable().optional(), image_url: z.string().nullable().optional(),
   status: z.enum(['draft', 'published']).optional(), category: z.string().nullable().optional(),
   confirm_slug_change: z.boolean().optional(),
-  tags: z.array(z.string()).optional(), editorial_reviewed: z.boolean().optional(),
+  tags: z.array(z.string().refine(name => !name.trim() || Boolean(slugify(name.trim(), { lower: true, strict: true })), 'Tag names must contain letters or numbers.')).optional(), editorial_reviewed: z.boolean().optional(),
 })
 
 export type PostApiBody = z.infer<typeof postApiSchema>

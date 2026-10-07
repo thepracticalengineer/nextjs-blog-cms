@@ -37,8 +37,8 @@ export async function POST(_req: NextRequest, props: Params) {
 
   const identity = creationIdentity('ai', { chatId, messages }, _req.headers.get('Idempotency-Key'))
   const previous = await findCreatedPost(user.id, identity)
-  if (previous.error) return NextResponse.json({ error: previous.error }, { status: 409 })
-  if (previous.post) return NextResponse.json({ post_id: previous.post.id, post_slug: previous.post.slug })
+  if (previous.error) return NextResponse.json({ error: previous.error }, { status: previous.status })
+  if (previous.post) return NextResponse.json({ post_id: previous.post.id, post_slug: previous.post.slug }, { headers: { 'Idempotent-Replayed': 'true' } })
 
   let apiKey: string
   try {
@@ -100,6 +100,7 @@ export async function POST(_req: NextRequest, props: Params) {
       })
     : null
 
+  let replayed = false
   const { data: post, error: postError } = await writeWithSlug<Post>(planSlug('', postData.title), async slug => {
     const { data, error } = await savePostAtomic({ actorId: user.id, tagNames: postData.tags ?? [],
       chatId, ...identity, payload: {
@@ -115,12 +116,18 @@ export async function POST(_req: NextRequest, props: Params) {
         cover_image: null,
       },
     })
+    replayed = data?.replayed ?? false
     return { data: data?.post ?? null, error }
   })
 
   if (postError || !post) {
-    return NextResponse.json({ error: isSlugConflict(postError) ? SLUG_CONFLICT : postError?.code === '22023' ? postError.message : 'The post and tags could not be saved. No changes were applied.' }, { status: isSlugConflict(postError) || postError?.code === '22023' ? 409 : 500 })
+    let error = 'The post and tags could not be saved. No changes were applied.'
+    if (isSlugConflict(postError)) error = SLUG_CONFLICT
+    else if (postError?.code === '22023') error = postError.message
+    else if (postError?.code === 'INVALID_TAGS') error = postError.message
+    const status = postError?.code === 'INVALID_TAGS' ? 422 : 500
+    return NextResponse.json({ error }, { status: isSlugConflict(postError) || postError?.code === '22023' ? 409 : status })
   }
 
-  return NextResponse.json({ post_id: post.id, post_slug: post.slug })
+  return NextResponse.json({ post_id: post.id, post_slug: post.slug }, replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : undefined)
 }

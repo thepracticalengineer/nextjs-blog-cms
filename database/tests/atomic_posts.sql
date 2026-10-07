@@ -78,7 +78,7 @@ do $$ declare p public.posts; begin
 end $$;
 
 -- Taxonomy resolution and AI linking share the same rollback boundary.
-insert into public.ai_books (id, user_id, title, file_name, file_url) values ('00000000-0000-4000-8000-000000000074', '00000000-0000-4000-8000-000000000071', 'Fixture', 'fixture.pdf', 'fixture.pdf');
+insert into public.ai_books (id, user_id, title, file_name, extracted_text) values ('00000000-0000-4000-8000-000000000074', '00000000-0000-4000-8000-000000000071', 'Fixture', 'fixture.pdf', 'Fixture text');
 insert into public.ai_chats (id, book_id, user_id, llm_model) values ('00000000-0000-4000-8000-000000000075', '00000000-0000-4000-8000-000000000074', '00000000-0000-4000-8000-000000000071', 'fixture');
 create trigger issue71_link_failure before insert on public.ai_generated_posts for each row execute function pg_temp.fail_tags();
 do $$ begin

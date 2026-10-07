@@ -62,8 +62,8 @@ export async function POST(request: Request) {
   const body = parsed.data
   const identity = creationIdentity('rest', body, request.headers.get('Idempotency-Key'))
   const previous = await findCreatedPost(userId, identity)
-  if (previous.error) return NextResponse.json({ success: false, error: previous.error }, { status: 409 })
-  if (previous.post) return NextResponse.json({ success: true, data: { post: previous.post } }, { status: 201 })
+  if (previous.error) return NextResponse.json({ success: false, error: previous.error }, { status: previous.status })
+  if (previous.post) return NextResponse.json({ success: true, data: { post: previous.post } }, { status: 201, headers: { 'Idempotent-Replayed': 'true' } })
   const supabase = createServiceClient()
   const plan = planSlug(body.slug, body.title ?? '')
   if (plan.error) return NextResponse.json({ success: false, error: plan.error, details: { field_errors: { slug: [plan.error] } } }, { status: 422 })
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
     if (Object.keys(fieldErrors).length) {
       // Another retry may have committed after the first receipt lookup.
       const committed = await findCreatedPost(userId, identity)
-      if (committed.post) return NextResponse.json({ success: true, data: { post: committed.post } }, { status: 201 })
+      if (committed.post) return NextResponse.json({ success: true, data: { post: committed.post } }, { status: 201, headers: { 'Idempotent-Replayed': 'true' } })
       return NextResponse.json({ success: false, error: 'Publication blocked', details: { field_errors: fieldErrors } }, { status: 422 })
     }
   }
@@ -86,7 +86,12 @@ export async function POST(request: Request) {
     replayed = result.data?.replayed ?? false
     return { data: result.data?.post ?? null, error: result.error }
   })
-  const error = writeError ? (isSlugConflict(writeError) ? SLUG_CONFLICT : writeError.code === '22023' ? writeError.message : 'The post and tags could not be saved. No changes were applied.') : null
+  let error: string | null = null
+  if (writeError) {
+    error = 'The post and tags could not be saved. No changes were applied.'
+    if (isSlugConflict(writeError)) error = SLUG_CONFLICT
+    else if (writeError.code === '22023') error = writeError.message
+  }
 
   if (error) {
     return NextResponse.json({ success: false, error, ...(error === SLUG_CONFLICT ? { details: { field_errors: { slug: [error] } } } : {}) }, { status: error === SLUG_CONFLICT || writeError?.code === '22023' ? 409 : 500 })
@@ -97,5 +102,5 @@ export async function POST(request: Request) {
   }
   if (post?.status === 'published') refreshPostPaths(post.slug)
   else refreshDraftPaths()
-  return NextResponse.json({ success: true, data: { post } }, { status: 201 })
+  return NextResponse.json({ success: true, data: { post } }, { status: 201, ...(replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : {}) })
 }
