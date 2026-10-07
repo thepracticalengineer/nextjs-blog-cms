@@ -30,7 +30,9 @@
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report",
     "prepare": "husky",
-    "typecheck": "next typegen && tsc --noEmit --incremental false"
+    "typecheck": "next typegen && tsc --noEmit --incremental false",
+    "docs:check": "node scripts/check-docs.mjs",
+    "docs:test": "node --test scripts/check-docs.test.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
