@@ -11,6 +11,7 @@ npx skills add vercel-labs/agent-skills --skill vercel-react-best-practices verc
 npx skills add shadcn-ui/ui --skill shadcn --agent codex -y
 npx skills add microsoft/playwright-cli --skill playwright-cli --agent codex -y
 npx skills list --agent codex
+npx skills list --agent claude-code
 ```
 
 | Skill | Apply when |
@@ -20,9 +21,9 @@ npx skills list --agent codex
 | [shadcn](../../.agents/skills/shadcn/SKILL.md) | Working with existing UI components, registries and `components.json` |
 | [playwright-cli](../../.agents/skills/playwright-cli/SKILL.md) | Inspecting browsers and reproducing editor/auth/newsletter bugs |
 
-Preserve existing [Vitest](../../.agents/skills/vitest/SKILL.md), [Postgres](../../.agents/skills/supabase-postgres-best-practices/SKILL.md), [accessibility](../../.agents/skills/web-design-guidelines/SKILL.md), [Tailwind](../../.agents/skills/tailwindcss-advanced-layouts/SKILL.md), [frontend design](../../.agents/skills/frontend-design/SKILL.md), [UI/UX](../../.agents/skills/ui-ux-pro-max/SKILL.md), and [Zustand adapter](../../.agents/skills/zustand/SKILL.md) skills. The adapter skill applies only to json-render integration. The older `.claude/skills/vercel-react-best-practices/` copy is retained for compatibility; Codex uses the canonical `.agents/` copy and shared root instructions.
+Preserve existing [Vitest](../../.agents/skills/vitest/SKILL.md), [Postgres](../../.agents/skills/supabase-postgres-best-practices/SKILL.md), [accessibility](../../.agents/skills/web-design-guidelines/SKILL.md), [Tailwind](../../.agents/skills/tailwindcss-advanced-layouts/SKILL.md), [frontend design](../../.agents/skills/frontend-design/SKILL.md), [UI/UX](../../.agents/skills/ui-ux-pro-max/SKILL.md), and [Zustand adapter](../../.agents/skills/zustand/SKILL.md) skills. The adapter skill applies only to json-render integration. Claude Code discovers the same canonical skills through relative symlinks in `.claude/skills/`; do not maintain separate copies. `docs:check` requires every project skill to have a matching Claude link and rejects broken, copied or misdirected entries.
 
-Installation resolves upstream revisions and refreshes `skills-lock.json`; it is not an exact historical restore. Restore a known version using Git. For updates, rerun the specific installation command, review all instruction/reference changes and the computed hash, verify discovery and run `pnpm run docs:check`. Commit the skill files and lockfile together. Do not copy machine-specific absolute paths or install only globally. Check upstream guidance against installed framework/components before following it.
+Installation resolves upstream revisions and refreshes `skills-lock.json`; it is not an exact historical restore. Restore a known version using Git. For updates, rerun the specific installation command, review all instruction/reference changes and the computed hash, verify discovery and run `pnpm run docs:check`. When adding a skill, add a relative Claude discovery link with `ln -s ../../.agents/skills/<skill> .claude/skills/<skill>`. Commit the skill files, links and lockfile together. Do not copy machine-specific absolute paths or install only globally. Check upstream guidance against installed framework/components before following it.
 
 ## Version-matched Next.js guidance
 

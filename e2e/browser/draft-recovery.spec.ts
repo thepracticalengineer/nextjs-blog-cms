@@ -63,8 +63,11 @@ test('published edits autosave privately; multiple posts and tabs keep separate 
   const publishedId = seedPostIds[1]
   const before = (await admin().from('posts').select('title, content, status').eq('id', publishedId).single()).data
   await page.goto(`/dashboard/posts/${publishedId}/edit`)
+  // Wait for hydration and recovery initialization before editing the controlled input.
+  await expect(page.getByText('Changes will autosave as a private working copy.')).toBeVisible()
   const title = `Private published edit ${Date.now()}`
   await page.getByLabel('Post title').fill(title)
+  await expect(page.getByLabel('Post title')).toHaveValue(title)
   await expect(page.getByText('Working copy saved', { exact: true })).toBeVisible()
   expect((await admin().from('posts').select('title, content, status').eq('id', publishedId).single()).data).toEqual(before)
   await page.reload()

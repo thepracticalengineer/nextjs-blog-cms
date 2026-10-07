@@ -14,7 +14,7 @@ Use Node **24.21.0** (`.nvmrc`) and pnpm **10.29.3** (`package.json`). Install w
 - `pnpm run typecheck`: Next route types and TypeScript; `pnpm run lint`: zero-warning ESLint.
 - `pnpm run test:run`: unit tests; `pnpm run test:coverage`: coverage thresholds; `pnpm test`: watch mode.
 - `pnpm exec playwright install chromium`, then `pnpm run test:e2e`: existing API/browser suite. See testing guide for Docker, credentials and email prerequisites.
-- `pnpm run docs:check`: repository documentation paths, anchors, images and skill/lockfile consistency.
+- `pnpm run docs:check`: repository documentation paths, anchors, images and skill/lockfile consistency; `pnpm run docs:test`: checker regression tests.
 
 ## Skills and Next.js
 
