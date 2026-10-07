@@ -225,3 +225,19 @@ describe('draft recovery and safe autosave', () => {
     expect(localStorage.getItem(key)).toBe('{bad json')
   })
 })
+
+
+it('continues autosaving to the created post without leaving the new editor', async () => {
+  const hook = mount(); await ready(hook)
+  type(hook, 'First draft')
+  await retry(hook)
+  await act(async () => {
+    await hook.result.current.recovery.beginSave()
+    await hook.result.current.recovery.finishSave(hook.result.current.form.getValues(), '2026-10-07T00:10:00Z', identity.documentId)
+  })
+  type(hook, 'More writing after Save Draft')
+  act(() => window.dispatchEvent(new Event('pagehide')))
+  expect(readRecovery(identity.userId)[0]?.record.postId).toBe(identity.documentId)
+  await retry(hook)
+  expect(saveWorkingCopy).toHaveBeenLastCalledWith(expect.objectContaining({ postId: identity.documentId, baseUpdatedAt: '2026-10-07T00:10:00Z', values: expect.objectContaining({ content: 'More writing after Save Draft' }) }))
+})

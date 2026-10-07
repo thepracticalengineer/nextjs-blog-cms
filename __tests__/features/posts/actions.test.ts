@@ -250,3 +250,42 @@ describe('atomic persistence failures', () => {
     expect(refreshPostPaths).not.toHaveBeenCalled()
   })
 })
+
+
+describe('publication directly from the new writing screen', () => {
+  it('publishes reviewed input atomically without an intermediate draft', async () => {
+    const db = useDb([])
+    const result = await createPost(values, 'user-1', undefined, true)
+    expect(result.data).toMatchObject({ status: 'published', content: values.content })
+    expect(db.writes.filter(write => write.table === 'posts')).toHaveLength(1)
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith(result.data!.id, { resetPendingDelay: true })
+  })
+  it.each([{ content: '' }, { editorial_reviewed: false }])('blocks invalid new publication before any write (%j)', async invalid => {
+    const db = useDb([])
+    const result = await createPost({ ...values, ...invalid }, 'user-1', undefined, true)
+    expect(result.fieldErrors).toBeDefined()
+    expect(db.posts).toEqual([])
+    expect(db.writes).toEqual([])
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('preserves automatic slug collision retries when publishing', async () => {
+    const db = useDb([{ ...validPost, slug: 'integration-testing-at-service-boundaries' }])
+    const result = await createPost({ ...values, auto_slug: true }, 'user-1', undefined, true)
+    expect(result.data?.slug).toBe('integration-testing-at-service-boundaries-2')
+    expect(db.posts).toHaveLength(2)
+    expect(scheduleNewsletterSend).toHaveBeenCalledOnce()
+  })
+  it('never publishes for an account different from the opened editor', async () => {
+    const db = useDb([])
+    expect((await createPost(values, 'other-author', undefined, true)).error).toContain('account changed')
+    expect(db.writes).toEqual([])
+  })
+  it('reports newsletter failure after successful new publication', async () => {
+    useDb([])
+    vi.mocked(scheduleNewsletterSend).mockRejectedValueOnce(new Error('Queue unavailable'))
+    const result = await createPost(values, 'user-1', undefined, true)
+    expect(result.data?.status).toBe('published')
+    expect(result.error).toBeUndefined()
+    expect(result.newsletterWarning).toContain('could not be confirmed')
+  })
+})

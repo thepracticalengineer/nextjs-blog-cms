@@ -70,3 +70,14 @@ browser flow is covered by `e2e/browser/slug-safety.spec.ts` on a dedicated test
 Supabase project.
 
 See [API publication and write contracts](../api/publication-and-writes.md) for errors, optimistic concurrency, atomic saves and idempotency.
+
+
+## Writing, preview and publication review
+
+The writing screen exposes **Save Draft**, **Preview** and **Publish** for new posts. Saving creates the draft without replacing the active editor; subsequent saves update the same post. The new-post recovery URL remains stable while writing; reloading it reopens the same persisted post in place, including any recovery copies. The posts list also links to its edit URL. Recovery continues under the persisted post identity. Published posts expose **Save Changes**, **View Post** and **Unpublish**, with an explicit publication status.
+
+**Preview** opens a private reader view of the current unsaved title, excerpt, cover and body. It shares the public article body and TipTap renderer. The preview action checks authentication, the opened editor account, and ownership (or administrator access) for an existing post. It does not save the article, change publication status, create a public preview URL, or schedule a newsletter. Legacy HTML is sanitized before it enters the dashboard. Closing the preview returns to the current writing form.
+
+**Publish** first opens a review showing the destination URL and newsletter consequence. An automatically generated slug can receive a collision suffix; **View Post** uses the final saved URL. Confirming publication reuses the server readiness checks described above, including the author's human editorial confirmation. New publication saves the article and taxonomy in one atomic write, without an intermediate draft. Failed validation leaves writing in the editor and queues no newsletter. Newsletter scheduling failures are reported separately from successful publication.
+
+Optional **Settings** and **SEO** sections start collapsed. SEO title and description fall back to the post title and excerpt when left blank; an excerpt is still required for publication. Sections with validation errors open to reveal the corrective guidance.

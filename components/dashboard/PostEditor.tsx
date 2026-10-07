@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +11,11 @@ import {
   Loader2, Check, ImageIcon, Tag, Settings2,
   Search, BarChart3, ChevronLeft, Globe, Send, BookOpen, ExternalLink, ArrowUp,
 } from 'lucide-react'
+import { previewPost } from '@/features/posts/preview'
+import { AuthorByline } from '@/features/authors/components/AuthorByline'
+import { PostBody } from '@/components/editor/PostBody'
+import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -39,6 +44,7 @@ const postSchema = z.object({
 type PostFormValues = z.infer<typeof postSchema>
 
 interface PostEditorProps {
+  readonly authorName?: string | null
   readonly draftIdentity?: DraftIdentity
   readonly post?: PostWithRelations
   readonly categories: Category[]
@@ -62,7 +68,17 @@ function getTagPalette(index: number) {
   return TAG_PALETTES[index % TAG_PALETTES.length]
 }
 
-export function PostEditor({ post, categories, tags, draftIdentity, newsletter }: PostEditorProps) {
+export function PostEditor({ post: initialPost, categories, tags, draftIdentity, newsletter: initialNewsletter, authorName }: PostEditorProps) {
+  const [createdPost, setCreatedPost] = useState<PostWithRelations>()
+  const createdIsLatest = createdPost && (!initialPost?.updated_at || Date.parse(createdPost.updated_at ?? '') >= Date.parse(initialPost.updated_at))
+  const post = createdIsLatest ? createdPost : initialPost
+  const [savedNewsletter, setSavedNewsletter] = useState<PostNewsletterState>()
+  const newsletter = initialPost ? initialNewsletter : savedNewsletter ?? initialNewsletter
+  const previewTrigger = useRef<HTMLButtonElement>(null)
+  const publicationTrigger = useRef<HTMLButtonElement>(null)
+  const [reviewOpen, setReviewOpen] = useState(false)
+  const [preview, setPreview] = useState<(PostFormValues & { renderedContent: string }) | null>(null)
+  const [previewing, setPreviewing] = useState(false)
   const router = useRouter()
   const [manuallyEditedSlug, setManuallyEditedSlug] = useState(false)
   const [generatedSlug, setGeneratedSlug] = useState('')
@@ -110,6 +126,9 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
   const title = useWatch({ control, name: 'title' })
   const slug = useWatch({ control, name: 'slug' })
   const normalizedSlug = slugify(slug ?? '', { lower: true, strict: true })
+  const editorialReviewed = useWatch({ control, name: 'editorial_reviewed' })
+  const destinationSlug = normalizedSlug || post?.slug || slugify(title ?? '', { lower: true, strict: true }) || 'generated-from-title'
+  const destinationUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '')}/blog/${destinationSlug}`
   const coverImage = useWatch({ control, name: 'cover_image' })
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
@@ -139,15 +158,18 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
     setAllowSlugChange(false)
   }
 
-  async function onSubmit(values: PostFormValues) {
+  async function onSubmit(values: PostFormValues, publish = false) {
     if (recoveryPending) return
     setPublicationFieldErrors({})
-    setSaving(true)
+    setSaving(!publish)
+    setPublishing(publish)
     try {
       const expectedUpdatedAt = await recovery.beginSave()
       const result = post
-        ? await updatePost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, false, expectedUpdatedAt, draftIdentity?.userId)
-        : await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId)
+        ? await updatePost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, publish, expectedUpdatedAt, draftIdentity?.userId)
+        : publish
+          ? await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId, true)
+          : await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
@@ -156,14 +178,19 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
         const savedValues = { ...values, slug: result.data.slug }
         syncSavedSlug(result.data.slug, values.slug)
         await recovery.finishSave(savedValues, result.data.updated_at, !post ? result.data.id : undefined)
-        if (post) router.refresh()
-        toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
-        if (!post) router.push(`/dashboard/posts/${result.data.id}/edit`)
+        if (createdPost || !post) {
+          setCreatedPost({ ...result.data, author: post?.author ?? null, category: categories.find(category => category.id === values.category_id) ?? null, tags: tags.filter(tag => values.tag_ids.includes(tag.id)) })
+        } else router.refresh()
+        toast.success(publish ? 'Post saved and published!' : isPublished ? 'Published changes saved' : 'Post saved as draft')
+        if (result.newsletterState) setSavedNewsletter(result.newsletterState)
+        setNewsletterWarning(result.newsletterWarning ?? null)
+        if (result.newsletterWarning) toast.warning(result.newsletterWarning)
+        setReviewOpen(false)
       }
     } catch {
       toast.error('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
       await recovery.finishSave()
-    } finally { setSaving(false) }
+    } finally { setSaving(false); setPublishing(false) }
   }
 
   async function handlePublishToggle() {
@@ -188,7 +215,10 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
           syncSavedSlug(result.data.slug, values.slug)
           await recovery.finishSave({ ...values, slug: result.data.slug }, result.data.updated_at)
         }
+        if (createdPost) setCreatedPost({ ...createdPost, ...result.data })
+        setReviewOpen(false)
         toast.success(isPublished ? 'Post unpublished' : 'Post saved and published!')
+        if (result.newsletterState) setSavedNewsletter(result.newsletterState)
         setNewsletterWarning(result.newsletterWarning ?? null)
         if (result.newsletterWarning) toast.warning(result.newsletterWarning)
         router.refresh()
@@ -199,9 +229,21 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
     } finally { setPublishing(false) }
   }
 
+  async function openPreview() {
+    if (recoveryPending || previewing) return
+    const values = getValues()
+    setPreviewing(true)
+    try {
+      const result = await previewPost(values.content, draftIdentity?.userId, post?.id)
+      if (result.error || result.content === undefined) toast.error(result.error ?? 'Preview unavailable.')
+      else setPreview({ ...values, renderedContent: result.content })
+    } catch { toast.error('Preview failed. Check your connection and retry.') }
+    finally { setPreviewing(false) }
+  }
+
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} onChange={(event) => {
+      <form onSubmit={handleSubmit(values => onSubmit(values))} onChange={(event) => {
         if (event.target.getAttribute('name') !== 'editorial_reviewed') setValue('editorial_reviewed', false)
       }}>
         {/* ── Sticky action bar ───────────────────────────────────── */}
@@ -216,7 +258,9 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
             All posts
           </button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Badge variant="outline">{isPublished ? 'Published' : 'Draft'}</Badge>
+            <Button ref={previewTrigger} type="button" variant="outline" size="sm" onClick={openPreview} disabled={saving || publishing || previewing || recoveryPending}>{previewing ? 'Preparing preview…' : 'Preview'}</Button>
             <Button
               type="button"
               variant="ghost"
@@ -235,7 +279,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
                 size="sm"
                 variant="ghost"
                 className="text-muted-foreground hover:text-foreground"
-                onClick={() => window.open(`/blog/${post.slug}`, '_blank')}
+                onClick={() => window.open(`/blog/${post.slug}`, '_blank', 'noopener,noreferrer')}
                 disabled={saving || publishing || recoveryPending}
               >
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
@@ -243,36 +287,34 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
               </Button>
             )}
 
-            {/* Save — only for existing posts */}
-            {post && (
-              <Button
-                type="submit"
-                disabled={saving || publishing || recoveryPending}
-                size="sm"
-                variant="outline"
-                className="border-border/70 hover:-translate-y-px transition-all duration-150 px-4 min-w-[110px]"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Saving…
-                  </>
-                ) : (
-                  <>
-                    <BookOpen className="mr-1.5 h-3.5 w-3.5" />
-                    {isPublished ? 'Save Changes' : 'Save Draft'}
-                  </>
-                )}
-              </Button>
-            )}
-
+            {/* Saving never changes publication status. */}
+            <Button
+              type="submit"
+              disabled={saving || publishing || recoveryPending}
+              size="sm"
+              variant="outline"
+              className="border-border/70 hover:-translate-y-px transition-all duration-150 px-4 min-w-[110px]"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <BookOpen className="mr-1.5 h-3.5 w-3.5" />
+                  {isPublished ? 'Save Changes' : 'Save Draft'}
+                </>
+              )}
+            </Button>
             {/* Publish / Unpublish — only shown for existing posts */}
             {post && (
               <Button
                 type="button"
                 disabled={saving || publishing || recoveryPending}
                 size="sm"
-                onClick={handlePublishToggle}
+                ref={publicationTrigger}
+                onClick={() => { if (isPublished) void handlePublishToggle(); else setReviewOpen(true) }}
                 className={
                   isPublished
                     ? 'bg-amber-500 hover:bg-amber-600 text-white border-0 shadow-xs shadow-amber-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]'
@@ -293,27 +335,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
               </Button>
             )}
 
-            {/* New post — single publish button */}
-            {!post && (
-              <Button
-                type="submit"
-                disabled={saving || recoveryPending}
-                size="sm"
-                className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-xs shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]"
-              >
-                {saving ? (
-                  <>
-                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                    Creating…
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-1.5 h-3.5 w-3.5" />
-                    Create Post
-                  </>
-                )}
-              </Button>
-            )}
+            {!post && <Button ref={publicationTrigger} type="button" size="sm" disabled={saving || publishing || recoveryPending} onClick={() => setReviewOpen(true)}>{publishing ? 'Publishing…' : 'Publish'}</Button>}
           </div>
         </div>
 
@@ -395,6 +417,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
               />
             </div>
 
+            <p className="text-xs text-muted-foreground">Used in listings and as the default search description. Required to publish.</p>
             <FieldError name="excerpt" errors={publicationFieldErrors} />
 
             {/* Content editor */}
@@ -446,7 +469,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
             </SidebarCard>
 
             {/* ── Settings card ──────────────────────────── */}
-            <SidebarCard icon={Settings2} title="Settings">
+            <SidebarCard icon={Settings2} title="Settings" expandable forceOpen={!!publicationFieldErrors.cover_image}>
               {/* Cover image */}
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Cover Image</Label>
@@ -479,6 +502,7 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Category</Label>
                 <select
+                  aria-label="Category"
                   {...register('category_id')}
                   className="w-full h-9 rounded-md border border-border/60 bg-muted/30 px-3 py-1 text-sm shadow-none focus:outline-hidden focus:border-blue-400/60 focus:ring-2 focus:ring-blue-400/20 transition-colors"
                 >
@@ -531,7 +555,8 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
             </SidebarCard>
 
             {/* ── SEO card ───────────────────────────────── */}
-            <SidebarCard icon={BarChart3} title="SEO">
+            <SidebarCard icon={BarChart3} title="SEO" expandable forceOpen={!!publicationFieldErrors.seo_title || !!publicationFieldErrors.seo_description}>
+              <p className="text-xs text-muted-foreground">Leave these blank to use the post title and excerpt in search results.</p>
               <FieldError name="seo_title" errors={publicationFieldErrors} />
               <FieldError name="seo_description" errors={publicationFieldErrors} />
               <div className="space-y-2">
@@ -562,6 +587,37 @@ export function PostEditor({ post, categories, tags, draftIdentity, newsletter }
           </div>
         </div>
       </form>
+      <Dialog open={!!preview} onOpenChange={open => { if (!open) setPreview(null) }}>
+        <DialogContent finalFocus={previewTrigger} className="sm:max-w-4xl max-h-[90dvh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Reader preview</DialogTitle><DialogDescription>Private preview of your current input. Previewing does not publish or send a newsletter.</DialogDescription></DialogHeader>
+          {preview && <article className="container max-w-3xl mx-auto py-12 px-4">
+            <h1 className="text-4xl font-bold mb-4 break-words">{preview.title || 'Untitled draft'}</h1>
+            <div className="flex flex-wrap items-center gap-3 mb-8 text-sm text-muted-foreground">
+              <AuthorByline author={post?.author ?? initialPost?.author ?? (draftIdentity ? { id: draftIdentity.userId, full_name: authorName ?? null, avatar_url: null } : null)} showAvatar />
+              {categories.find(category => category.id === preview.category_id) && <Badge className="rounded-full px-3 text-xs">{categories.find(category => category.id === preview.category_id)?.name}</Badge>}
+            </div>
+            <PostBody unoptimizedCover title={preview.title} coverImage={/^https?:\/\//i.test(preview.cover_image) ? preview.cover_image : null} excerpt={preview.excerpt} content={preview.renderedContent} />
+            <div className="mt-12 flex flex-wrap gap-2">{tags.filter(tag => preview.tag_ids.includes(tag.id)).map(tag => <Badge key={tag.id} variant="secondary" className="rounded-full px-3 text-xs">#{tag.name}</Badge>)}</div>
+          </article>}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={reviewOpen} onOpenChange={open => { if (!saving && !publishing) setReviewOpen(open) }}>
+        <DialogContent finalFocus={publicationTrigger} className="max-h-[90dvh] overflow-y-auto" showCloseButton={!saving && !publishing}>
+          <DialogHeader><DialogTitle>Review publication</DialogTitle><DialogDescription>Your current writing will become public after the publication checks pass.</DialogDescription></DialogHeader>
+          <p className="break-all">Destination: {destinationUrl}</p>
+          {!post && <p className="text-xs text-muted-foreground">An automatically generated URL may receive a suffix if already reserved. View Post shows the final URL after publication.</p>}
+          <p className="text-sm text-muted-foreground">{newsletter?.send?.delivery_started_at || newsletter?.send?.sent_at ? 'The newsletter may already have been delivered; publishing again will not resend it.' : `Publishing queues a newsletter for active subscribers after the configured ${newsletter?.delayMinutes ?? 30}-minute delay. Unpublishing cancels a queued send.`}</p>
+          <p className="text-xs text-muted-foreground">The readiness checklist requires a descriptive title, unique slug, at least 200 readable body words, an accurate excerpt and a named author. Failed checks preserve your writing and send no newsletter.</p>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={editorialReviewed} onChange={event => setValue('editorial_reviewed', event.target.checked)} />
+            I have reviewed this article for accuracy, usefulness, attribution, taxonomy and SEO metadata.
+          </label>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={saving || publishing} onClick={() => setReviewOpen(false)}>Keep editing</Button>
+            <Button type="button" disabled={saving || publishing || recoveryPending} onClick={() => { setReviewOpen(false); if (post) void handlePublishToggle(); else void handleSubmit(values => onSubmit(values, true))() }}>{saving || publishing ? 'Publishing…' : 'Confirm publication'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {showBackToTop && (
         <Button
           type="button"
@@ -583,11 +639,21 @@ function SidebarCard({
   icon: Icon,
   title,
   children,
+  expandable = false,
+  forceOpen = false,
 }: {
+  readonly expandable?: boolean
+  readonly forceOpen?: boolean
   readonly icon: React.ElementType
   readonly title: string
   readonly children: React.ReactNode
 }) {
+  if (expandable) return (
+    <details key={String(forceOpen)} open={forceOpen || undefined} className="rounded-xl border border-border/70 bg-card shadow-xs overflow-hidden">
+      <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-widest bg-muted/20">{title}</summary>
+      <div className="p-4 space-y-4">{children}</div>
+    </details>
+  )
   return (
     <div className="rounded-xl border border-border/70 bg-card shadow-xs overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/50 bg-muted/20">

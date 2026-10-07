@@ -100,6 +100,7 @@ test('author can edit, save, reload, publish and read an article', async ({ page
   await expect(page.locator('.ProseMirror')).toContainText('A reliable integration test')
   await page.getByRole('checkbox').check()
   await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm publication', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
   await page.goto('/blog/browser-migration-article')
   await expect(page.getByRole('heading', { name: 'Browser Migration Article', exact: true })).toBeVisible()
