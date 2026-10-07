@@ -1,4 +1,8 @@
 import { NextResponse } from 'next/server'
+import { randomUUID } from 'crypto'
+import { postApiSchema, validatePublication, type PostApiBody } from '@/features/posts/publication'
+import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
+import { scheduleNewsletterSend } from '@/features/newsletter/actions'
 import {
   validateApiKey,
   resolveTagIds,
@@ -7,46 +11,22 @@ import {
 } from '@/features/api-keys/apiKeyService'
 import { createServiceClient } from '@/lib/supabase/service'
 
-type PostBody = {
-  title: string
-  content: string
-  slug?: string
-  status?: string
-  excerpt?: string
-  meta_title?: string
-  meta_description?: string
-  tags?: string[]
-  category?: string
-  image_url?: string
-}
-
-function parsePostBody(raw: Record<string, unknown>): { body: PostBody } | { error: string } {
-  const { title, content } = raw
-  if (!title || typeof title !== 'string' || !title.trim()) {
-    return { error: 'title is required' }
-  }
-  if (!content || typeof content !== 'string' || !content.trim()) {
-    return { error: 'content is required' }
-  }
-  return { body: raw as unknown as PostBody }
-}
-
-function buildPostPayload(body: PostBody, slug: string, categoryId: string | null, userId: string) {
+function buildPostPayload(body: PostApiBody, slug: string, categoryId: string | null, userId: string) {
   const postStatus = body.status === 'published' ? 'published' : 'draft'
   const seoDescription = typeof body.meta_description === 'string'
     ? body.meta_description
     : (typeof body.excerpt === 'string' ? body.excerpt : null)
 
   return {
-    title: body.title.trim(),
+    title: (body.title ?? '').trim(),
     slug,
-    content: body.content,
+    content: body.content ?? '',
     excerpt: typeof body.excerpt === 'string' ? body.excerpt : null,
     cover_image: typeof body.image_url === 'string' ? body.image_url : null,
     status: postStatus,
     author_id: userId,
     category_id: categoryId,
-    seo_title: typeof body.meta_title === 'string' ? body.meta_title : body.title.trim(),
+    seo_title: typeof body.meta_title === 'string' ? body.meta_title : (body.title ?? '').trim(),
     seo_description: seoDescription,
     published_at: postStatus === 'published' ? new Date().toISOString() : null,
   }
@@ -77,6 +57,7 @@ async function insertPostWithTags(
         .insert(tagIds.map((tag_id) => ({ post_id: post.id, tag_id })))
 
       if (postTagsError) {
+        await supabase.from('posts').delete().eq('id', post.id)
         console.error('[API] Failed to insert post tags:', postTagsError.message)
         return { post: null, error: 'Failed to create post tags' }
       }
@@ -109,26 +90,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const parsed = parsePostBody(rawBody)
-  if ('error' in parsed) {
-    return NextResponse.json({ success: false, error: parsed.error }, { status: 400 })
+  const parsed = postApiSchema.safeParse(rawBody)
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: 'Invalid post fields', details: { field_errors: parsed.error.flatten().fieldErrors } }, { status: 422 })
   }
-  const body = parsed.body
-
-  // 3. Resolve slug and category
+  const body = parsed.data
   const supabase = createServiceClient()
-  const resolvedSlug = (typeof body.slug === 'string' && body.slug.trim())
-    ? body.slug.trim()
-    : await generateUniqueSlugForApi(body.title, supabase)
-  const categoryId = body.category ? await resolveCategoryId(body.category, supabase) : null
+  const resolvedSlug = body.slug?.trim() || (body.title?.trim()
+    ? await generateUniqueSlugForApi(body.title, supabase)
+    : `draft-${randomUUID()}`)
+  const payload = buildPostPayload(body, resolvedSlug, null, userId)
+  if (payload.status === 'published') {
+    const fieldErrors = await validatePublication(supabase, payload, body.editorial_reviewed)
+    if (Object.keys(fieldErrors).length) {
+      return NextResponse.json({ success: false, error: 'Publication blocked', details: { field_errors: fieldErrors } }, { status: 422 })
+    }
+  }
+  payload.category_id = body.category ? await resolveCategoryId(body.category, supabase) : null
 
   // 4. Insert post with tags
-  const payload = buildPostPayload(body, resolvedSlug, categoryId, userId)
   const { post, error } = await insertPostWithTags(supabase, payload, body.tags)
 
   if (error) {
     return NextResponse.json({ success: false, error }, { status: 500 })
   }
 
+  if (post?.status === 'published') {
+    try { await scheduleNewsletterSend(post.id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
+  }
+  if (post?.status === 'published') refreshPostPaths(post.slug)
+  else refreshDraftPaths()
   return NextResponse.json({ success: true, data: { post } }, { status: 201 })
 }

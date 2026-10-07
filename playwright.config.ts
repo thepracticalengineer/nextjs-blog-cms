@@ -1,7 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 import dotenv from 'dotenv'
+import { assertDedicatedTestProject } from './e2e/environment'
 
 dotenv.config({ path: '.env.e2e' })
+if (process.env.NEXT_PUBLIC_SUPABASE_URL) assertDedicatedTestProject(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.E2E_SUPABASE_PROJECT_REF)
 
 const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:3000'
 const port = new URL(baseURL).port || '3000'

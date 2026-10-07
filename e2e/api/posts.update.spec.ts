@@ -37,4 +37,16 @@ test.describe('PATCH /api/posts/[id]', () => {
     expect(body.data.title).toBe('E2E Updated Title')
     expect(body.data.id).toBe(seedPostIds[0])
   })
+  test('cannot publish an incomplete draft through the API', async ({ request, apiKey, seedPostIds }) => {
+    const headers = { Authorization: `Bearer ${apiKey}` }
+    const before = await (await request.get(`/api/posts/${seedPostIds[0]}`, { headers })).json()
+    const res = await request.patch(`/api/posts/${seedPostIds[0]}`, {
+      headers, data: { status: 'published', editorial_reviewed: true },
+    })
+    expect(res.status()).toBe(422)
+    expect((await res.json()).details.field_errors.content).toBeDefined()
+    const after = await (await request.get(`/api/posts/${seedPostIds[0]}`, { headers })).json()
+    expect(after.data).toEqual(before.data)
+  })
+
 })

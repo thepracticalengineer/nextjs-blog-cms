@@ -76,13 +76,14 @@ Authorization: Bearer fmblog_your_key_here`,
   {
     method: 'POST',
     path: '/api/posts/create',
-    description: 'Create a new post',
+    description: 'Create a draft or publish a reviewed article. Publication requires a title, unique slug, body, excerpt and named author; failures return 422 with details.field_errors.',
     paramLabel: 'Request Body',
     params: [
-      { name: 'title',     type: 'string',   required: true,  description: 'Post title' },
-      { name: 'content',   type: 'string',   required: true,  description: 'HTML content' },
+      { name: 'title',     type: 'string',   required: false, description: 'Required for publication: 10–160 readable characters' },
+      { name: 'content',   type: 'string',   required: false, description: 'Required for publication: at least 200 readable words' },
       { name: 'status',    type: 'string',   required: false, default: 'draft',   description: '"draft" or "published"' },
-      { name: 'excerpt',   type: 'string',   required: false, default: '—',       description: 'Short summary' },
+      { name: 'excerpt',   type: 'string',   required: false, default: '—',       description: 'Required for publication: 40–500 readable characters' },
+      { name: 'editorial_reviewed', type: 'boolean', required: false, default: 'false', description: 'Set true only after human review; required for publication and live edits' },
       { name: 'tags',      type: 'string[]', required: false, default: '—',       description: 'Tag names' },
       { name: 'category',  type: 'string',   required: false, default: '—',       description: 'Category name' },
       { name: 'image_url', type: 'string',   required: false, default: '—',       description: 'Cover image URL' },
@@ -145,9 +146,10 @@ Authorization: Bearer fmblog_your_key_here`,
   {
     method: 'PATCH',
     path: '/api/posts/{id}',
-    description: 'Update a post (partial)',
+    description: 'Update a post (partial). Publishing and live edits validate the entire resulting article before any write. Blocked requests return 422 with details.field_errors.',
     paramLabel: 'Request Body',
     params: [
+      { name: 'editorial_reviewed', type: 'boolean', required: false, default: 'false', description: 'Required for publication and live edits after human review' },
       { name: 'title',            type: 'string',   required: false, default: '—', description: 'New title' },
       { name: 'content',          type: 'string',   required: false, default: '—', description: 'New HTML content' },
       { name: 'slug',             type: 'string',   required: false, default: '—', description: 'URL-safe slug (lowercase, hyphens)' },
@@ -165,6 +167,7 @@ Content-Type: application/json
 
 {
   "status": "published",
+  "editorial_reviewed": true,
   "title": "Updated Title"
 }`,
     response: `{

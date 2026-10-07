@@ -22,16 +22,16 @@ export function parseEditorContent(value: string): object | string {
 }
 
 export function Editor({ value, onChange, className }: EditorProps) {
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isInternalUpdate = useRef(false)
+  const lastEmittedValue = useRef<string | null>(null)
 
   const handleUpdate = useCallback(
     ({ editor }: { editor: { getJSON: () => object } }) => {
       if (isInternalUpdate.current) return
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => {
-        onChange(JSON.stringify(editor.getJSON()))
-      }, 300)
+      // Keep form values current before Save/Publish can be clicked.
+      const serialized = JSON.stringify(editor.getJSON())
+      lastEmittedValue.current = serialized
+      onChange(serialized)
     },
     [onChange]
   )
@@ -50,7 +50,8 @@ export function Editor({ value, onChange, className }: EditorProps) {
 
   // Sync external value changes (e.g. form reset or switching posts)
   useEffect(() => {
-    if (!editor) return
+    if (!editor || value === lastEmittedValue.current) return
+    lastEmittedValue.current = null
     const parsed = value ? parseEditorContent(value) : ''
     if (typeof parsed === 'object') {
       // JSON content: skip if editor already contains the same data
@@ -60,10 +61,6 @@ export function Editor({ value, onChange, className }: EditorProps) {
     editor.commands.setContent(parsed, { emitUpdate: false })
     isInternalUpdate.current = false
   }, [editor, value])
-
-  useEffect(() => () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-  }, [])
 
   if (!editor) return null
 

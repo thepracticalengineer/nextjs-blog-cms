@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'crypto'
+import { validatePublication } from '@/features/posts/publication'
 import { type NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendNewsletterEmail } from '@/lib/notifications/newsletter'
@@ -16,15 +17,18 @@ function secureCompare(a: string, b: string): boolean {
 
 async function sendInBatches(
   subscribers: NewsletterSubscription[],
-  post: PostEmailData
-): Promise<number> {
+  post: PostEmailData,
+  canContinue: () => Promise<boolean>
+): Promise<{ failures: number; stopped: boolean }> {
   let failures = 0
   for (let i = 0; i < subscribers.length; i += EMAIL_BATCH_SIZE) {
+    // Unpublishing or cancellation may happen while a batch is in flight.
+    if (!await canContinue()) return { failures, stopped: true }
     const batch = subscribers.slice(i, i + EMAIL_BATCH_SIZE)
     const results = await Promise.allSettled(batch.map((sub) => sendNewsletterEmail(sub, post)))
     failures += results.filter((r) => r.status === 'rejected').length
   }
-  return failures
+  return { failures, stopped: false }
 }
 
 export async function POST(req: NextRequest) {
@@ -104,19 +108,34 @@ export async function POST(req: NextRequest) {
   for (const send of claimedSends) {
     const { data: postData, error: postError } = await supabase
       .from('posts')
-      .select('title, slug, excerpt, cover_image')
+      .select('*')
       .eq('id', send.post_id)
       .single()
 
-    if (postError || !postData) {
-      console.error(`[newsletter/send] Post ${send.post_id} not found, skipping`)
+    const fieldErrors = postData?.status === 'published'
+      ? await validatePublication(supabase, postData, true, send.post_id) : {}
+    if (postError || !postData || postData.status !== 'published' || Object.keys(fieldErrors).length > 0) {
+      const reason = postError || !postData ? 'post unavailable'
+        : postData.status !== 'published' ? 'post unpublished' : 'publication validation failed'
+      console.error(`[newsletter/send] Skipping post ${send.post_id}: ${reason}`, fieldErrors)
       await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
       continue
     }
 
-    const failures = await sendInBatches(activeSubscribers, postData)
+    // Deliver the validated snapshot consistently, even if a reviewed live edit occurs.
+    const { failures, stopped } = await sendInBatches(activeSubscribers, postData, async () => {
+      const [currentPost, currentSend] = await Promise.all([
+        supabase.from('posts').select('status').eq('id', send.post_id).single(),
+        supabase.from('newsletter_sends').select('status').eq('id', send.id).single(),
+      ])
+      return !currentPost.error && !currentSend.error && currentPost.data?.status === 'published' &&
+        currentSend.data?.status === 'sending'
+    })
 
-    if (failures > 0) {
+    if (stopped) {
+      console.warn(`[newsletter/send] Send ${send.id} stopped: publication withdrawn, queue canceled, or state unavailable`)
+      await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
+    } else if (failures > 0) {
       console.error(`[newsletter/send] ${failures}/${activeSubscribers.length} emails failed for send ${send.id}`)
       await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
     } else {

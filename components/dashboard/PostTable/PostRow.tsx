@@ -93,7 +93,7 @@ export function PostRow({ post, onPublish, onUnpublish, onDelete }: PostRowProps
             </DropdownMenuItem>
             {post.status === 'draft' ? (
               <DropdownMenuItem onClick={() => onPublish(post.id)}>
-                <Eye className="h-4 w-4 mr-2" /> Publish
+                <Eye className="h-4 w-4 mr-2" /> Review & Publish
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem onClick={() => onUnpublish(post.id)}>

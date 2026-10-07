@@ -525,3 +525,95 @@ This project follows the [Contributor Covenant Code of Conduct](https://www.cont
 ## Author
 
 Frank Mendez
+
+## Publication readiness and editorial review
+
+Drafts may have empty titles, bodies or excerpts. A draft becomes public only after
+server validation succeeds. Published edits validate the complete resulting article
+before changing any live fields or tags; rejected requests preserve the previous
+publication and do not queue newsletter emails. The dashboard retains unsaved input
+and displays actionable field errors. Its post-list publish action opens the editor
+for review instead of publishing immediately.
+
+The shared policy in `features/posts/publication.ts` requires:
+
+- A descriptive title of **10–160 readable characters**.
+- A unique slug, up to **200 characters**, using lowercase letters, numbers and
+  single hyphen separators. Empty draft slugs are generated automatically.
+- At least **200 readable body words**, with practical examples and useful takeaways.
+  HTML markup, comments, scripts, styles, TipTap JSON node names/attributes, empty blocks and whitespace entities do
+  not count. Inline markup does not conceal placeholder phrases.
+- An accurate excerpt of **40–500 readable characters** and an existing author
+  whose profile has a non-empty display name.
+- No obvious test titles, lorem ipsum, unfinished template instructions or
+  placeholder cover or inline images. Articles about testing are welcome: the word “test”
+  alone is never grounds for rejection.
+- Explicit human editorial review of accuracy, usefulness, attribution, relevant
+  taxonomy and consistent SEO metadata. The editor clears the confirmation when
+  content changes. Ambiguous flags such as `TODO`, `TBD` or “work in progress” stay
+  visible as non-blocking warnings before and after confirmation so a human can review their context. Obvious filler still must be removed.
+
+These thresholds are minimum readiness checks, not measures of accuracy or quality.
+An editor must assess originality, sources, appropriate examples, category/tags and
+assets before confirming review. SEO title/description may use the site's title and
+excerpt fallbacks; editors must check their rendered meaning.
+
+REST `POST /api/posts/create` and `PATCH /api/posts/{id}` require
+`"editorial_reviewed": true` when the resulting article is published, including
+PATCH requests that omit `status` while editing a published article. This is an
+attestation by a human reviewer, not permission for an AI pipeline to assert review
+automatically. AI generation routes continue to create drafts and must go through
+the same publishing checks. There is currently no scheduled article-publication
+flow; any future flow must reuse `validatePublication` and require prior human
+review. Newsletter scheduling and dispatch independently check readiness and current
+publication state.
+
+Publication errors return HTTP 422 with the following shape (no article or taxonomy
+writes occur on validation failure):
+
+```json
+{
+  "success": false,
+  "error": "Publication blocked",
+  "details": {
+    "field_errors": {
+      "content": ["Write at least 200 readable words; this article has 0. Include practical examples and useful takeaways."],
+      "editorial_reviewed": ["A human editor must confirm accuracy, usefulness, attribution, taxonomy and SEO metadata before publishing."]
+    }
+  }
+}
+```
+
+Publication writes compare the fetched post's timestamp and status to prevent a
+concurrent change between validation and saving from bypassing checks. Reload and
+review again after a conflict. Published edits do not requeue newsletters. Unpublishing
+marks pending/claimed notifications failed; the sender also refuses missing, draft
+or unready articles. Dispatch rechecks publication state and queue cancellation between batches. Reviewed live edits preserve the validated email snapshot for the remaining recipients. Canceled sends can be rescheduled on republish only if they were never claimed; sent or potentially partial sends retain deduplication. An email already handed to the provider cannot be recalled.
+
+Public cache invalidation covers the root layout (home, blog, author and taxonomy
+pages), affected old/new article URLs and the sitemap. Changing a slug is deliberate;
+the previous URL returns 404 once its page is invalidated. Add an explicit redirect
+only when an editor has chosen a suitable replacement. Existing slugs are no longer
+silently regenerated when editing titles.
+
+### Test content and production cleanup
+
+Keep test/seed posts in local or dedicated disposable test projects. Global E2E
+setup/teardown reject the known production project. Remote test projects additionally
+require `E2E_SUPABASE_PROJECT_REF` matching their Supabase hostname; local stacks are
+allowed without it. Never configure E2E credentials for production. AI outputs and
+work-in-progress articles belong in drafts until reviewed.
+
+On **October 7, 2026**, a read-only production audit found that
+`/blog/hello-this-is-for-test` already returned 404, was absent from the sitemap and
+had no surviving post or associated newsletter queue row. All **42** sitemap article
+URLs returned 200; an article-body scan found no obvious filler/template phrases.
+The database audit also found no published posts matching the obvious test-title or
+filler patterns. No production content was changed during this implementation.
+This audit detects obvious placeholders and does not replace human quality review.
+
+For future cleanup, use the checked dashboard/API to unpublish unsuitable articles,
+then inspect `newsletter_sends` for pending or claimed notifications before allowing
+mail dispatch. Verify the old URL, home/blog navigation, relevant tag/category pages
+and sitemap in production after deployment. When there is no reviewed replacement,
+leave the old URL at 404 rather than publishing filler to fill the gap.
