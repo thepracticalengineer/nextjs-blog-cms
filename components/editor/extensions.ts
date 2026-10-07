@@ -45,10 +45,18 @@ export const extensions = [
   TableHeader,
   CharacterCount,
   Typography,
-  Image.configure({
+  Image.extend({
+    addAttributes() {
+      return {
+        ...this.parent?.(),
+        width: { default: null, parseHTML: element => element.getAttribute('width') },
+        height: { default: null, parseHTML: element => element.getAttribute('height') },
+      }
+    },
+  }).configure({
     inline: false,
     allowBase64: false,
-    HTMLAttributes: { class: 'max-w-full rounded my-4' },
+    HTMLAttributes: { class: 'max-w-full h-auto rounded my-4' },
   }),
   Link.configure({
     openOnClick: false,

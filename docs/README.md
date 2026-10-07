@@ -29,6 +29,7 @@
 - [Newsletter subscriptions, retries and cron](features/newsletter.md)
 - [Password recovery and MFA](features/password-recovery.md)
 - [Public author profiles and privacy](features/public-author-profiles.md)
+- [Cover and inline images](features/post-images.md)
 - [Publication readiness, editorial review and slug behavior](features/publication-and-slugs.md)
 - [Screenshots](features/screenshots.md)
 - [Roadmap](features/roadmap.md)

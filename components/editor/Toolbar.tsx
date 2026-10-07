@@ -20,6 +20,7 @@ import {
 
 interface ToolbarProps {
   editor: Editor
+  onImage: () => void
 }
 
 // ── Color palettes ────────────────────────────────────────────────────────────
@@ -232,7 +233,7 @@ function LineHeightMenu({ editor, activeLineHeight }: LineHeightMenuProps) {
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
-export function Toolbar({ editor }: ToolbarProps) {
+export function Toolbar({ editor, onImage }: ToolbarProps) {
   const [colorPanelOpen, setColorPanelOpen] = useState(false)
   const colorTriggerRef = useRef<HTMLDivElement | null>(null)
 
@@ -241,10 +242,6 @@ export function Toolbar({ editor }: ToolbarProps) {
     if (url) editor.chain().focus().setLink({ href: url }).run()
   }
 
-  function addImage() {
-    const url = window.prompt('Enter image URL')
-    if (url) editor.chain().focus().setImage({ src: url }).run()
-  }
 
   const activeLineHeight =
     editor.getAttributes('paragraph').lineHeight ??
@@ -360,7 +357,7 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Button type="button" variant={editor.isActive('link') ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" onClick={addLink} title="Link">
         <Link className="h-4 w-4" />
       </Button>
-      <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={addImage} title="Image">
+      <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onImage} title="Insert or edit image" aria-label="Insert or edit image">
         <ImageIcon className="h-4 w-4" />
       </Button>
 <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => editor.chain().focus().setHorizontalRule().run()} title="Horizontal Rule">

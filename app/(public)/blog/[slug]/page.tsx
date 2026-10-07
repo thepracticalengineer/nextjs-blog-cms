@@ -108,7 +108,7 @@ export default async function PostPage({ params }: PostPageProps) {
           </div>
         </div>
 
-        <PostBody title={post.title} coverImage={post.cover_image} excerpt={post.excerpt} content={post.content ?? ''} />
+        <PostBody title={post.title} coverImage={post.cover_image} coverImageAlt={post.cover_image_alt} excerpt={post.excerpt} content={post.content ?? ''} />
 
         {post.tags && post.tags.length > 0 && (
           <div className="mt-12 flex flex-wrap gap-2">

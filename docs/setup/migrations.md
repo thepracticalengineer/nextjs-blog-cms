@@ -11,5 +11,6 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261007055822_post_slug_routes.sql` | Reserved URLs and permanent redirects |
 | `20261007110518_atomic_post_mutations.sql` | Atomic saves and idempotency receipts |
 | `20261007121102_newsletter_delivery_handoff.sql` | Pause dispatcher, migrate, deploy, then resume |
+| `20261007155857_post_media_uploads.sql` | Public image bucket, server-only registry, retention and cover alt text |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.

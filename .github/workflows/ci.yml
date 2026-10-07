@@ -147,6 +147,9 @@ jobs:
       - name: Verify atomic post rollback and retry contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/atomic_posts.sql
 
+      - name: Verify image retention and cleanup permissions
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media.sql
+
       - name: Verify newsletter queue retry and cancellation contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
 

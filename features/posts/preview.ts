@@ -24,7 +24,7 @@ export async function previewPost(content: string, editorId?: string, postId?: s
   // unsaved input into the authenticated dashboard DOM.
   return { content: sanitizeHtml(renderEditorHtml(content), {
     allowedTags: [...sanitizeHtml.defaults.allowedTags, 'img', 'input', 's', 'u', 'mark'],
-    allowedAttributes: { '*': ['class', 'style'], a: ['href', 'rel'], img: ['src', 'alt'], input: ['type', 'disabled', 'checked'] },
+    allowedAttributes: { '*': ['class', 'style'], a: ['href', 'rel'], img: ['src', 'alt', 'width', 'height', 'loading', 'decoding'], input: ['type', 'disabled', 'checked'] },
     allowedStyles: { '*': {
       color: [/^#[a-f\d]{3,8}$/i, /^rgba?\([\d\s.,]+\)$/],
       background: [/^#[a-f\d]{3,8}$/i],

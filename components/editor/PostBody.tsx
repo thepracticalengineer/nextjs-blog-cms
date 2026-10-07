@@ -3,18 +3,19 @@ import { EditorContent } from './EditorContent'
 
 interface PostBodyProps {
   readonly title: string
+  readonly coverImageAlt?: string | null
   readonly coverImage?: string | null
   readonly excerpt?: string | null
   readonly content: string
 }
 
 // Shared by the public article and the private unsaved-input preview.
-export function PostBody({ title, coverImage, excerpt, content }: PostBodyProps) {
+export function PostBody({ title, coverImage, coverImageAlt, excerpt, content }: PostBodyProps) {
   return (
     <>
       {coverImage && (
         <div className="relative h-64 sm:h-80 lg:h-96 rounded-xl overflow-hidden mb-8">
-          <Image src={coverImage} alt={title} fill className="object-cover" priority />
+          <Image src={coverImage} alt={coverImageAlt || title} fill sizes="(max-width: 768px) 100vw, 896px" className="object-cover" preload />
         </div>
       )}
       {excerpt && <p className="text-lg text-muted-foreground mb-8 border-l-4 border-primary pl-4 italic">{excerpt}</p>}

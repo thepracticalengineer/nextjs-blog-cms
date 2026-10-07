@@ -126,7 +126,7 @@ export async function validatePublication(
 export const postApiSchema = z.object({
   title: z.string().optional(), content: z.string().optional(), slug: z.string().optional(),
   excerpt: z.string().nullable().optional(), meta_title: z.string().nullable().optional(),
-  meta_description: z.string().nullable().optional(), image_url: z.string().nullable().optional(),
+  meta_description: z.string().nullable().optional(), image_url: z.string().nullable().optional(), image_alt: z.string().max(1000).optional(),
   status: z.enum(['draft', 'published']).optional(), category: z.string().nullable().optional(),
   confirm_slug_change: z.boolean().optional(),
   tags: z.array(z.string().refine(name => !name.trim() || Boolean(slugify(name.trim(), { lower: true, strict: true })), 'Tag names must contain letters or numbers.')).optional(), editorial_reviewed: z.boolean().optional(),

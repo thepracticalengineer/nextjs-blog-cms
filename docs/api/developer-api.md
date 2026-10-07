@@ -101,3 +101,5 @@ Delete a post by ID.
 - API routes are rate-limited in-memory
 
 See [publication and write contracts](publication-and-writes.md) for published requests, concurrency and idempotency. AI generation creates drafts requiring human editorial review.
+
+Cover metadata uses `image_url` and optional `image_alt` (at most 1000 characters) on create/update. Read endpoints return both. See [post images](../features/post-images.md) for authenticated dashboard upload and storage policy.

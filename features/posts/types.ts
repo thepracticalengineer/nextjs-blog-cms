@@ -14,6 +14,7 @@ export type PostFormValues = {
   slug: string
   excerpt: string
   content: string
+  cover_image_alt?: string
   cover_image: string
   category_id: string
   seo_title: string

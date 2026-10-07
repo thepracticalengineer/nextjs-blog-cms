@@ -15,7 +15,7 @@ import {
 
 const POST_FULL_SELECT = `
   id, title, slug, content, excerpt, seo_title, seo_description,
-  status, cover_image, author_id, created_at, updated_at, published_at,
+  status, cover_image, cover_image_alt, author_id, created_at, updated_at, published_at,
   category:categories(name),
   tags:post_tags(tag:tags(name))
 `
@@ -29,6 +29,7 @@ type RawPostFull = {
   seo_title: string | null
   seo_description: string | null
   status: string
+  cover_image_alt: string
   cover_image: string | null
   author_id: string | null
   created_at: string | null
@@ -51,6 +52,7 @@ function normalizeFullPost(raw: RawPostFull) {
     category: raw.category?.name ?? null,
     tags: (raw.tags ?? []).map((pt) => pt.tag?.name).filter(Boolean) as string[],
     image_url: raw.cover_image,
+    image_alt: raw.cover_image_alt,
     created_at: raw.created_at,
     updated_at: raw.updated_at,
     published_at: raw.published_at,
@@ -140,6 +142,7 @@ export async function PATCH(
     ...(body.meta_title !== undefined ? { seo_title: body.meta_title } : {}),
     ...(body.meta_description !== undefined ? { seo_description: body.meta_description } : {}),
     ...(body.image_url !== undefined ? { cover_image: body.image_url } : {}),
+    ...(body.image_alt !== undefined ? { cover_image_alt: body.image_alt.trim() } : {}),
     status: body.status ?? existing.status,
   }
   // Validate the entire resulting document, including PATCHes without status.
@@ -161,6 +164,7 @@ export async function PATCH(
   if (body.meta_title !== undefined) updatePayload.seo_title = body.meta_title
   if (body.meta_description !== undefined) updatePayload.seo_description = body.meta_description
   if (body.image_url !== undefined) updatePayload.cover_image = body.image_url
+  if (body.image_alt !== undefined) updatePayload.cover_image_alt = body.image_alt.trim()
 
   // Handle status transitions
   if (body.status !== undefined) {

@@ -18,7 +18,7 @@ export function PostCard({ post, showTags = false }: PostCardProps) {
         <div className="relative h-48 w-full overflow-hidden">
           <Image
             src={post.cover_image}
-            alt={post.title}
+            alt={post.cover_image_alt || post.title}
             fill
             className="object-cover transition-transform duration-300 hover:scale-105"
           />

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +12,8 @@ import {
   Loader2, Check, ImageIcon, Tag, Settings2,
   Search, BarChart3, ChevronLeft, Globe, Send, BookOpen, ExternalLink, ArrowUp,
 } from 'lucide-react'
+import { ImageDialog } from '@/components/editor/ImageDialog'
+import { CoverImagePreview } from '@/components/editor/CoverImagePreview'
 import { previewPost } from '@/features/posts/preview'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import { PostBody } from '@/components/editor/PostBody'
@@ -35,6 +38,7 @@ const postSchema = z.object({
   excerpt: z.string(),
   content: z.string(),
   cover_image: z.string(),
+  cover_image_alt: z.string().max(1000).optional(),
   category_id: z.string(),
   seo_title: z.string(),
   seo_description: z.string(),
@@ -87,6 +91,8 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [newsletterWarning, setNewsletterWarning] = useState<string | null>(null)
+  const [coverDialogOpen, setCoverDialogOpen] = useState(false)
+  const [coverPaste, setCoverPaste] = useState<File>()
   const [publicationError, setPublicationError] = useState<string>()
   const [publicationFieldErrors, setPublicationFieldErrors] = useState<FieldErrors>({})
   const [showBackToTop, setShowBackToTop] = useState(false)
@@ -111,6 +117,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
         excerpt: post?.excerpt ?? '',
         content: post?.content ?? '',
         cover_image: post?.cover_image ?? '',
+        cover_image_alt: post?.cover_image_alt ?? '',
         category_id: post?.category_id ?? '',
         seo_title: post?.seo_title ?? '',
         seo_description: post?.seo_description ?? '',
@@ -131,6 +138,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
   const destinationSlug = normalizedSlug || post?.slug || slugify(title ?? '', { lower: true, strict: true }) || 'generated-from-title'
   const destinationUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? '').replace(/\/+$/, '')}/blog/${destinationSlug}`
   const coverImage = useWatch({ control, name: 'cover_image' })
+  const coverImageAlt = useWatch({ control, name: 'cover_image_alt' })
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
   function autoSlug() {
@@ -436,7 +444,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
                 name="content"
                 control={control}
                 render={({ field }) => (
-                  <Editor value={field.value} onChange={(value) => { field.onChange(value); setValue('editorial_reviewed', false) }} />
+                  <Editor editorId={draftIdentity?.userId} value={field.value} onChange={(value) => { field.onChange(value); setValue('editorial_reviewed', false) }} />
                 )}
               />
               <FieldError name="content" errors={publicationFieldErrors} />
@@ -480,21 +488,17 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
               {/* Cover image */}
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Cover Image</Label>
-                {coverImage && (
-                  <div className="relative rounded-lg overflow-hidden aspect-video bg-muted mb-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={coverImage}
-                      alt="Cover preview"
-                      className="w-full h-full object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-                    />
-                  </div>
-                )}
+                {coverImage && draftIdentity && <CoverImagePreview key={coverImage} src={coverImage} alt={coverImageAlt || 'Cover preview'} editorId={draftIdentity.userId} />}
+                <Button type="button" variant="outline" size="sm" disabled={!draftIdentity || recoveryPending} onClick={() => { setCoverPaste(undefined); setCoverDialogOpen(true) }}>Choose cover image</Button>
+                {coverImage && <Button type="button" variant="ghost" size="sm" onClick={() => { setValue('cover_image', '', { shouldDirty: true }); setValue('cover_image_alt', '', { shouldDirty: true }); setValue('editorial_reviewed', false) }}>Remove cover image</Button>}
                 <div className="relative">
                   <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
                   <Input
                     {...register('cover_image')}
+                    onPaste={event => {
+                      const file = pastedImageFile(event.clipboardData)
+                      if (file && draftIdentity) { event.preventDefault(); setCoverPaste(file); setCoverDialogOpen(true) }
+                    }}
                     aria-label="Cover image"
                     aria-describedby="cover_image-error"
                     placeholder="https://…"
@@ -504,6 +508,16 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
               </div>
 
               <FieldError name="cover_image" errors={publicationFieldErrors} />
+              <Label htmlFor="cover-alt">Cover image description (alt text)</Label>
+              <Input id="cover-alt" {...register('cover_image_alt')} maxLength={1000} placeholder="Describe the image for readers who cannot see it" />
+              {coverDialogOpen && draftIdentity && <ImageDialog cover editorId={draftIdentity.userId} initialFile={coverPaste}
+                initial={coverImage ? { src: coverImage, alt: coverImageAlt ?? '' } : undefined}
+                onClose={() => setCoverDialogOpen(false)} onSave={image => {
+                  setValue('cover_image', image.src, { shouldDirty: true })
+                  setValue('cover_image_alt', image.alt, { shouldDirty: true })
+                  setValue('editorial_reviewed', false)
+                }} />}
+
 
               {/* Category */}
               <div className="space-y-2">
@@ -603,7 +617,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
               <AuthorByline author={post?.author ?? initialPost?.author ?? (draftIdentity ? { id: draftIdentity.userId, full_name: authorName ?? null, avatar_url: null } : null)} showAvatar />
               {categories.find(category => category.id === preview.category_id) && <Badge className="rounded-full px-3 text-xs">{categories.find(category => category.id === preview.category_id)?.name}</Badge>}
             </div>
-            <PostBody title={preview.title} coverImage={preview.cover_image} excerpt={preview.excerpt} content={preview.renderedContent} />
+            <PostBody title={preview.title} coverImage={preview.cover_image} coverImageAlt={preview.cover_image_alt} excerpt={preview.excerpt} content={preview.renderedContent} />
             <div className="mt-12 flex flex-wrap gap-2">{tags.filter(tag => preview.tag_ids.includes(tag.id)).map(tag => <Badge key={tag.id} variant="secondary" className="rounded-full px-3 text-xs">#{tag.name}</Badge>)}</div>
           </article>}
         </DialogContent>

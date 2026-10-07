@@ -55,6 +55,7 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
         excerpt: values.excerpt || null,
         content: values.content || null,
         cover_image: values.cover_image || null,
+        cover_image_alt: values.cover_image_alt?.trim().slice(0, 1000) ?? '',
         category_id: values.category_id || null,
         seo_title: values.seo_title || null,
         seo_description: values.seo_description || null,
@@ -122,6 +123,7 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
       excerpt: values.excerpt || null,
       content: values.content || null,
       cover_image: values.cover_image || null,
+      cover_image_alt: values.cover_image_alt?.trim().slice(0, 1000) ?? '',
       category_id: values.category_id || null,
       seo_title: values.seo_title || null,
       seo_description: values.seo_description || null,
@@ -129,6 +131,7 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   const post = saved?.post
 
   if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
+  if (error?.code === '23514' && error.message.includes('abandoned image')) return { error: error.message }
   if (error || !post) return { error: error?.code === '40001' ? 'The post changed. Your input is preserved; reload before trying again.' : 'The post and tags could not be saved. No changes were applied. Try again.' }
 
   let newsletterWarning: string | undefined
