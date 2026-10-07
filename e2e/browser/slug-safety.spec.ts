@@ -24,9 +24,9 @@ test('preserves custom slugs and redirects deliberate published URL changes', as
   await expect(page.getByLabel('Slug')).toHaveValue(slug)
 
   await page.getByLabel('Slug').fill('   ')
-  await page.getByRole('button', { name: 'Create Post', exact: true }).click()
-  await expect(page).toHaveURL(/\/dashboard\/posts\/[^/]+\/edit$/)
-  const draftId = new URL(page.url()).pathname.split('/').at(-2)!
+  await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
+  await expect(page.getByText('Post saved as draft', { exact: true })).toBeVisible()
+  const draftId = new URL(page.url()).searchParams.get('draft')!
   try {
     const saved = await request.get(`/api/posts/${draftId}`, { headers })
     expect(saved.status()).toBe(200)

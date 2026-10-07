@@ -13,23 +13,41 @@ import { can } from '@/lib/permissions'
 import type { Role } from '@/lib/permissions'
 import { getProfile } from '@/lib/auth/session'
 import type { PostFormValues, Post } from './types'
+import type { PostNewsletterState } from '@/features/newsletter/types'
 import { getPostNewsletterState } from '@/features/newsletter/queries'
 
-type PostMutationResult = { data?: Post; error?: string; fieldErrors?: FieldErrors; newsletterWarning?: string }
+type PostMutationResult = { data?: Post; error?: string; fieldErrors?: FieldErrors; newsletterWarning?: string; newsletterState?: PostNewsletterState }
 
-export async function createPost(values: PostFormValues, editorId?: string, documentId?: string): Promise<PostMutationResult> {
+export async function createPost(values: PostFormValues, editorId?: string, documentId?: string, publish = false): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:create')) {
     return { error: 'Unauthorized' }
   }
 
+  if (publish && !can(profile.role as Role, 'posts:publish')) return { error: 'Unauthorized' }
   if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
   if (documentId && !z.uuid().safeParse(documentId).success) return { error: 'Invalid draft identity.' }
+  const actorId = profile.id
+  async function existingDocumentError() {
+    if (!documentId) return undefined
+    const { data: existing } = await supabase.from('posts').select('id, author_id, status').eq('id', documentId).single()
+    if (existing?.author_id !== actorId) return undefined
+    return existing.status === 'published'
+      ? 'This post was already published. Reload this editor to see the saved post and newsletter status, and compare your current writing before saving.'
+      : 'This draft was already created. Reload this editor to compare your writing before saving.'
+  }
+  const existingError = await existingDocumentError()
+  if (existingError) return { error: existingError }
   const plan = planSlug(values.slug, values.title, values.auto_slug)
   if (plan.error) return { error: plan.error, fieldErrors: { slug: [plan.error] } }
 
+  let fieldErrors: FieldErrors = {}
   const result = await writeWithSlug<Post>(plan, async slug => {
+    if (publish) {
+      fieldErrors = await validatePublication(createServiceClient(), { ...values, slug, author_id: profile.id }, values.editorial_reviewed, undefined, plan.automatic)
+      if (Object.keys(fieldErrors).length) return { data: null, error: { message: 'Publication blocked. Review the highlighted fields.' } }
+    }
     const { data, error } = await savePostAtomic({ actorId: profile.id, postId: documentId,
       tagIds: values.tag_ids ?? [], payload: {
         title: values.title,
@@ -41,7 +59,8 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
         seo_title: values.seo_title || null,
         seo_description: values.seo_description || null,
         author_id: profile.id,
-        status: 'draft',
+        status: publish ? 'published' : 'draft',
+        ...(publish ? { published_at: new Date().toISOString() } : {}),
       },
     })
     return { data: data?.post ?? null, error }
@@ -49,17 +68,25 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
   const { data: post, error } = result
 
   if (error) {
-    if (documentId && error.code === '23505') {
-      const { data: existing } = await supabase.from('posts').select('id, author_id').eq('id', documentId).single()
-      if (existing?.author_id === profile.id) return { error: 'This draft was already created. Reopen it from All Posts to compare your writing before saving.' }
+    if (documentId) {
+      const existingError = await existingDocumentError()
+      if (existingError) return { error: existingError }
     }
+    if (Object.keys(fieldErrors).length) return { error: error.message, fieldErrors }
     if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
     return { error: error.message }
   }
   if (!post) return { error: 'The post could not be saved. Try again.' }
 
-  refreshDraftPaths()
-  return { data: post }
+  let newsletterWarning: string | undefined
+  if (publish) {
+    try { await scheduleNewsletterSend(post.id, { resetPendingDelay: true }) } catch (err) {
+      console.error('[createPost] Newsletter scheduling failed:', err)
+      newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status before retrying.'
+    }
+    refreshPostPaths(post.slug, post.slug)
+  } else refreshDraftPaths()
+  return { data: post, newsletterState: await getPostNewsletterState(post.id), ...(newsletterWarning ? { newsletterWarning } : {}) }
 }
 
 export async function updatePost(id: string, values: PostFormValues, publish = false, expectedUpdatedAt?: string | null, editorId?: string): Promise<PostMutationResult> {
@@ -113,7 +140,7 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   }
   if (targetPublished) refreshPostPaths(existing.slug, slug)
   else refreshDraftPaths()
-  return { data: post, ...(newsletterWarning ? { newsletterWarning } : {}) }
+  return { data: post, newsletterState: await getPostNewsletterState(post.id), ...(newsletterWarning ? { newsletterWarning } : {}) }
 }
 
 export async function publishPost(id: string, values: PostFormValues, expectedUpdatedAt?: string | null, editorId?: string) {
@@ -145,7 +172,7 @@ export async function unpublishPost(id: string, editorId?: string): Promise<Post
     newsletterWarning = 'Post unpublished, but newsletter cancellation could not be confirmed. Delivery checks will block new batches while the post is unpublished. Refresh newsletter status before republishing.'
   }
   refreshPostPaths(post.slug)
-  return { data: post, ...(newsletterWarning ? { newsletterWarning } : {}) }
+  return { data: post, newsletterState: await getPostNewsletterState(post.id), ...(newsletterWarning ? { newsletterWarning } : {}) }
 }
 
 export async function retryNewsletterScheduling(id: string, editorId?: string): Promise<{ error?: string }> {

@@ -1,10 +1,9 @@
 import { notFound, permanentRedirect } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Metadata } from 'next'
 import { getPostBySlug, getAllPublishedSlugs, getPostRedirect } from '@/features/posts/queries'
-import { EditorContent } from '@/components/editor/EditorContent'
+import { PostBody } from '@/components/editor/PostBody'
 import { Badge } from '@/components/ui/badge'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import { BackToTopButton } from '@/components/BackToTopButton'
@@ -109,25 +108,7 @@ export default async function PostPage({ params }: PostPageProps) {
           </div>
         </div>
 
-        {post.cover_image && (
-          <div className="relative h-64 sm:h-80 lg:h-96 rounded-xl overflow-hidden mb-8">
-            <Image
-              src={post.cover_image}
-              alt={post.title}
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
-        )}
-
-        {post.excerpt && (
-          <p className="text-lg text-muted-foreground mb-8 border-l-4 border-primary pl-4 italic">
-            {post.excerpt}
-          </p>
-        )}
-
-        <EditorContent content={post.content ?? ''} />
+        <PostBody title={post.title} coverImage={post.cover_image} excerpt={post.excerpt} content={post.content ?? ''} />
 
         {post.tags && post.tags.length > 0 && (
           <div className="mt-12 flex flex-wrap gap-2">

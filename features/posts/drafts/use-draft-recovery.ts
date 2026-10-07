@@ -90,7 +90,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
       let success = false
       inFlight = (async () => {
         try {
-          const result = await saveWorkingCopy({ editorId: userId!, documentId: documentId!, postId, values, expectedRevision: revision, revision: requestRevision, baseUpdatedAt })
+          const result = await saveWorkingCopy({ editorId: userId!, documentId: documentId!, postId: recoveryPostId, values, expectedRevision: revision, revision: requestRevision, baseUpdatedAt })
           if (!result.data) { update({ status: 'failed', error: result.error ?? 'Autosave failed. Retry to save your writing.' }); return }
           revision = result.data.revision
           safeSnapshot = submitted
@@ -174,7 +174,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
         if (!candidate || !window.confirm('Discard this recovered copy permanently?')) return
         if (candidate.revision) {
           try {
-            const result = await discardWorkingCopy(documentId!, postId, candidate.revision, userId!)
+            const result = await discardWorkingCopy(documentId!, recoveryPostId, candidate.revision, userId!)
             if (result.error) { update({ status: 'failed', error: result.error }); return }
             revision = null
           } catch { update({ status: 'failed', error: 'Could not discard this copy. Retry when connected.' }); return }
@@ -191,7 +191,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
         await inFlight
         if (revision) {
           try {
-            const result = await discardWorkingCopy(documentId!, postId, revision, userId!)
+            const result = await discardWorkingCopy(documentId!, recoveryPostId, revision, userId!)
             if (result.error) { paused = false; update({ status: 'failed', error: result.error }); return false }
           } catch { paused = false; update({ status: 'failed', error: 'Discard failed. Retry when connected.' }); return false }
         }
@@ -209,7 +209,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
             safeSnapshot = snapshot(values)
             baseUpdatedAt = newUpdatedAt ?? null
             if (revision) {
-              const result = await discardWorkingCopy(documentId!, postId, revision, userId!)
+              const result = await discardWorkingCopy(documentId!, recoveryPostId, revision, userId!)
               if (!result.error) revision = null
             }
             if (currentSnapshot() === safeSnapshot) {
@@ -219,8 +219,8 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
             } else {
               persistLocal()
             }
-            // Continue storing edits made while the new edit route is loading
-            // under the created post identity, with background writes paused.
+            // Keep the same editor open after creation, now saving working
+            // copies against the persisted post identity.
             if (createdPostId) {
               const previousKey = ownKey
               recordIdentity.documentId = createdPostId
@@ -230,7 +230,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
             }
           }
         } catch { update({ storageError: 'Recovery cleanup failed. Your writing is still available on this device.' }) }
-        finally { paused = !!createdPostId; if (!paused) schedule() }
+        finally { paused = false; schedule() }
       },
       updateBase: value => { baseUpdatedAt = value; persistLocal() },
       canLeave: () => !unsafe() || window.confirm('Some writing is not saved to the server. Leave this editor? Recovery will remain on this device.'),

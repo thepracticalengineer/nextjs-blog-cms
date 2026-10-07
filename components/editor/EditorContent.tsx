@@ -144,21 +144,21 @@ interface EditorContentProps {
   readonly className?: string
 }
 
+export function renderEditorHtml(content: string): string {
+  if (!content) return ''
+  try {
+    return renderNode(JSON.parse(content) as TipTapNode)
+  } catch {
+    return content
+  }
+}
+
 export function EditorContent({ content, className }: EditorContentProps) {
   if (!content) return null
-
-  let html = ''
-  try {
-    const json: TipTapNode = JSON.parse(content)
-    html = renderNode(json)
-  } catch {
-    html = content
-  }
-
   return (
     <div
       className={`prose prose-sm sm:prose-base lg:prose-lg max-w-none ${className ?? ''}`}
-      dangerouslySetInnerHTML={{ __html: html }}
+      dangerouslySetInnerHTML={{ __html: renderEditorHtml(content) }}
     />
   )
 }

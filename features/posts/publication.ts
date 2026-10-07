@@ -1,3 +1,4 @@
+import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
 import slugify from 'slugify'
 import sanitizeHtml from 'sanitize-html'
 import { z } from 'zod'
@@ -98,6 +99,7 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
     if (field !== 'title' && filler.test(text)) add(field, 'Remove filler or unfinished template text before publishing.')
   }
   if (typeof authorName !== 'string' || !authorName.trim() || !input.author_id) add('author_id', 'Assign an author with a display name in their profile.')
+  if (!isCoverImageAllowed(input.cover_image)) add('cover_image', COVER_IMAGE_ERROR)
   if (isPlaceholderImage(input.cover_image)) add('cover_image', 'Replace the placeholder cover image or remove it.')
   if (hasPlaceholderImage(input.content)) add('content', 'Replace placeholder article images or remove them before publishing.')
   if (editorialReviewed !== true) add('editorial_reviewed', 'A human editor must confirm accuracy, usefulness, attribution, taxonomy and SEO metadata before publishing.')
