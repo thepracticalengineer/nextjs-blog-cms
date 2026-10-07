@@ -22,16 +22,13 @@ export function parseEditorContent(value: string): object | string {
 }
 
 export function Editor({ value, onChange, className }: EditorProps) {
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isInternalUpdate = useRef(false)
 
   const handleUpdate = useCallback(
     ({ editor }: { editor: { getJSON: () => object } }) => {
       if (isInternalUpdate.current) return
-      if (debounceRef.current) clearTimeout(debounceRef.current)
-      debounceRef.current = setTimeout(() => {
-        onChange(JSON.stringify(editor.getJSON()))
-      }, 300)
+      // Keep form values current before Save/Publish can be clicked.
+      onChange(JSON.stringify(editor.getJSON()))
     },
     [onChange]
   )
@@ -60,10 +57,6 @@ export function Editor({ value, onChange, className }: EditorProps) {
     editor.commands.setContent(parsed, { emitUpdate: false })
     isInternalUpdate.current = false
   }, [editor, value])
-
-  useEffect(() => () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-  }, [])
 
   if (!editor) return null
 

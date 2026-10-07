@@ -7,6 +7,7 @@ export type PostWithRelations = Post & {
 }
 
 export type PostFormValues = {
+  editorial_reviewed?: boolean
   title: string
   slug: string
   excerpt: string

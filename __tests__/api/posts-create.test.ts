@@ -1,122 +1,81 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/features/api-keys/apiKeyService', () => ({
-  validateApiKey: vi.fn(),
-  resolveTagIds: vi.fn().mockResolvedValue([]),
-  resolveCategoryId: vi.fn().mockResolvedValue(null),
-  generateUniqueSlugForApi: vi.fn().mockResolvedValue('test-post'),
+  validateApiKey: vi.fn(), resolveTagIds: vi.fn().mockResolvedValue([]),
+  resolveCategoryId: vi.fn().mockResolvedValue(null), generateUniqueSlugForApi: vi.fn().mockResolvedValue('new-article'),
 }))
-
-vi.mock('@/lib/supabase/service', () => ({
-  createServiceClient: vi.fn(),
-}))
+vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
+vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn() }))
+vi.mock('@/features/newsletter/actions', () => ({ scheduleNewsletterSend: vi.fn() }))
 
 import { POST } from '@/app/api/posts/create/route'
 import { validateApiKey } from '@/features/api-keys/apiKeyService'
 import { createServiceClient } from '@/lib/supabase/service'
+import { scheduleNewsletterSend } from '@/features/newsletter/actions'
+import { postClient, validPost } from '../helpers/publication'
 
-const mockValidateApiKey = vi.mocked(validateApiKey)
-const mockCreateServiceClient = vi.mocked(createServiceClient)
+const validApiPost = { title: validPost.title, slug: validPost.slug, content: validPost.content, excerpt: validPost.excerpt, tags: ['testing'] }
 
-function makeRequest(body: unknown, authHeader?: string): Request {
+function request(body: unknown, auth = 'Bearer fmblog_valid') {
   return new Request('http://localhost/api/posts/create', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authHeader ? { Authorization: authHeader } : {}),
-    },
-    body: JSON.stringify(body),
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: auth } : {}) }, body: JSON.stringify(body),
   })
 }
-
-beforeEach(() => {
-  vi.clearAllMocks()
-})
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(validateApiKey).mockResolvedValue('user-1') })
 
 describe('POST /api/posts/create', () => {
-  it('returns 401 when Authorization header is missing', async () => {
-    const req = makeRequest({ title: 'Test', content: '<p>Hi</p>' })
-    const res = await POST(req)
-    expect(res.status).toBe(401)
-    const json = await res.json()
-    expect(json.success).toBe(false)
-    expect(json.error).toBe('Missing or invalid Authorization header')
+  it('requires authorization and a valid API key', async () => {
+    expect((await POST(request({}, ''))).status).toBe(401)
+    vi.mocked(validateApiKey).mockResolvedValue(null)
+    expect((await POST(request({}))).status).toBe(401)
   })
-
-  it('returns 401 when the API key is invalid', async () => {
-    mockValidateApiKey.mockResolvedValue(null)
-    const req = makeRequest({ title: 'Test', content: '<p>Hi</p>' }, 'Bearer fmblog_invalid')
-    const res = await POST(req)
-    expect(res.status).toBe(401)
-    const json = await res.json()
-    expect(json.success).toBe(false)
-    expect(json.error).toBe('Invalid or revoked API key')
+  it('allows incomplete work as a draft', async () => {
+    const db = postClient()
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    expect((await POST(request({}))).status).toBe(201)
+    expect(db.posts[0]).toMatchObject({ title: '', content: '', status: 'draft', author_id: 'user-1' })
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
   })
-
-  it('returns 400 when title is missing', async () => {
-    mockValidateApiKey.mockResolvedValue('user-123')
-    const req = makeRequest({ content: '<p>Hi</p>' }, 'Bearer fmblog_valid')
-    const res = await POST(req)
-    expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.success).toBe(false)
-    expect(json.error).toContain('title')
+  it.each([
+    {}, { title: '   ', content: '   ' }, { title: 'hello this is for test', content: '<p><br></p>' },
+    { title: validPost.title, content: '<p>' + 'lorem ipsum '.repeat(200) + '</p>' },
+    { ...validApiPost, slug: 'INVALID SLUG' }, { ...validApiPost, editorial_reviewed: false },
+  ])('blocks an incomplete or placeholder publication before any writes', async fields => {
+    const db = postClient()
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await POST(request({ editorial_reviewed: true, ...fields, status: 'published' }))
+    expect(res.status).toBe(422)
+    expect((await res.json()).details.field_errors).toBeDefined()
+    expect(db.writes).toEqual([])
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
   })
-
-  it('returns 400 when content is missing', async () => {
-    mockValidateApiKey.mockResolvedValue('user-123')
-    const req = makeRequest({ title: 'Test' }, 'Bearer fmblog_valid')
-    const res = await POST(req)
-    expect(res.status).toBe(400)
-    const json = await res.json()
-    expect(json.success).toBe(false)
-    expect(json.error).toContain('content')
+  it.each([null, [], { title: 7 }, { content: {} }, { status: 'anything' }, { editorial_reviewed: 'true' }])('rejects malformed JSON fields %j', async body => {
+    const res = await POST(request(body))
+    expect(res.status).toBe(422)
+    expect(createServiceClient).not.toHaveBeenCalled()
   })
-
-  it('returns 201 with created post on valid request', async () => {
-    mockValidateApiKey.mockResolvedValue('user-123')
-
-    const fakePost = {
-      id: 'post-abc',
-      title: 'Test Post',
-      slug: 'test-post',
-      status: 'draft',
-      author_id: 'user-123',
-      content: '<p>Hello</p>',
-      excerpt: null,
-      cover_image: null,
-      category_id: null,
-      seo_title: null,
-      seo_description: null,
-      published_at: null,
-      created_at: '2026-04-07T00:00:00Z',
-      updated_at: '2026-04-07T00:00:00Z',
-    }
-
-    mockCreateServiceClient.mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        insert: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: fakePost, error: null }),
-          }),
-        }),
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: null, error: { message: 'Not found' } }),
-          }),
-        }),
-      }),
-    } as unknown as ReturnType<typeof createServiceClient>)
-
-    const req = makeRequest(
-      { title: 'Test Post', content: '<p>Hello</p>' },
-      'Bearer fmblog_valid'
-    )
-    const res = await POST(req)
+  it('publishes a reviewed engineering article and queues its newsletter', async () => {
+    const db = postClient()
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await POST(request({ ...validApiPost, status: 'published', editorial_reviewed: true }))
     expect(res.status).toBe(201)
-    const json = await res.json()
-    expect(json.success).toBe(true)
-    expect(json.data.post.id).toBe('post-abc')
-    expect(json.data.post.title).toBe('Test Post')
+    expect(db.posts[0]).toMatchObject({ status: 'published', title: validPost.title })
+    expect(scheduleNewsletterSend).toHaveBeenCalledWith('created-post')
+  })
+  it('cannot publish under a missing or unnamed author', async () => {
+    const db = postClient([], null)
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await POST(request({ ...validApiPost, status: 'published', editorial_reviewed: true }))
+    expect(res.status).toBe(422)
+    expect((await res.json()).details.field_errors.author_id).toBeDefined()
+    expect(db.writes).toEqual([])
+  })
+  it('returns a field error for a duplicate slug without publishing', async () => {
+    const db = postClient([validPost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await POST(request({ ...validApiPost, status: 'published', editorial_reviewed: true }))
+    expect(res.status).toBe(422)
+    expect((await res.json()).details.field_errors.slug).toBeDefined()
+    expect(db.writes).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
 import { config } from 'dotenv'
+import { assertDedicatedTestProject } from './environment'
 import { createClient } from '@supabase/supabase-js'
 import { readFileSync, unlinkSync, existsSync } from 'node:fs'
 
@@ -25,6 +26,8 @@ export default async function globalTeardown() {
   if (!supabaseUrl || !serviceKey) {
     throw new Error('Missing dedicated E2E Supabase credentials in .env.e2e or the environment')
   }
+
+  assertDedicatedTestProject(supabaseUrl, process.env.E2E_SUPABASE_PROJECT_REF)
 
   const supabase = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },

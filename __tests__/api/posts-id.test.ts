@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn() }))
+vi.mock('@/features/newsletter/actions', () => ({ scheduleNewsletterSend: vi.fn(), cancelNewsletterSend: vi.fn() }))
+
 vi.mock('@/lib/apiAuth', () => ({ requireApiKey: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 vi.mock('@/lib/rateLimit', () => ({ checkRateLimit: vi.fn().mockReturnValue({ allowed: true }) }))
@@ -10,6 +13,9 @@ vi.mock('@/features/api-keys/apiKeyService', () => ({
   hashApiKey: vi.fn().mockReturnValue('hashed-key'),
 }))
 
+import { postClient, validPost } from '../helpers/publication'
+import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'
+import { refreshPostPaths } from '@/features/posts/cache'
 import { GET, PATCH, DELETE } from '@/app/api/posts/[id]/route'
 import { requireApiKey } from '@/lib/apiAuth'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -110,96 +116,85 @@ describe('GET /api/posts/[id]', () => {
 // ─── PATCH ────────────────────────────────────────────────────────────────────
 
 describe('PATCH /api/posts/[id]', () => {
-  it('returns 404 when post not found for this user', async () => {
-    mockCreateServiceClient.mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              single: vi.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
-            }),
-          }),
-        }),
-      }),
-    } as unknown as ReturnType<typeof createServiceClient>)
-
-    const res = await PATCH(makeReq('PATCH', { title: 'New' }), makeParams('post-1'))
-    expect(res.status).toBe(404)
+  it('returns 404 for a nonexistent or foreign post', async () => {
+    vi.mocked(createServiceClient).mockReturnValue(postClient([{ ...validPost, author_id: 'other-user' }]).client)
+    expect((await PATCH(makeReq('PATCH', { title: 'New' }), makeParams('post-1'))).status).toBe(404)
   })
-
-  it('sets published_at when status changes to published', async () => {
-    const updateSingle = vi.fn().mockResolvedValue({ data: { ...fakePost, status: 'published', published_at: '2026-04-13T00:00:00Z' }, error: null })
-    const updateMock = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({ single: updateSingle }),
-        }),
-      }),
-    })
-    const deleteMock = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
-
-    mockCreateServiceClient.mockReturnValue({
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === 'posts') {
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({
-                  single: vi.fn().mockResolvedValue({ data: fakePost, error: null }),
-                }),
-              }),
-            }),
-            update: updateMock,
-          }
-        }
-        if (table === 'post_tags') return { delete: deleteMock, insert: vi.fn().mockResolvedValue({ error: null }) }
-        return {}
-      }),
-    } as unknown as ReturnType<typeof createServiceClient>)
-
-    const res = await PATCH(makeReq('PATCH', { status: 'published' }), makeParams('post-1'))
+  it('allows incomplete draft updates', async () => {
+    const db = postClient([validPost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    expect((await PATCH(makeReq('PATCH', { title: '', content: '' }), makeParams('post-1'))).status).toBe(200)
+    expect(db.posts[0]).toMatchObject({ title: '', content: '', status: 'draft' })
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('validates stored content when only status is supplied', async () => {
+    const db = postClient([fakePost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))
+    expect(res.status).toBe(422)
+    expect((await res.json()).details.field_errors.content).toBeDefined()
+    expect(db.posts[0]).toEqual(fakePost)
+    expect(db.writes).toEqual([])
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it.each([
+    { title: 'hello this is for test' }, { content: '<p>&nbsp;</p>' }, { excerpt: '' },
+    { content: validPost.content + '<p>lorem ipsum</p>' }, { slug: 'INVALID SLUG' },
+  ])('rejects invalid live edits even without a status field', async patch => {
+    const original = { ...validPost, status: 'published', published_at: '2026-01-01T00:00:00Z' }
+    const db = postClient([original])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { ...patch, editorial_reviewed: true, tags: ['new-tag'] }), makeParams('post-1'))
+    expect(res.status).toBe(422)
+    expect(db.posts[0]).toEqual(original)
+    expect(db.writes).toEqual([])
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('requires human review for live edits', async () => {
+    const db = postClient([{ ...validPost, status: 'published' }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { title: 'Another Useful Engineering Article' }), makeParams('post-1'))
+    expect(res.status).toBe(422)
+    expect((await res.json()).details.field_errors.editorial_reviewed).toBeDefined()
+    expect(db.writes).toEqual([])
+  })
+  it('publishes a valid draft and schedules exactly one newsletter', async () => {
+    const db = postClient([validPost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))
     expect(res.status).toBe(200)
-    const updatePayload = updateMock.mock.calls[0][0]
-    expect(updatePayload.status).toBe('published')
-    expect(updatePayload.published_at).toBeTruthy()
+    expect(db.posts[0]).toMatchObject({ status: 'published', published_at: expect.any(String) })
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
   })
-
-  it('clears published_at when status changes back to draft', async () => {
-    const publishedPost = { ...fakePost, status: 'published', published_at: '2026-01-01T00:00:00Z' }
-    const updateMock = vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          select: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { ...publishedPost, status: 'draft', published_at: null }, error: null }),
-          }),
-        }),
-      }),
-    })
-    const deleteMock = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) })
-
-    mockCreateServiceClient.mockReturnValue({
-      from: vi.fn().mockImplementation((table: string) => {
-        if (table === 'posts') {
-          return {
-            select: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                eq: vi.fn().mockReturnValue({
-                  single: vi.fn().mockResolvedValue({ data: publishedPost, error: null }),
-                }),
-              }),
-            }),
-            update: updateMock,
-          }
-        }
-        if (table === 'post_tags') return { delete: deleteMock, insert: vi.fn().mockResolvedValue({ error: null }) }
-        return {}
-      }),
-    } as unknown as ReturnType<typeof createServiceClient>)
-
-    await PATCH(makeReq('PATCH', { status: 'draft' }), makeParams('post-1'))
-    const updatePayload = updateMock.mock.calls[0][0]
-    expect(updatePayload.status).toBe('draft')
-    expect(updatePayload.published_at).toBeNull()
+  it('preserves the original publication timestamp and does not requeue live edits', async () => {
+    const db = postClient([{ ...validPost, status: 'published', published_at: '2026-01-01T00:00:00Z' }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { slug: 'new-engineering-slug', editorial_reviewed: true }), makeParams('post-1'))
+    expect(res.status).toBe(200)
+    expect(db.posts[0].published_at).toBe('2026-01-01T00:00:00Z')
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+    expect(refreshPostPaths).toHaveBeenCalledWith(validPost.slug, 'new-engineering-slug')
+  })
+  it('unpublishes even incomplete legacy content and cancels pending notifications', async () => {
+    const db = postClient([{ ...fakePost, status: 'published', published_at: '2026-01-01T00:00:00Z' }])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const res = await PATCH(makeReq('PATCH', { status: 'draft' }), makeParams('post-1'))
+    expect(res.status).toBe(200)
+    expect(db.posts[0]).toMatchObject({ status: 'draft', published_at: null })
+    expect(cancelNewsletterSend).toHaveBeenCalledWith('post-1')
+  })
+  it.each([{ title: null }, { slug: 123 }, { tags: {} }, { status: 'scheduled' }])('returns structured errors for malformed fields %j', async body => {
+    const db = postClient([validPost])
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    expect((await PATCH(makeReq('PATCH', body), makeParams('post-1'))).status).toBe(422)
+    expect(db.writes).toEqual([])
+  })
+  it('does not publish or queue when a concurrent change prevents the checked write', async () => {
+    const db = postClient([validPost]); db.simulateRace()
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    expect((await PATCH(makeReq('PATCH', { status: 'published', editorial_reviewed: true }), makeParams('post-1'))).status).toBe(409)
+    expect(db.posts[0]).toEqual(validPost)
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
   })
 })
 

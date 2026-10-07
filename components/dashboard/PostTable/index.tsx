@@ -3,7 +3,8 @@
 import { useState, useMemo } from 'react'
 import { Search, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import { toast } from 'sonner'
-import { publishPost, unpublishPost, deletePost } from '@/features/posts/actions'
+import { useRouter } from 'next/navigation'
+import { unpublishPost, deletePost } from '@/features/posts/actions'
 import type { PostWithRelations } from '@/features/posts/types'
 import { filterAndSort, getCategories, type SortField, type SortDir } from './utils'
 import { PostEmptyState } from './EmptyState'
@@ -23,6 +24,7 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 }
 
 export function PostTable({ posts }: PostTableProps) {
+  const router = useRouter()
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -56,9 +58,8 @@ export function PostTable({ posts }: PostTableProps) {
   function handleClearFilters() { setSearch(''); setCategoryFilter(null); setPage(1) }
   function handlePageSizeChange(size: number) { setPageSize(size); setPage(1) }
 
-  async function handlePublish(id: string) {
-    const result = await publishPost(id)
-    result.error ? toast.error(result.error) : toast.success('Post published')
+  function handlePublish(id: string) {
+    router.push(`/dashboard/posts/${id}/edit`)
   }
 
   async function handleUnpublish(id: string) {

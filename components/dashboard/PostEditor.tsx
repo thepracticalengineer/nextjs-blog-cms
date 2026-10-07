@@ -17,10 +17,12 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Editor } from '@/components/editor/Editor'
 import { createPost, updatePost, publishPost, unpublishPost } from '@/features/posts/actions'
+import type { FieldErrors } from '@/features/posts/publication'
 import type { PostWithRelations, Category, Tag as TagType } from '@/features/posts/types'
 
 const postSchema = z.object({
-  title: z.string().min(1, 'Title is required'),
+  title: z.string(),
+  editorial_reviewed: z.boolean(),
   slug: z.string(),
   excerpt: z.string(),
   content: z.string(),
@@ -59,6 +61,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [publicationFieldErrors, setPublicationFieldErrors] = useState<FieldErrors>({})
   const [showBackToTop, setShowBackToTop] = useState(false)
 
   useEffect(() => {
@@ -76,6 +79,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
     useForm<PostFormValues>({
       resolver: zodResolver(postSchema),
       defaultValues: {
+        editorial_reviewed: false,
         title: post?.title ?? '',
         slug: post?.slug ?? '',
         excerpt: post?.excerpt ?? '',
@@ -93,11 +97,12 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
   function autoSlug() {
-    if (!title) return
+    if (!title || getValues('slug')) return
     setValue('slug', slugify(title, { lower: true, strict: true }))
   }
 
   function toggleTag(tagId: string) {
+    setValue('editorial_reviewed', false)
     const current = selectedTagIds ?? []
     if (current.includes(tagId)) {
       setValue('tag_ids', current.filter((id) => id !== tagId))
@@ -107,15 +112,17 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
   }
 
   async function onSubmit(values: PostFormValues) {
+    setPublicationFieldErrors({})
     setSaving(true)
     const result = post
       ? await updatePost(post.id, values)
       : await createPost(values)
 
     if (result.error) {
+      setPublicationFieldErrors(result.fieldErrors ?? {})
       toast.error(result.error)
     } else {
-      toast.success(post ? 'Draft saved' : 'Post saved as draft')
+      toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
       if (!post && result.data) {
         router.push(`/dashboard/posts/${result.data.id}/edit`)
       }
@@ -126,6 +133,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
   async function handlePublishToggle() {
     if (!post) return
     setPublishing(true)
+    setPublicationFieldErrors({})
 
     if (isPublished) {
       const result = await unpublishPost(post.id)
@@ -136,15 +144,9 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
         router.refresh()
       }
     } else {
-      // Save current form values first, then publish
-      const saveResult = await updatePost(post.id, getValues())
-      if (saveResult.error) {
-        toast.error(saveResult.error)
-        setPublishing(false)
-        return
-      }
-      const publishResult = await publishPost(post.id)
+      const publishResult = await publishPost(post.id, getValues())
       if (publishResult.error) {
+        setPublicationFieldErrors(publishResult.fieldErrors ?? {})
         toast.error(publishResult.error)
       } else {
         toast.success('Post saved and published!')
@@ -157,7 +159,9 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={handleSubmit(onSubmit)} onChange={(event) => {
+        if (event.target.getAttribute('name') !== 'editorial_reviewed') setValue('editorial_reviewed', false)
+      }}>
         {/* ── Sticky action bar ───────────────────────────────────── */}
         <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-8 md:px-8 py-3 mb-6 bg-background/80 backdrop-blur-md border-b border-border/50 flex items-center justify-between gap-4 flex-wrap">
           <button
@@ -280,6 +284,9 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
             <div className="space-y-1">
               <input
                 {...register('title')}
+                aria-label="Post title"
+                aria-invalid={!!publicationFieldErrors.title}
+                aria-describedby="title-error"
                 onBlur={autoSlug}
                 placeholder="Post title…"
                 className="w-full text-3xl font-bold tracking-tight bg-transparent border-0 outline-hidden placeholder:text-muted-foreground/40 text-foreground resize-none leading-tight"
@@ -289,12 +296,17 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               )}
             </div>
 
+            <FieldError name="title" errors={publicationFieldErrors} />
+
             {/* Slug row */}
             <div className="flex items-center gap-2 py-2 border-y border-dashed border-border/70">
               <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
               <span className="text-xs text-muted-foreground shrink-0">slug /</span>
               <input
                 {...register('slug')}
+                aria-label="Slug"
+                aria-invalid={!!publicationFieldErrors.slug}
+                aria-describedby="slug-error"
                 placeholder="auto-generated-from-title"
                 className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-hidden placeholder:text-muted-foreground/40 font-mono"
                 onChange={(e) => {
@@ -304,6 +316,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               />
             </div>
 
+            <FieldError name="slug" errors={publicationFieldErrors} />
+
             {/* Excerpt */}
             <div className="space-y-1.5">
               <Label className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
@@ -311,11 +325,16 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               </Label>
               <Textarea
                 {...register('excerpt')}
+                aria-label="Excerpt"
+                aria-invalid={!!publicationFieldErrors.excerpt}
+                aria-describedby="excerpt-error"
                 placeholder="A short summary displayed in post listings and meta descriptions…"
                 rows={3}
                 className="resize-none text-sm leading-relaxed bg-muted/30 border-border/60 focus-visible:border-blue-400/60 focus-visible:ring-blue-400/20 placeholder:text-muted-foreground/40"
               />
             </div>
+
+            <FieldError name="excerpt" errors={publicationFieldErrors} />
 
             {/* Content editor */}
             <div className="space-y-1.5">
@@ -326,14 +345,33 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 name="content"
                 control={control}
                 render={({ field }) => (
-                  <Editor value={field.value} onChange={field.onChange} />
+                  <Editor value={field.value} onChange={(value) => { field.onChange(value); setValue('editorial_reviewed', false) }} />
                 )}
               />
+              <FieldError name="content" errors={publicationFieldErrors} />
             </div>
           </div>
 
           {/* Right: sidebar */}
           <div className="space-y-4">
+
+            <SidebarCard icon={Check} title="Publication readiness">
+              <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-2">
+                <li>Descriptive title: 10–160 characters; unique URL-safe slug.</li>
+                <li>At least 200 readable body words with examples and useful takeaways.</li>
+                <li>Accurate excerpt: 40–500 characters; named author.</li>
+                <li>No filler, test posts or placeholder images.</li>
+                <li>Relevant category and tags; accurate SEO title and description.</li>
+              </ul>
+              <p className="text-xs text-muted-foreground">Author: {post?.author?.full_name || 'Your profile display name (required)'}</p>
+              <FieldError name="author_id" errors={publicationFieldErrors} />
+              <label className="flex items-start gap-2 text-xs leading-relaxed">
+                <input type="checkbox" {...register('editorial_reviewed')} aria-describedby="editorial_reviewed-error" className="mt-0.5" />
+                I have reviewed this article for accuracy, usefulness, attribution, taxonomy and SEO metadata.
+              </label>
+              <FieldError name="editorial_reviewed" errors={publicationFieldErrors} />
+              <p className="text-xs text-muted-foreground">Review is required for publication and live edits. Editing clears this confirmation. Incomplete work can be saved as a draft.</p>
+            </SidebarCard>
 
             {/* ── Settings card ──────────────────────────── */}
             <SidebarCard icon={Settings2} title="Settings">
@@ -355,11 +393,15 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                   <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
                   <Input
                     {...register('cover_image')}
+                    aria-label="Cover image"
+                    aria-describedby="cover_image-error"
                     placeholder="https://…"
                     className="pl-9 text-sm h-9 bg-muted/30 border-border/60"
                   />
                 </div>
               </div>
+
+              <FieldError name="cover_image" errors={publicationFieldErrors} />
 
               {/* Category */}
               <div className="space-y-2">
@@ -418,12 +460,16 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
 
             {/* ── SEO card ───────────────────────────────── */}
             <SidebarCard icon={BarChart3} title="SEO">
+              <FieldError name="seo_title" errors={publicationFieldErrors} />
+              <FieldError name="seo_description" errors={publicationFieldErrors} />
               <div className="space-y-2">
                 <Label className="text-xs text-muted-foreground">Meta Title</Label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60" />
                   <Input
                     {...register('seo_title')}
+                    aria-label="SEO title"
+                    aria-describedby="seo_title-error"
                     placeholder="Overrides post title in search…"
                     className="pl-9 text-sm h-9 bg-muted/30 border-border/60"
                   />
@@ -433,6 +479,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 <Label className="text-xs text-muted-foreground">Meta Description</Label>
                 <Textarea
                   {...register('seo_description')}
+                  aria-label="SEO description"
+                  aria-describedby="seo_description-error"
                   placeholder="Concise summary for search results…"
                   rows={3}
                   className="resize-none text-sm leading-relaxed bg-muted/30 border-border/60 focus-visible:border-blue-400/60 focus-visible:ring-blue-400/20 placeholder:text-muted-foreground/40"
@@ -479,4 +527,8 @@ function SidebarCard({
       <div className="p-4 space-y-4">{children}</div>
     </div>
   )
+}
+
+function FieldError({ name, errors }: { name: string; errors: FieldErrors }) {
+  return errors[name]?.length ? <p id={`${name}-error`} role="alert" className="text-xs text-destructive">{errors[name].join(' ')}</p> : null
 }

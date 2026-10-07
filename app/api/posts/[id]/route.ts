@@ -1,4 +1,7 @@
 import { type NextRequest } from 'next/server'
+import { postApiSchema, validatePublication } from '@/features/posts/publication'
+import { refreshPostPaths } from '@/features/posts/cache'
+import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'
 import { requireApiKey } from '@/lib/apiAuth'
 import { apiSuccess, apiError } from '@/lib/apiHelpers'
 import { checkRateLimit } from '@/lib/rateLimit'
@@ -86,19 +89,6 @@ export async function GET(
   return apiSuccess({ data: normalizeFullPost(data as unknown as RawPostFull) })
 }
 
-type PatchBody = {
-  title?: string
-  content?: string
-  slug?: string
-  excerpt?: string
-  meta_title?: string
-  meta_description?: string
-  status?: string
-  category?: string
-  tags?: string[]
-  image_url?: string
-}
-
 export async function PATCH(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
@@ -115,35 +105,41 @@ export async function PATCH(
   // Verify post exists and is owned by this user
   const { data: existing, error: fetchError } = await supabase
     .from('posts')
-    .select('id, status, published_at, author_id')
+    .select('*')
     .eq('id', id)
     .eq('author_id', auth.userId)
     .single()
 
   if (fetchError || !existing) return apiError('Post not found.', 404)
 
-  let body: PatchBody
+  let rawBody: unknown
   try {
-    body = await req.json()
+    rawBody = await req.json()
   } catch {
     return apiError('Invalid JSON body.', 400)
   }
 
-  // Validate slug if provided
-  if (body.slug !== undefined) {
-    const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
-    const normalizedSlug = body.slug.trim()
-    if (!slugPattern.test(normalizedSlug)) {
-      return apiError('Slug must be URL-safe (lowercase letters, numbers, hyphens only).', 422)
-    }
-    const { data: conflict } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('slug', normalizedSlug)
-      .neq('id', id)
-      .single()
-    if (conflict) return apiError('Slug is already in use by another post.', 409)
-    body.slug = normalizedSlug
+  const parsed = postApiSchema.safeParse(rawBody)
+  if (!parsed.success) return apiError('Invalid post fields', 422, { field_errors: parsed.error.flatten().fieldErrors })
+  const body = parsed.data
+  if (body.slug !== undefined) body.slug = body.slug.trim()
+  const candidate = {
+    ...existing,
+    ...(body.title !== undefined ? { title: body.title.trim() } : {}),
+    ...(body.content !== undefined ? { content: body.content } : {}),
+    ...(body.slug !== undefined ? { slug: body.slug } : {}),
+    ...(body.excerpt !== undefined ? { excerpt: body.excerpt } : {}),
+    ...(body.meta_title !== undefined ? { seo_title: body.meta_title } : {}),
+    ...(body.meta_description !== undefined ? { seo_description: body.meta_description } : {}),
+    ...(body.image_url !== undefined ? { cover_image: body.image_url } : {}),
+    status: body.status ?? existing.status,
+  }
+  // Validate the entire resulting document, including PATCHes without status.
+  if (candidate.status === 'published') {
+    const fieldErrors = await validatePublication(supabase, candidate, body.editorial_reviewed, id)
+    if (Object.keys(fieldErrors).length) return apiError('Publication blocked', 422, { field_errors: fieldErrors })
+  } else if (body.slug !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(body.slug)) {
+    return apiError('Invalid slug', 422, { field_errors: { slug: ['Use lowercase letters, numbers and hyphens.'] } })
   }
 
   const updatePayload: Record<string, unknown> = {
@@ -160,9 +156,6 @@ export async function PATCH(
 
   // Handle status transitions
   if (body.status !== undefined) {
-    if (body.status !== 'draft' && body.status !== 'published') {
-      return apiError('status must be "draft" or "published".', 422)
-    }
     updatePayload.status = body.status
     const currentPost = existing as { status: string; published_at: string | null }
     if (body.status === 'published' && !currentPost.published_at) {
@@ -184,12 +177,14 @@ export async function PATCH(
     .update(updatePayload)
     .eq('id', id)
     .eq('author_id', auth.userId)
+    .eq('updated_at', existing.updated_at)
+    .eq('status', existing.status)
     .select(POST_FULL_SELECT)
     .single()
 
   if (updateError || !updated) {
     console.error('[PATCH /api/posts/[id]] Update failed:', updateError?.message)
-    return apiError('Failed to update post.', 500)
+    return apiError('The post changed or could not be saved. Reload before trying again.', 409)
   }
 
   // Handle tags update if provided
@@ -209,6 +204,12 @@ export async function PATCH(
     }
   }
 
+  if (candidate.status === 'draft' && existing.status === 'published') {
+    await cancelNewsletterSend(id)
+  } else if (candidate.status === 'published' && existing.status !== 'published') {
+    try { await scheduleNewsletterSend(id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
+  }
+  refreshPostPaths(existing.slug, updated.slug)
   return apiSuccess({ data: normalizeFullPost(updated as unknown as RawPostFull) })
 }
 
@@ -230,10 +231,11 @@ export async function DELETE(
     .delete()
     .eq('id', id)
     .eq('author_id', auth.userId)
-    .select('id')
+    .select('id, slug')
     .single()
 
   if (error || !data) return apiError('Post not found.', 404)
 
+  refreshPostPaths(data.slug)
   return apiSuccess({ message: 'Post deleted successfully.' })
 }
