@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
+import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,7 +71,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" onPaste={event => {
-        const pasted = Array.from(event.clipboardData.files)[0]
+        const pasted = pastedImageFile(event.clipboardData)
         if (pasted && !busy) { event.preventDefault(); chooseFile(pasted) }
       }}>
         <DialogHeader>

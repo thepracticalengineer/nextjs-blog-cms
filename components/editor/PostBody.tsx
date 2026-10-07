@@ -15,7 +15,7 @@ export function PostBody({ title, coverImage, coverImageAlt, excerpt, content }:
     <>
       {coverImage && (
         <div className="relative h-64 sm:h-80 lg:h-96 rounded-xl overflow-hidden mb-8">
-          <Image src={coverImage} alt={coverImageAlt ?? title} fill sizes="(max-width: 768px) 100vw, 896px" className="object-cover" preload />
+          <Image src={coverImage} alt={coverImageAlt || title} fill sizes="(max-width: 768px) 100vw, 896px" className="object-cover" preload />
         </div>
       )}
       {excerpt && <p className="text-lg text-muted-foreground mb-8 border-l-4 border-primary pl-4 italic">{excerpt}</p>}

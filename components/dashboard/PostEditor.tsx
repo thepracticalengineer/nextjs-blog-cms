@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { useForm, useWatch, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -495,7 +496,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
                   <Input
                     {...register('cover_image')}
                     onPaste={event => {
-                      const file = Array.from(event.clipboardData.files)[0]
+                      const file = pastedImageFile(event.clipboardData)
                       if (file && draftIdentity) { event.preventDefault(); setCoverPaste(file); setCoverDialogOpen(true) }
                     }}
                     aria-label="Cover image"

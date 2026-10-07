@@ -30,7 +30,7 @@ const subscriber = {
   subscribed_at: '2026-01-01T00:00:00Z',
   unsubscribed_at: null,
 }
-const post = { ...validPost, status: 'published' }
+const post = { ...validPost, status: 'published', cover_image_alt: 'Annotated circuit board' }
 
 function makeSupabase({
   pendingSends = [pendingSend] as typeof pendingSend[],

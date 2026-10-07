@@ -6,7 +6,16 @@ values ('post-media', 'post-media', true, 2097152, array['image/webp']);
 alter table public.posts add column cover_image_alt text not null default ''
   check (char_length(cover_image_alt) <= 1000);
 -- Preserve existing cover descriptions until an editor supplies specific alt text.
-update public.posts set cover_image_alt = left(title, 1000) where cover_image is not null;
+-- This metadata backfill must preserve publication dates and optimistic save tokens.
+-- Keep trigger changes and the update atomic even when this SQL is run directly.
+do $$
+begin
+  alter table public.posts disable trigger posts_updated_at;
+  update public.posts set cover_image_alt = left(title, 1000)
+    where cover_image is not null and cover_image <> '';
+  alter table public.posts enable trigger posts_updated_at;
+end;
+$$;
 
 create table public.post_media (
   path text primary key,

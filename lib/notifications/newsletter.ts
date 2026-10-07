@@ -19,6 +19,7 @@ export interface PostEmailData {
   slug: string
   excerpt: string | null
   cover_image: string | null
+  cover_image_alt?: string | null
 }
 
 export async function sendNewsletterEmail(
@@ -46,7 +47,7 @@ export async function sendNewsletterEmail(
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">
         <h1 style="font-size:24px;font-weight:700;margin-bottom:8px;">${title}</h1>
         ${excerpt ? `<p style="color:#6b7280;margin-bottom:16px;">${excerpt}</p>` : ''}
-        ${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${title}" style="width:100%;border-radius:8px;margin-bottom:16px;" />` : ''}
+        ${post.cover_image ? `<img src="${escapeHtml(post.cover_image)}" alt="${escapeHtml(post.cover_image_alt || post.title)}" style="width:100%;border-radius:8px;margin-bottom:16px;" />` : ''}
         <a href="${escapeHtml(postUrl)}" style="display:inline-block;background:#111;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;">Read Post</a>
         <hr style="margin:32px 0;border:none;border-top:1px solid #e5e7eb;" />
         <p style="color:#9ca3af;font-size:12px;">

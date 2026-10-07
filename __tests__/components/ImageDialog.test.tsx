@@ -13,6 +13,15 @@ beforeEach(() => {
   vi.mocked(readImageDimensions).mockResolvedValue({ width: 800, height: 600 })
 })
 describe('shared accessible image workflow', () => {
+  it.each(['text/plain', 'text/html'])('preserves clipboard %s even when an image rendition is present', type => {
+    render(<ImageDialog editorId="author-a" onSave={vi.fn()} onClose={vi.fn()} />)
+    const accepted = fireEvent.paste(screen.getByLabelText('Image description (alt text)'), {
+      clipboardData: { files: [file()], getData: (format: string) => format === type ? 'Copied text' : '' },
+    })
+    expect(accepted).toBe(true)
+    expect(screen.queryByText('Selected: circuit.png')).not.toBeInTheDocument()
+    expect(uploadImage).not.toHaveBeenCalled()
+  })
   it('uses the same upload and metadata path for pasted and selected files', async () => {
     const save = vi.fn()
     const close = vi.fn()
@@ -29,7 +38,7 @@ describe('shared accessible image workflow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use image' }))
     await waitFor(() => expect(save).toHaveBeenCalledWith({ ...ready, alt: 'A circuit board with test points labeled in blue' }))
     const pasted = file()
-    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [pasted] } })
+    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { getData: () => '', files: [pasted] } })
     fireEvent.click(screen.getByRole('button', { name: 'Upload image / retry' }))
     await waitFor(() => expect(uploadImage).toHaveBeenLastCalledWith(pasted, 'author-a', expect.any(Function), expect.any(AbortSignal)))
     expect(close).toHaveBeenCalled()
@@ -56,7 +65,7 @@ describe('shared accessible image workflow', () => {
     fireEvent.change(screen.getByLabelText('Image file'), { target: { files: [new File(['<svg/>'], 'image.svg', { type: 'image/svg+xml' })] } })
     expect(screen.getByRole('alert')).toHaveTextContent('not supported')
     expect(screen.getByRole('button', { name: 'Upload image / retry' })).toBeDisabled()
-    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { files: [new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })] } })
+    fireEvent.paste(screen.getByRole('dialog'), { clipboardData: { getData: () => '', files: [new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.png', { type: 'image/png' })] } })
     expect(screen.getByRole('alert')).toHaveTextContent('exceeds 4 MB')
     expect(uploadImage).not.toHaveBeenCalled()
   })

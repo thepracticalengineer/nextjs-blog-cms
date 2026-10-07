@@ -3,13 +3,17 @@
 Apply `supabase/migrations/20261007155857_post_media_uploads.sql` before deploying
 this feature. It creates the public `post-media` bucket, a server-only registry,
 reference-retention triggers, and `posts.cover_image_alt`. Existing covers keep the
-post title as their initial description; editors can replace it with specific alt text.
+post title as their initial description without changing their modification dates or
+optimistic save tokens; editors can replace it with specific alt text.
 
 ## Editor workflow
 
 Use **Choose cover image**, or **Insert or edit image** in the article toolbar.
 Select a file through the labeled file picker, or paste an image file into the
-article, cover URL field, or open image dialog. Then choose **Upload image / retry**.
+article, cover URL field, or open image dialog. Dropping a file into the article
+opens the same dialog at the drop position. Clipboard text and HTML take priority
+over accompanying image renditions, so copied rich text keeps its normal paste
+behavior. Then choose **Upload image / retry**.
 Transfer progress and server processing are announced. Add an image description
 before choosing **Use image**. Inline images can deliberately be marked decorative;
 cover images require a description in the dialog. Select an existing inline image
@@ -49,7 +53,9 @@ Legacy inline HTTP/HTTPS images remain renderable for compatibility.
 
 TipTap images store alt text and intrinsic width/height; reader preview and public
 article preserve those dimensions and use lazy loading and asynchronous decoding.
-Cover containers reserve responsive layout space and use the edited description.
+Cover containers reserve responsive layout space and use the edited description,
+falling back to the post title when none is saved. Newsletter covers use the same
+description and fallback.
 REST create/update accepts `image_alt`, returned with `image_url`; dashboard saves
 and recovery copies preserve cover descriptions. Alt text does not replace human
 editorial review of image meaning, rights or suitability.

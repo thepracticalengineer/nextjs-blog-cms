@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useCallback, useState } from 'react'
+import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { useEditor, EditorContent as TipTapContent } from '@tiptap/react'
 import { extensions } from './extensions'
 import { Toolbar } from './Toolbar'
@@ -47,16 +48,20 @@ export function Editor({ value, onChange, className, editorId }: EditorProps) {
     onUpdate: handleUpdate,
     editorProps: {
       handlePaste: (view, event) => {
-        const file = Array.from(event.clipboardData?.files ?? [])[0]
+        const file = pastedImageFile(event.clipboardData)
         if (!file || !editorId) return false
         event.preventDefault()
         setImageDialog({ file, position: view.state.selection.from, editing: false })
         return true
       },
-      handleDrop: (_view, event) => {
-        // Do not let files become browser-local blob/data URLs in the document.
-        if (event.dataTransfer?.files.length) { event.preventDefault(); return true }
-        return false
+      handleDrop: (view, event, _slice, moved) => {
+        if (moved) return false
+        const file = Array.from(event.dataTransfer?.files ?? [])[0]
+        if (!file || !editorId) return false
+        event.preventDefault()
+        const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos ?? view.state.selection.from
+        setImageDialog({ file, position, editing: false })
+        return true
       },
       attributes: {
         class: 'prose prose-sm sm:prose-base max-w-none focus:outline-hidden min-h-[300px] p-4',
