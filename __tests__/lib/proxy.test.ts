@@ -81,3 +81,23 @@ describe('Password recovery navigation', () => {
     expect((await proxy(request(path))).headers.get('location')).toBeNull()
   })
 })
+
+
+describe('post editor actions keep input mounted on authentication failure', () => {
+  it('returns 401 for an expired session without redirecting or losing refreshed cookies', async () => {
+    getUser.mockResolvedValue({ data: { user: null } })
+    const req = new NextRequest('https://example.com/dashboard/posts/new', { method: 'POST', headers: { 'next-action': 'test-action' } })
+    const response = await proxy(req)
+    expect(response.status).toBe(401)
+    expect(response.headers.get('location')).toBeNull()
+    expectRefresh(response)
+  })
+  it('still fails closed for action requests that require MFA', async () => {
+    getAal.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    const req = new NextRequest('https://example.com/dashboard/posts/id/edit', { method: 'POST', headers: { 'next-action': 'test-action' } })
+    const response = await proxy(req)
+    expect(response.status).toBe(403)
+    expect(response.headers.get('location')).toBeNull()
+    expectRefresh(response)
+  })
+})

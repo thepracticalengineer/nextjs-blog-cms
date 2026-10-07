@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Editor } from '@/components/editor/Editor'
 import { createPost, updatePost, publishPost, unpublishPost } from '@/features/posts/actions'
+import { useDraftRecovery, type DraftIdentity } from '@/features/posts/drafts/use-draft-recovery'
 import type { FieldErrors } from '@/features/posts/publication'
 import type { PostWithRelations, Category, Tag as TagType } from '@/features/posts/types'
 
@@ -36,6 +37,7 @@ const postSchema = z.object({
 type PostFormValues = z.infer<typeof postSchema>
 
 interface PostEditorProps {
+  readonly draftIdentity?: DraftIdentity
   readonly post?: PostWithRelations
   readonly categories: Category[]
   readonly tags: TagType[]
@@ -57,7 +59,7 @@ function getTagPalette(index: number) {
   return TAG_PALETTES[index % TAG_PALETTES.length]
 }
 
-export function PostEditor({ post, categories, tags }: PostEditorProps) {
+export function PostEditor({ post, categories, tags, draftIdentity }: PostEditorProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -75,8 +77,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
 
   const isPublished = post?.status === 'published'
 
-  const { register, handleSubmit, control, setValue, getValues, formState: { errors } } =
-    useForm<PostFormValues>({
+  const form = useForm<PostFormValues>({
       resolver: zodResolver(postSchema),
       defaultValues: {
         editorial_reviewed: false,
@@ -91,6 +92,10 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
         tag_ids: post?.tags?.map((t) => t.id) ?? [],
       },
     })
+
+  const { register, handleSubmit, control, setValue, getValues, formState: { errors } } = form
+  const recovery = useDraftRecovery(form, draftIdentity, post?.id ?? null, post?.updated_at ?? null)
+  const recoveryPending = !recovery.ready || recovery.candidates.length > 0
 
   const reviewText = useWatch({ control, name: ['title', 'excerpt', 'content'] })
   const flaggedForReview = reviewText.some(text => /\b(?:TODO|TBD)\b|coming soon|work in progress/i.test(text ?? ''))
@@ -114,49 +119,55 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
   }
 
   async function onSubmit(values: PostFormValues) {
+    if (recoveryPending) return
     setPublicationFieldErrors({})
     setSaving(true)
-    const result = post
-      ? await updatePost(post.id, values)
-      : await createPost(values)
-
-    if (result.error) {
-      setPublicationFieldErrors(result.fieldErrors ?? {})
-      toast.error(result.error)
-    } else {
-      toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
-      if (!post && result.data) {
-        router.push(`/dashboard/posts/${result.data.id}/edit`)
+    try {
+      const expectedUpdatedAt = await recovery.beginSave()
+      const result = post
+        ? await updatePost(post.id, values, false, expectedUpdatedAt, draftIdentity?.userId)
+        : await createPost(values, draftIdentity?.userId)
+      if (result.error || !result.data) {
+        setPublicationFieldErrors(result.fieldErrors ?? {})
+        toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
+        await recovery.finishSave()
+      } else {
+        await recovery.finishSave(values, result.data.updated_at, !post ? result.data.id : undefined)
+        toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
+        if (!post) router.push(`/dashboard/posts/${result.data.id}/edit`)
       }
-    }
-    setSaving(false)
+    } catch {
+      toast.error('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
+      await recovery.finishSave()
+    } finally { setSaving(false) }
   }
 
   async function handlePublishToggle() {
-    if (!post) return
+    if (!post || recoveryPending) return
     setPublishing(true)
     setPublicationFieldErrors({})
-
-    if (isPublished) {
-      const result = await unpublishPost(post.id)
-      if (result.error) {
-        toast.error(result.error)
+    const values = getValues()
+    try {
+      const expectedUpdatedAt = await recovery.beginSave()
+      const result = isPublished
+        ? await unpublishPost(post.id, draftIdentity?.userId)
+        : await publishPost(post.id, values, expectedUpdatedAt, draftIdentity?.userId)
+      if (result.error || !result.data) {
+        setPublicationFieldErrors('fieldErrors' in result ? result.fieldErrors ?? {} : {})
+        toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
+        await recovery.finishSave()
       } else {
-        toast.success('Post unpublished')
+        if (isPublished) {
+          recovery.updateBase(result.data.updated_at)
+          await recovery.finishSave()
+        } else await recovery.finishSave(values, result.data.updated_at)
+        toast.success(isPublished ? 'Post unpublished' : 'Post saved and published!')
         router.refresh()
       }
-    } else {
-      const publishResult = await publishPost(post.id, getValues())
-      if (publishResult.error) {
-        setPublicationFieldErrors(publishResult.fieldErrors ?? {})
-        toast.error(publishResult.error)
-      } else {
-        toast.success('Post saved and published!')
-        router.refresh()
-      }
-    }
-
-    setPublishing(false)
+    } catch {
+      toast.error('Save failed. Check your connection or sign in again, then retry. Your input is preserved.')
+      await recovery.finishSave()
+    } finally { setPublishing(false) }
   }
 
   return (
@@ -168,7 +179,8 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
         <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-8 md:px-8 py-3 mb-6 bg-background/80 backdrop-blur-md border-b border-border/50 flex items-center justify-between gap-4 flex-wrap">
           <button
             type="button"
-            onClick={() => router.push('/dashboard/posts')}
+            disabled={saving || publishing}
+            onClick={() => { if (recovery.canLeave()) router.push('/dashboard/posts') }}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -180,9 +192,9 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
               type="button"
               variant="ghost"
               size="sm"
-              onClick={() => router.push('/dashboard/posts')}
+              onClick={async () => { if (await recovery.discard()) router.push('/dashboard/posts') }}
               className="text-muted-foreground"
-              disabled={saving || publishing}
+              disabled={saving || publishing || recoveryPending}
             >
               Discard
             </Button>
@@ -195,7 +207,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
                 variant="ghost"
                 className="text-muted-foreground hover:text-foreground"
                 onClick={() => window.open(`/blog/${post.slug}`, '_blank')}
-                disabled={saving || publishing}
+                disabled={saving || publishing || recoveryPending}
               >
                 <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
                 View Post
@@ -206,7 +218,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
             {post && (
               <Button
                 type="submit"
-                disabled={saving || publishing}
+                disabled={saving || publishing || recoveryPending}
                 size="sm"
                 variant="outline"
                 className="border-border/70 hover:-translate-y-px transition-all duration-150 px-4 min-w-[110px]"
@@ -229,7 +241,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
             {post && (
               <Button
                 type="button"
-                disabled={saving || publishing}
+                disabled={saving || publishing || recoveryPending}
                 size="sm"
                 onClick={handlePublishToggle}
                 className={
@@ -256,7 +268,7 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
             {!post && (
               <Button
                 type="submit"
-                disabled={saving}
+                disabled={saving || recoveryPending}
                 size="sm"
                 className="bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-xs shadow-blue-500/25 hover:-translate-y-px transition-all duration-150 px-5 min-w-[130px]"
               >
@@ -275,6 +287,27 @@ export function PostEditor({ post, categories, tags }: PostEditorProps) {
             )}
           </div>
         </div>
+
+        {draftIdentity && (
+          <div className="mb-5 space-y-3 text-sm" aria-live="polite">
+            <p>{!recovery.ready ? 'Checking draft recovery…' : recovery.status === 'saving' ? 'Saving working copy…' : recovery.status === 'saved' ? 'Working copy saved' : recovery.status === 'failed' ? 'Autosave failed' : recovery.status === 'pending' ? 'Unsaved changes' : 'Changes will autosave as a private working copy.'}</p>
+            {recovery.error && <div role="alert"><p>{recovery.error}</p><a className="mr-3 underline" href="/login" target="_blank" rel="noopener noreferrer">Sign in in another tab</a><Button type="button" variant="outline" size="sm" onClick={recovery.retry}>Retry autosave</Button></div>}
+            {recovery.storageError && <p role="alert">{recovery.storageError}</p>}
+            {recovery.candidates.length > 0 && (
+              <section aria-label="Draft recovery" className="rounded-lg border p-4 space-y-3">
+                <h2 className="font-semibold">Recover interrupted writing</h2>
+                <p>Choose a copy to restore, or discard it. Published content stays unchanged until you save reviewed changes.</p>
+                {recovery.candidates.map(candidate => (
+                  <div key={candidate.id} className="flex flex-wrap items-center gap-2">
+                    <span>{candidate.values.title || 'Untitled post'} — {candidate.label}</span>
+                    <Button type="button" variant="outline" size="sm" onClick={() => recovery.restore(candidate.id)}>Restore</Button>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => void recovery.discardCandidate(candidate.id)}>Discard copy</Button>
+                  </div>
+                ))}
+              </section>
+            )}
+          </div>
+        )}
 
         {/* ── Main layout ─────────────────────────────────────────── */}
         <div className="grid gap-8 lg:grid-cols-[1fr_292px]">

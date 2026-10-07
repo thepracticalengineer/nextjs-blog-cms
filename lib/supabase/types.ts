@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      post_working_copies: {
+        Row: {
+          user_id: string
+          document_id: string
+          post_id: string | null
+          values: Json
+          revision: string
+          base_updated_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          document_id: string
+          post_id?: string | null
+          values: Json
+          revision: string
+          base_updated_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          document_id?: string
+          post_id?: string | null
+          values?: Json
+          revision?: string
+          base_updated_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "post_working_copies_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+          { foreignKeyName: "post_working_copies_post_id_fkey"; columns: ["post_id"]; isOneToOne: false; referencedRelation: "posts"; referencedColumns: ["id"] },
+        ]
+      }
       categories: {
         Row: {
           created_at: string | null

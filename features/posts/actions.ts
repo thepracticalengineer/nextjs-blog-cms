@@ -34,12 +34,13 @@ async function generateUniqueSlug(title: string, excludeId?: string): Promise<st
   return slug
 }
 
-export async function createPost(values: PostFormValues): Promise<PostMutationResult> {
+export async function createPost(values: PostFormValues, editorId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:create')) {
     return { error: 'Unauthorized' }
   }
 
+  if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
   const slug = values.slug || await generateUniqueSlug(values.title)
 
@@ -73,15 +74,17 @@ export async function createPost(values: PostFormValues): Promise<PostMutationRe
   return { data: post }
 }
 
-export async function updatePost(id: string, values: PostFormValues, publish = false): Promise<PostMutationResult> {
+export async function updatePost(id: string, values: PostFormValues, publish = false, expectedUpdatedAt?: string | null, editorId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile) return { error: 'Unauthorized' }
+  if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
 
   const supabase = await createClient()
 
   const { data: existing, error: fetchError } = await supabase.from('posts').select('*').eq('id', id).single()
   if (fetchError || !existing) return { error: 'Post not found' }
   if (profile.role !== 'admin' && existing.author_id !== profile.id) return { error: 'Unauthorized' }
+  if (expectedUpdatedAt !== undefined && existing.updated_at !== expectedUpdatedAt) return { error: 'The post changed in another editor. Your writing is preserved; reopen to compare before saving.' }
   const targetPublished = publish || existing.status === 'published'
   if (targetPublished && !can(profile.role as Role, 'posts:publish')) return { error: 'Unauthorized' }
   const slug = values.slug || await generateUniqueSlug(values.title, id)
@@ -127,18 +130,19 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   return { data: post }
 }
 
-export async function publishPost(id: string, values: PostFormValues) {
+export async function publishPost(id: string, values: PostFormValues, expectedUpdatedAt?: string | null, editorId?: string) {
   // Save and publish in one checked write. Never save draft input over live
   // content before learning whether publication validation succeeds.
-  return updatePost(id, values, true)
+  return updatePost(id, values, true, expectedUpdatedAt, editorId)
 }
 
-export async function unpublishPost(id: string) {
+export async function unpublishPost(id: string, editorId?: string) {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:publish')) {
     return { error: 'Unauthorized' }
   }
 
+  if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
   const { data: post, error } = await supabase
     .from('posts')

@@ -75,6 +75,11 @@ describe('dashboard publication actions', () => {
     expect(db.posts[0]).toEqual(validPost)
     expect(scheduleNewsletterSend).not.toHaveBeenCalled()
   })
+  it('rejects a manual save from a stale loaded post before attempting writes', async () => {
+    const db = useDb([{ ...validPost, updated_at: '2026-10-07T00:00:00Z' }])
+    expect((await updatePost('post-1', values, false, validPost.updated_at)).error).toContain('another editor')
+    expect(db.writes).toEqual([])
+  })
   it('cannot publish another author’s post', async () => {
     const db = useDb([{ ...validPost, author_id: 'other-author' }])
     expect((await publishPost('post-1', values)).error).toBe('Unauthorized')

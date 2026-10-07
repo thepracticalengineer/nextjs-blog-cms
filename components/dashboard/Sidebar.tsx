@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, Menu, X, MessageSquare, Loader2, Code, Bot, UserCircle, Mail,
 } from 'lucide-react'
+import { allowEditorNavigation } from '@/features/posts/drafts/navigation'
 import { cn } from '@/lib/utils'
 import { can } from '@/lib/permissions'
 import type { Role } from '@/lib/permissions'
@@ -31,6 +32,7 @@ export function Sidebar({ profile }: SidebarProps) {
   }
 
   function handleLogout() {
+    if (!allowEditorNavigation()) return
     startTransition(async () => {
       try {
         await fetch('/api/auth/signout', { method: 'POST' })

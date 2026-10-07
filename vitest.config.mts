@@ -36,6 +36,7 @@ export default defineConfig({
         // features
         'features/posts/components/**/*.{ts,tsx}',
         'features/posts/actions.ts',
+        'features/posts/drafts/**/*.{ts,tsx}',
         'features/posts/publication.ts',
         'features/newsletter/actions.ts',
         'features/authors/**/*.{ts,tsx}',
