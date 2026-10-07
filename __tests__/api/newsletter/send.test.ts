@@ -65,11 +65,12 @@ function makeSupabase({
     limit: vi.fn().mockResolvedValue({ data: fetchPendingError ? null : pendingSends, error: fetchPendingError }),
   })
 
-  // Call 3: claim sends (.update.in.eq.select)
+  // Call 3: claim sends (.update.in.eq.lte.select)
   fromMock.mockReturnValueOnce({
     update: vi.fn().mockImplementation(function (this: unknown, payload: { dispatch_token: string }) { dispatchToken = payload.dispatch_token; return this }),
     in: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    lte: vi.fn().mockReturnThis(),
     select: vi.fn().mockResolvedValue({ data: claimError ? null : claimedSends, error: claimError }),
   })
 

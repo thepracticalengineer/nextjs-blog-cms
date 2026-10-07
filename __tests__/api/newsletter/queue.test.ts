@@ -30,6 +30,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs())
 
 describe('newsletter queue delivery with isolated recipients and provider', () => {
+  it('does not claim a row whose publication deadline changed after selection', async () => {
+    const db = useQueue()
+    db.observeQueries(({ table, operation, payload }) => {
+      if (table === 'newsletter_sends' && operation === 'update' && payload.status === 'sending') {
+        db.sends[0].scheduled_at = new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      }
+    })
+    expect(await (await POST(request())).json()).toEqual({ dispatched: 0 })
+    expect(db.sends[0]).toMatchObject({ status: 'pending', dispatch_token: null, delivery_started_at: null })
+    expect(providerSend).not.toHaveBeenCalled()
+  })
   it('publish then unpublish before dispatch sends no emails, including after cancellation failure', async () => {
     const db = useQueue()
     await scheduleNewsletterSend('post-1')

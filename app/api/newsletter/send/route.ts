@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
     .update({ status: 'sending', sending_started_at: new Date().toISOString(), dispatch_token: dispatchToken })
     .in('id', candidateIds)
     .eq('status', 'pending')
+    .lte('scheduled_at', new Date().toISOString())
     .select('id, post_id')
 
   if (claimError) {
