@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 import { createServiceClient } from '@/lib/supabase/service'
 import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'

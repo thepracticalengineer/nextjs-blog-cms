@@ -1,4 +1,4 @@
-'use server'
+import 'server-only'
 
 import { createServiceClient } from '@/lib/supabase/service'
 import { validatePublication } from '@/features/posts/publication'
