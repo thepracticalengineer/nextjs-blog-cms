@@ -7,6 +7,8 @@ export type PostWithRelations = Post & {
 }
 
 export type PostFormValues = {
+  auto_slug?: boolean
+  confirm_slug_change?: boolean
   editorial_reviewed?: boolean
   title: string
   slug: string

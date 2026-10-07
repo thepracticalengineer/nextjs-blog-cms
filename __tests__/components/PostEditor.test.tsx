@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import { publishPost, updatePost } from '@/features/posts/actions'
+import { createPost, publishPost, updatePost } from '@/features/posts/actions'
 import { validPost } from '../helpers/publication'
 import type { PostWithRelations } from '@/features/posts/types'
 import { PostEditor } from '@/components/dashboard/PostEditor'
@@ -142,4 +142,67 @@ describe('editorial flags', () => {
     fireEvent.change(screen.getByLabelText('Article body'), { target: { value: 'The article is complete.' } })
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
+})
+
+describe('slug editing', () => {
+  beforeEach(() => vi.clearAllMocks())
+  it('regenerates on title blur only until the slug is explicitly edited', () => {
+    render(<PostEditor {...minimalProps} />)
+    const title = screen.getByLabelText('Post title')
+    const slug = screen.getByLabelText('Slug')
+    fireEvent.change(title, { target: { value: 'First Engineering Title' } })
+    fireEvent.blur(title)
+    expect(slug).toHaveValue('first-engineering-title')
+    fireEvent.change(title, { target: { value: 'Second Engineering Title' } })
+    fireEvent.blur(title)
+    expect(slug).toHaveValue('second-engineering-title')
+    fireEvent.change(slug, { target: { value: 'custom-url' } })
+    fireEvent.focus(title)
+    fireEvent.blur(title)
+    expect(slug).toHaveValue('custom-url')
+    fireEvent.change(slug, { target: { value: '' } })
+    fireEvent.blur(title)
+    expect(slug).toHaveValue('')
+  })
+  it('locks a published URL until the author deliberately enables editing', async () => {
+    vi.mocked(updatePost).mockResolvedValue({ error: 'Confirm the URL change' })
+    render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} />)
+    expect(screen.getByLabelText('Slug')).toHaveAttribute('readonly')
+    fireEvent.click(screen.getByRole('button', { name: 'Change published URL' }))
+    expect(screen.getByLabelText('Slug')).not.toHaveAttribute('readonly')
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'new-published-url' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Confirm this URL change/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() => expect(updatePost).toHaveBeenCalledWith(editorPost.id, expect.objectContaining({ slug: 'new-published-url', confirm_slug_change: true }), false, editorPost.updated_at, undefined))
+    fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'another-url' } })
+    expect(screen.getByRole('checkbox', { name: /Confirm this URL change/ })).not.toBeChecked()
+  })
+})
+
+it('preserves slug edits made while creation is in flight', async () => {
+  vi.clearAllMocks()
+  let finish!: (result: Awaited<ReturnType<typeof createPost>>) => void
+  vi.mocked(createPost).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  render(<PostEditor {...minimalProps} />)
+  fireEvent.change(screen.getByLabelText('Post title'), { target: { value: 'First Engineering Title' } })
+  fireEvent.blur(screen.getByLabelText('Post title'))
+  fireEvent.click(screen.getByRole('button', { name: 'Create Post' }))
+  await waitFor(() => expect(createPost).toHaveBeenCalledWith(expect.objectContaining({ auto_slug: true, slug: 'first-engineering-title' }), undefined, undefined))
+  fireEvent.change(screen.getByLabelText('Slug'), { target: { value: 'newer-custom-url' } })
+  await act(async () => finish({ data: { ...editorPost, slug: 'first-engineering-title-2' } }))
+  expect(screen.getByLabelText('Slug')).toHaveValue('newer-custom-url')
+})
+
+it('generates a new URL on save after an author edits and clears the slug', async () => {
+  vi.clearAllMocks()
+  vi.mocked(createPost).mockResolvedValueOnce({ data: { ...editorPost, slug: 'useful-engineering-title' } })
+  render(<PostEditor {...minimalProps} />)
+  fireEvent.change(screen.getByLabelText('Post title'), { target: { value: 'Useful Engineering Title' } })
+  fireEvent.blur(screen.getByLabelText('Post title'))
+  fireEvent.change(screen.getByLabelText('Slug'), { target: { value: ' My Custom URL ' } })
+  expect(screen.getByText('URL preview: /blog/my-custom-url')).toBeVisible()
+  fireEvent.change(screen.getByLabelText('Slug'), { target: { value: '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Create Post' }))
+  await waitFor(() => expect(createPost).toHaveBeenCalledWith(expect.objectContaining({ slug: '', auto_slug: true }), undefined, undefined))
+  await waitFor(() => expect(screen.getByLabelText('Slug')).toHaveValue('useful-engineering-title'))
 })

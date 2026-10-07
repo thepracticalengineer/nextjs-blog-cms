@@ -155,7 +155,8 @@ WEBHOOK_SECRET=               # shared secret used to authenticate the /api/news
 
 ### 4. Set up the database
 
-- Run `database/schema.sql` in the Supabase SQL editor
+- Run `database/schema.sql` in the Supabase SQL editor, then run
+  `supabase/migrations/20261007055822_post_slug_routes.sql` to install URL reservations and redirects
 - Apply RLS policies from `database/policies/`
 - Optionally seed with `database/seed.sql`
 
@@ -227,7 +228,7 @@ Content-Type: application/json
 | ------------------ | ---------------------- | -------- | ------------------------------------------------------ |
 | `title`            | string                 | Yes      | Post title                                             |
 | `content`          | string                 | Yes      | HTML content (TipTap-compatible)                       |
-| `slug`             | string                 | No       | URL slug — auto-generated from title if omitted        |
+| `slug`             | string                 | No       | Custom URL slug; normalized server-side. Omit for automatic generation. |
 | `status`           | `draft` \| `published` | No       | Defaults to `draft`                                    |
 | `excerpt`          | string                 | No       | Plain-text summary                                     |
 | `meta_title`       | string                 | No       | SEO title — defaults to `title`                        |
@@ -592,9 +593,32 @@ or unready articles. Dispatch rechecks publication state and queue cancellation 
 
 Public cache invalidation covers the root layout (home, blog, author and taxonomy
 pages), affected old/new article URLs and the sitemap. Changing a slug is deliberate;
-the previous URL returns 404 once its page is invalidated. Add an explicit redirect
-only when an editor has chosen a suitable replacement. Existing slugs are no longer
-silently regenerated when editing titles.
+the editor locks published URLs until you choose **Change published URL** and
+confirm the permanent redirect. REST PATCH requests that change a published slug
+must include `confirm_slug_change: true` as well as `editorial_reviewed: true`.
+Former published URLs return **308** and resolve directly to the current published
+URL. They remain reserved through unpublish/republish; unpublished destinations
+return 404, and deleting a post removes its reservations. Title edits and clearing
+an existing slug preserve the saved URL.
+
+Slugs are normalized server-side to lowercase letters, numbers and single hyphens,
+with a 200-character limit. Automatic new-post slugs follow the title until manually
+edited and retry actual unique-constraint conflicts up to 20 times (`-2`, `-3`, …).
+Titles with no usable slug characters receive a `draft-<UUID>` fallback. Custom slug
+conflicts preserve input and return an actionable `slug` field error (HTTP 409 for
+write conflicts); a chosen URL is never silently suffixed.
+
+Apply `supabase/migrations/20261007055822_post_slug_routes.sql` **before deploying**
+this code. It backfills current URL reservations without rewriting existing URLs.
+Historical URL changes made before this migration cannot be reconstructed.
+Reservations and post writes commit together, so a failed reservation leaves the
+post unchanged. The route table has read-only public access for published posts;
+only the database trigger maintains it.
+
+Verify the database behavior, including concurrent creates and URL hijacking,
+with `bash database/tests/verify-slug-routes.sh` (isolated local PostgreSQL). The
+browser flow is covered by `e2e/browser/slug-safety.spec.ts` on a dedicated test
+Supabase project.
 
 ### Test content and production cleanup
 

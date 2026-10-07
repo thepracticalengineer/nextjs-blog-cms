@@ -148,21 +148,3 @@ export async function resolveCategoryId(
 
   return byName?.id ?? null
 }
-
-export async function generateUniqueSlugForApi(
-  title: string,
-  supabase: ReturnType<typeof createServiceClient>
-): Promise<string> {
-  const base = slugify(title, { lower: true, strict: true })
-  let slug = base
-  let counter = 2
-
-  while (true) {
-    const { data } = await supabase.from('posts').select('id').eq('slug', slug)
-    if (!data || data.length === 0) break
-    slug = `${base}-${counter}`
-    counter++
-  }
-
-  return slug
-}

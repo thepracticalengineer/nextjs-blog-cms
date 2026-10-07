@@ -1,11 +1,10 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import slugify from 'slugify'
 import { z } from 'zod'
-import { randomUUID } from 'node:crypto'
 import { validatePublication, type FieldErrors } from './publication'
 import { refreshPostPaths, refreshDraftPaths } from './cache'
+import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT, SLUG_CHANGE_CONFIRMATION } from './slugs'
 import { cancelNewsletterSend } from '@/features/newsletter/actions'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -17,24 +16,6 @@ import type { PostFormValues, Post } from './types'
 type PostMutationResult = { data?: Post; error?: string; fieldErrors?: FieldErrors }
 import { scheduleNewsletterSend } from '@/features/newsletter/actions'
 
-async function generateUniqueSlug(title: string, excludeId?: string): Promise<string> {
-  const supabase = await createClient()
-  const base = slugify(title, { lower: true, strict: true }) || `draft-${randomUUID()}`
-  let slug = base
-  let counter = 2
-
-  while (true) {
-    let query = supabase.from('posts').select('id').eq('slug', slug)
-    if (excludeId) query = query.neq('id', excludeId)
-    const { data } = await query
-    if (!data || data.length === 0) break
-    slug = `${base}-${counter}`
-    counter++
-  }
-
-  return slug
-}
-
 export async function createPost(values: PostFormValues, editorId?: string, documentId?: string): Promise<PostMutationResult> {
   const profile = await getProfile()
   if (!profile || !can(profile.role as Role, 'posts:create')) {
@@ -44,9 +25,10 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
   if (editorId !== undefined && profile.id !== editorId) return { error: 'The signed-in account changed. Sign in with the account that opened this editor; your input is preserved.' }
   const supabase = await createClient()
   if (documentId && !z.uuid().safeParse(documentId).success) return { error: 'Invalid draft identity.' }
-  const slug = values.slug || await generateUniqueSlug(values.title)
+  const plan = planSlug(values.slug, values.title, values.auto_slug)
+  if (plan.error) return { error: plan.error, fieldErrors: { slug: [plan.error] } }
 
-  const { data: post, error } = await supabase
+  const { data: post, error } = await writeWithSlug<Post>(plan, slug => supabase
     .from('posts')
     .insert({
       ...(documentId ? { id: documentId } : {}),
@@ -62,15 +44,17 @@ export async function createPost(values: PostFormValues, editorId?: string, docu
       status: 'draft',
     })
     .select()
-    .single()
+    .single())
 
   if (error) {
     if (documentId && error.code === '23505') {
       const { data: existing } = await supabase.from('posts').select('id, author_id').eq('id', documentId).single()
       if (existing?.author_id === profile.id) return { error: 'This draft was already created. Reopen it from All Posts to compare your writing before saving.' }
     }
+    if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
     return { error: error.message }
   }
+  if (!post) return { error: 'The post could not be saved. Try again.' }
 
   // Handle tags
   if (values.tag_ids?.length > 0) {
@@ -96,7 +80,12 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
   if (expectedUpdatedAt !== undefined && existing.updated_at !== expectedUpdatedAt) return { error: 'The post changed in another editor. Your writing is preserved; reopen to compare before saving.' }
   const targetPublished = publish || existing.status === 'published'
   if (targetPublished && !can(profile.role as Role, 'posts:publish')) return { error: 'Unauthorized' }
-  const slug = values.slug || await generateUniqueSlug(values.title, id)
+  const plan = planSlug(values.slug, values.title, false, existing.slug)
+  if (plan.error) return { error: plan.error, fieldErrors: { slug: [plan.error] } }
+  const slug = plan.slug
+  if (existing.status === 'published' && slug !== existing.slug && values.confirm_slug_change !== true) {
+    return { error: SLUG_CHANGE_CONFIRMATION, fieldErrors: { slug: [SLUG_CHANGE_CONFIRMATION] } }
+  }
   if (targetPublished) {
     const fieldErrors = await validatePublication(createServiceClient(), { ...values, slug, author_id: existing.author_id }, values.editorial_reviewed, id)
     if (Object.keys(fieldErrors).length) return { error: 'Publication blocked. Review the highlighted fields.', fieldErrors }
@@ -121,6 +110,7 @@ export async function updatePost(id: string, values: PostFormValues, publish = f
     .select()
     .single()
 
+  if (isSlugConflict(error)) return { error: SLUG_CONFLICT, fieldErrors: { slug: [SLUG_CONFLICT] } }
   if (error || !post) return { error: 'The post changed or could not be saved. Your input is preserved; reload before trying again.' }
 
   // Replace tags

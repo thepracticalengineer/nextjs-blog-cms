@@ -1,9 +1,9 @@
-import { notFound } from 'next/navigation'
+import { notFound, permanentRedirect } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Metadata } from 'next'
-import { getPostBySlug, getAllPublishedSlugs } from '@/features/posts/queries'
+import { getPostBySlug, getAllPublishedSlugs, getPostRedirect } from '@/features/posts/queries'
 import { EditorContent } from '@/components/editor/EditorContent'
 import { Badge } from '@/components/ui/badge'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
@@ -46,7 +46,11 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
 export default async function PostPage({ params }: PostPageProps) {
   const { slug } = await params
   const post = await getPostBySlug(slug)
-  if (!post) notFound()
+  if (!post) {
+    const currentSlug = await getPostRedirect(slug)
+    if (currentSlug) permanentRedirect(`/blog/${currentSlug}`)
+    notFound()
+  }
 
   const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
 

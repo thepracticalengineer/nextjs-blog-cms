@@ -61,6 +61,10 @@ function getTagPalette(index: number) {
 
 export function PostEditor({ post, categories, tags, draftIdentity }: PostEditorProps) {
   const router = useRouter()
+  const [manuallyEditedSlug, setManuallyEditedSlug] = useState(false)
+  const [generatedSlug, setGeneratedSlug] = useState('')
+  const [slugChangeConfirmed, setSlugChangeConfirmed] = useState(false)
+  const [allowSlugChange, setAllowSlugChange] = useState(false)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
   const [publicationFieldErrors, setPublicationFieldErrors] = useState<FieldErrors>({})
@@ -100,12 +104,18 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
   const reviewText = useWatch({ control, name: ['title', 'excerpt', 'content'] })
   const flaggedForReview = reviewText.some(text => /\b(?:TODO|TBD)\b|coming soon|work in progress/i.test(text ?? ''))
   const title = useWatch({ control, name: 'title' })
+  const slug = useWatch({ control, name: 'slug' })
+  const normalizedSlug = slugify(slug ?? '', { lower: true, strict: true })
   const coverImage = useWatch({ control, name: 'cover_image' })
   const selectedTagIds = useWatch({ control, name: 'tag_ids' })
 
   function autoSlug() {
-    if (!title || getValues('slug')) return
-    setValue('slug', slugify(title, { lower: true, strict: true }))
+    const current = getValues('slug')
+    // A restored or saved URL is authoritative, even without local edit history.
+    if (post || manuallyEditedSlug || (current && current !== generatedSlug)) return
+    const nextSlug = slugify(title ?? '', { lower: true, strict: true }).slice(0, 196).replace(/-+$/, '')
+    setGeneratedSlug(nextSlug)
+    setValue('slug', nextSlug)
   }
 
   function toggleTag(tagId: string) {
@@ -125,14 +135,21 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
     try {
       const expectedUpdatedAt = await recovery.beginSave()
       const result = post
-        ? await updatePost(post.id, values, false, expectedUpdatedAt, draftIdentity?.userId)
-        : await createPost(values, draftIdentity?.userId, draftIdentity?.documentId)
+        ? await updatePost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, false, expectedUpdatedAt, draftIdentity?.userId)
+        : await createPost({ ...values, auto_slug: !values.slug.trim() || (!manuallyEditedSlug && values.slug === generatedSlug) }, draftIdentity?.userId, draftIdentity?.documentId)
       if (result.error || !result.data) {
         setPublicationFieldErrors(result.fieldErrors ?? {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
         await recovery.finishSave()
       } else {
-        await recovery.finishSave(values, result.data.updated_at, !post ? result.data.id : undefined)
+        const savedValues = { ...values, slug: result.data.slug }
+        if (getValues('slug') === values.slug) {
+          setValue('slug', result.data.slug)
+          setSlugChangeConfirmed(false)
+          setAllowSlugChange(false)
+        }
+        await recovery.finishSave(savedValues, result.data.updated_at, !post ? result.data.id : undefined)
+        if (post) router.refresh()
         toast.success(isPublished ? 'Published changes saved' : 'Post saved as draft')
         if (!post) router.push(`/dashboard/posts/${result.data.id}/edit`)
       }
@@ -151,7 +168,7 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
       const expectedUpdatedAt = await recovery.beginSave()
       const result = isPublished
         ? await unpublishPost(post.id, draftIdentity?.userId)
-        : await publishPost(post.id, values, expectedUpdatedAt, draftIdentity?.userId)
+        : await publishPost(post.id, { ...values, confirm_slug_change: slugChangeConfirmed }, expectedUpdatedAt, draftIdentity?.userId)
       if (result.error || !result.data) {
         setPublicationFieldErrors('fieldErrors' in result ? result.fieldErrors ?? {} : {})
         toast.error(result.error ?? 'The post could not be saved. Your input is preserved.')
@@ -160,7 +177,14 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
         if (isPublished) {
           recovery.updateBase(result.data.updated_at)
           await recovery.finishSave()
-        } else await recovery.finishSave(values, result.data.updated_at)
+        } else {
+          if (getValues('slug') === values.slug) {
+            setValue('slug', result.data.slug)
+            setSlugChangeConfirmed(false)
+            setAllowSlugChange(false)
+          }
+          await recovery.finishSave({ ...values, slug: result.data.slug }, result.data.updated_at)
+        }
         toast.success(isPublished ? 'Post unpublished' : 'Post saved and published!')
         router.refresh()
       }
@@ -340,17 +364,33 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
               <input
                 {...register('slug')}
                 aria-label="Slug"
+                readOnly={isPublished && !allowSlugChange}
                 aria-invalid={!!publicationFieldErrors.slug}
                 aria-describedby="slug-error"
                 placeholder="auto-generated-from-title"
                 className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-hidden placeholder:text-muted-foreground/40 font-mono"
                 onChange={(e) => {
-                  const formatted = slugify(e.target.value, { lower: true, strict: true })
-                  setValue('slug', formatted)
+                  setManuallyEditedSlug(true)
+                  setSlugChangeConfirmed(false)
+                  setValue('slug', e.target.value, { shouldDirty: true })
                 }}
               />
             </div>
 
+            {normalizedSlug && slug !== normalizedSlug && (
+              <p className="text-xs text-muted-foreground" aria-live="polite">URL preview: /blog/{normalizedSlug}</p>
+            )}
+            {isPublished && !allowSlugChange && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setAllowSlugChange(true)}>
+                Change published URL
+              </Button>
+            )}
+            {isPublished && allowSlugChange && (
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" checked={slugChangeConfirmed} onChange={event => setSlugChangeConfirmed(event.target.checked)} />
+                <span>Confirm this URL change. The old URL will permanently redirect to the new URL.</span>
+              </label>
+            )}
             <FieldError name="slug" errors={publicationFieldErrors} />
 
             {/* Excerpt */}

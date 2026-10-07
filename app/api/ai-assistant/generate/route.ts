@@ -1,3 +1,4 @@
+import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { type NextRequest } from 'next/server'
 import { requireApiKey } from '@/lib/apiAuth'
 import { apiSuccess, apiError } from '@/lib/apiHelpers'
@@ -8,7 +9,6 @@ import { generateBlogPostHeadless } from '@/features/ai-assistant/llmService'
 import {
   resolveTagIds,
   resolveCategoryId,
-  generateUniqueSlugForApi,
   hashApiKey,
 } from '@/features/api-keys/apiKeyService'
 import { AVAILABLE_MODELS } from '@/features/ai-assistant/types'
@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
   const supabase = createServiceClient()
 
   // Resolve slug
-  const slug = await generateUniqueSlugForApi(finalTitle, supabase)
+  const plan = planSlug('', finalTitle)
 
   // Resolve category
   const categoryId = finalCategory
@@ -161,7 +161,7 @@ export async function POST(req: NextRequest) {
     : null
 
   // Insert post as draft
-  const { data: post, error: postError } = await supabase
+  const { data: post, error: postError } = await writeWithSlug<{ id: string; title: string; slug: string; status: string; created_at: string | null }>(plan, slug => supabase
     .from('posts')
     .insert({
       title: finalTitle,
@@ -177,11 +177,11 @@ export async function POST(req: NextRequest) {
       published_at: null,
     })
     .select('id, title, slug, status, created_at')
-    .single()
+    .single())
 
   if (postError || !post) {
     console.error('[POST /api/ai-assistant/generate] Post insert failed:', postError?.message)
-    return apiError('Failed to save generated post.', 500)
+    return apiError(isSlugConflict(postError) ? SLUG_CONFLICT : 'Failed to save generated post.', isSlugConflict(postError) ? 409 : 500)
   }
 
   // Insert post tags

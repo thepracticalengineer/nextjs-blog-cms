@@ -101,3 +101,66 @@ describe('dashboard publication actions', () => {
     expect(cancelNewsletterSend).toHaveBeenCalledWith('post-1')
   })
 })
+
+describe('slug safety', () => {
+  it('normalizes custom slugs server-side and rejects empty or overlong results', async () => {
+    const db = useDb([])
+    expect((await createPost({ ...values, slug: '  My Custom URL  ' })).data?.slug).toBe('my-custom-url')
+    for (const slug of ['!!!', 'x'.repeat(201)]) {
+      expect((await createPost({ ...values, slug })).fieldErrors?.slug).toBeDefined()
+    }
+    expect(db.posts).toHaveLength(1)
+  })
+  it('preserves existing URLs when the title changes or the submitted slug is cleared', async () => {
+    useDb()
+    expect((await updatePost(validPost.id, { ...values, title: 'A Different Engineering Title', slug: '' })).data?.slug).toBe(validPost.slug)
+  })
+  it('suffixes automatic slugs after both existing conflicts and uniqueness races', async () => {
+    const base = 'integration-testing-at-service-boundaries'
+    const db = useDb([{ ...validPost, slug: base }])
+    expect((await createPost({ ...values, slug: base, auto_slug: true })).data?.slug).toBe(base + '-2')
+    db.simulateSlugRace()
+    expect((await createPost({ ...values, title: 'Concurrent Creation', slug: '', auto_slug: true })).data?.slug).toBe('concurrent-creation-2')
+  })
+  it('bounds collision retries and returns an actionable field error', async () => {
+    const db = useDb([]); db.simulateSlugRace(100)
+    expect((await createPost({ ...values, slug: '', auto_slug: true })).fieldErrors?.slug[0]).toContain('Choose another')
+    expect(db.writes).toHaveLength(20)
+    expect(db.posts).toHaveLength(0)
+  })
+  it('reports custom slug conflicts without silently suffixing them', async () => {
+    const db = useDb()
+    expect((await createPost(values)).fieldErrors?.slug[0]).toContain('Choose another')
+    expect(db.writes).toHaveLength(1)
+    db.simulateSlugRace()
+    expect((await updatePost(validPost.id, { ...values, slug: 'new-url' })).fieldErrors?.slug).toBeDefined()
+    expect(db.posts[0].slug).toBe(validPost.slug)
+  })
+  it('provides a nonempty fallback for punctuation-only titles', async () => {
+    useDb([])
+    expect((await createPost({ ...values, title: '!!!', slug: '', auto_slug: true })).data?.slug).toMatch(/^draft-[0-9a-f-]{36}$/)
+  })
+  it('requires confirmation before changing a published URL, then keeps the old route', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    const changed = { ...values, slug: 'changed-public-url' }
+    expect((await updatePost(validPost.id, changed)).fieldErrors?.slug[0]).toContain('Confirm')
+    expect(db.writes).toHaveLength(0)
+    expect((await updatePost(validPost.id, { ...changed, confirm_slug_change: true })).error).toBeUndefined()
+    expect(db.routes).toEqual(expect.arrayContaining([{ slug: validPost.slug, post_id: validPost.id, was_published: true }]))
+    expect(refreshPostPaths).toHaveBeenCalledWith(validPost.slug, changed.slug)
+  })
+  it('rejects a former published URL belonging to another post', async () => {
+    const db = postClient([validPost], 'Frank Mendez', [], [{ slug: 'reserved-old-url', post_id: 'other-post', was_published: true }])
+    vi.mocked(createClient).mockResolvedValue(db.client as unknown as Awaited<ReturnType<typeof createClient>>)
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    const result = await publishPost(validPost.id, { ...values, slug: 'reserved-old-url' })
+    expect(result.fieldErrors?.slug[0]).toContain('reserved')
+    expect(db.posts[0].slug).toBe(validPost.slug)
+    expect(db.writes).toHaveLength(1)
+  })
+})
+
+it('creates a draft with an automatic URL after a manually edited slug is cleared', async () => {
+  useDb([])
+  expect((await createPost({ ...values, title: 'Cleared Slug Draft', slug: '   ', auto_slug: false })).data?.slug).toBe('cleared-slug-draft')
+})

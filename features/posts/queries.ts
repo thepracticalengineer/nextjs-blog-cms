@@ -125,3 +125,15 @@ export async function getPopularTags(limit = 8): Promise<TagWithCount[]> {
     count: Number(row.count),
   }))
 }
+
+// Resolve every former URL directly to the current slug, avoiding redirect
+// chains and loops. RLS and the status check keep unpublished posts private.
+export async function getPostRedirect(slug: string): Promise<string | null> {
+  const supabase = await createClient()
+  const { data: route, error } = await supabase.from('post_slug_routes')
+    .select('post_id').eq('slug', slug).eq('was_published', true).maybeSingle()
+  if (error || !route) return null
+  const { data: post } = await supabase.from('posts').select('slug')
+    .eq('id', route.post_id).eq('status', 'published').maybeSingle()
+  return post && post.slug !== slug ? post.slug : null
+}

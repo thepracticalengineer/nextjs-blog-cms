@@ -1,5 +1,5 @@
+import type { Post } from '@/features/posts/types'
 import { NextResponse } from 'next/server'
-import { randomUUID } from 'crypto'
 import { postApiSchema, validatePublication, type PostApiBody } from '@/features/posts/publication'
 import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend } from '@/features/newsletter/actions'
@@ -7,8 +7,8 @@ import {
   validateApiKey,
   resolveTagIds,
   resolveCategoryId,
-  generateUniqueSlugForApi,
 } from '@/features/api-keys/apiKeyService'
+import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { createServiceClient } from '@/lib/supabase/service'
 
 function buildPostPayload(body: PostApiBody, slug: string, categoryId: string | null, userId: string) {
@@ -35,18 +35,21 @@ function buildPostPayload(body: PostApiBody, slug: string, categoryId: string | 
 async function insertPostWithTags(
   supabase: ReturnType<typeof createServiceClient>,
   payload: ReturnType<typeof buildPostPayload>,
-  tags: string[] | undefined
+  tags: string[] | undefined,
+  plan: ReturnType<typeof planSlug>
 ) {
-  const { data: post, error: postError } = await supabase
+  const { data: post, error: postError } = await writeWithSlug<Post>(plan, slug => supabase
     .from('posts')
-    .insert(payload)
+    .insert({ ...payload, slug })
     .select()
-    .single()
+    .single())
 
   if (postError) {
     console.error('[API] Failed to insert post:', postError.message)
-    return { post: null, error: 'Failed to create post' }
+    return { post: null, error: isSlugConflict(postError) ? SLUG_CONFLICT : 'Failed to create post' }
   }
+
+  if (!post) return { post: null, error: 'Failed to create post' }
 
   if (Array.isArray(tags) && tags.length > 0) {
     const tagNames = tags.filter((t) => typeof t === 'string' && t.trim())
@@ -96,12 +99,11 @@ export async function POST(request: Request) {
   }
   const body = parsed.data
   const supabase = createServiceClient()
-  const resolvedSlug = body.slug?.trim() || (body.title?.trim()
-    ? await generateUniqueSlugForApi(body.title, supabase)
-    : `draft-${randomUUID()}`)
-  const payload = buildPostPayload(body, resolvedSlug, null, userId)
+  const plan = planSlug(body.slug, body.title ?? '')
+  if (plan.error) return NextResponse.json({ success: false, error: plan.error, details: { field_errors: { slug: [plan.error] } } }, { status: 422 })
+  const payload = buildPostPayload(body, plan.slug, null, userId)
   if (payload.status === 'published') {
-    const fieldErrors = await validatePublication(supabase, payload, body.editorial_reviewed)
+    const fieldErrors = await validatePublication(supabase, payload, body.editorial_reviewed, undefined, plan.automatic)
     if (Object.keys(fieldErrors).length) {
       return NextResponse.json({ success: false, error: 'Publication blocked', details: { field_errors: fieldErrors } }, { status: 422 })
     }
@@ -109,10 +111,10 @@ export async function POST(request: Request) {
   payload.category_id = body.category ? await resolveCategoryId(body.category, supabase) : null
 
   // 4. Insert post with tags
-  const { post, error } = await insertPostWithTags(supabase, payload, body.tags)
+  const { post, error } = await insertPostWithTags(supabase, payload, body.tags, plan)
 
   if (error) {
-    return NextResponse.json({ success: false, error }, { status: 500 })
+    return NextResponse.json({ success: false, error, ...(error === SLUG_CONFLICT ? { details: { field_errors: { slug: [error] } } } : {}) }, { status: error === SLUG_CONFLICT ? 409 : 500 })
   }
 
   if (post?.status === 'published') {

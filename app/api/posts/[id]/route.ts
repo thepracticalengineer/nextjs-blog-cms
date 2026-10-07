@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server'
 import { postApiSchema, validatePublication } from '@/features/posts/publication'
+import { planSlug, isSlugConflict, SLUG_CONFLICT, SLUG_CHANGE_CONFIRMATION } from '@/features/posts/slugs'
 import { refreshPostPaths, refreshDraftPaths } from '@/features/posts/cache'
 import { scheduleNewsletterSend, cancelNewsletterSend } from '@/features/newsletter/actions'
 import { requireApiKey } from '@/lib/apiAuth'
@@ -122,7 +123,14 @@ export async function PATCH(
   const parsed = postApiSchema.safeParse(rawBody)
   if (!parsed.success) return apiError('Invalid post fields', 422, { field_errors: parsed.error.flatten().fieldErrors })
   const body = parsed.data
-  if (body.slug !== undefined) body.slug = body.slug.trim()
+  if (body.slug !== undefined) {
+    const plan = planSlug(body.slug, body.title ?? existing.title, false, existing.slug)
+    if (plan.error) return apiError(plan.error, 422, { field_errors: { slug: [plan.error] } })
+    body.slug = plan.slug
+    if (existing.status === 'published' && body.slug !== existing.slug && body.confirm_slug_change !== true) {
+      return apiError(SLUG_CHANGE_CONFIRMATION, 422, { field_errors: { slug: [SLUG_CHANGE_CONFIRMATION] } })
+    }
+  }
   const candidate = {
     ...existing,
     ...(body.title !== undefined ? { title: body.title.trim() } : {}),
@@ -182,6 +190,7 @@ export async function PATCH(
     .select(POST_FULL_SELECT)
     .single()
 
+  if (isSlugConflict(updateError)) return apiError(SLUG_CONFLICT, 409, { field_errors: { slug: [SLUG_CONFLICT] } })
   if (updateError || !updated) {
     console.error('[PATCH /api/posts/[id]] Update failed:', updateError?.message)
     return apiError('The post changed or could not be saved. Reload before trying again.', 409)

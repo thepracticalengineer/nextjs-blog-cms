@@ -9,7 +9,6 @@ vi.mock('@/lib/rateLimit', () => ({ checkRateLimit: vi.fn().mockReturnValue({ al
 vi.mock('@/features/api-keys/apiKeyService', () => ({
   resolveTagIds: vi.fn().mockResolvedValue([]),
   resolveCategoryId: vi.fn().mockResolvedValue(null),
-  generateUniqueSlugForApi: vi.fn().mockResolvedValue('new-slug'),
   hashApiKey: vi.fn().mockReturnValue('hashed-key'),
 }))
 
@@ -169,7 +168,7 @@ describe('PATCH /api/posts/[id]', () => {
   it('preserves the original publication timestamp and does not requeue live edits', async () => {
     const db = postClient([{ ...validPost, status: 'published', published_at: '2026-01-01T00:00:00Z' }])
     vi.mocked(createServiceClient).mockReturnValue(db.client)
-    const res = await PATCH(makeReq('PATCH', { slug: 'new-engineering-slug', editorial_reviewed: true }), makeParams('post-1'))
+    const res = await PATCH(makeReq('PATCH', { slug: 'new-engineering-slug', editorial_reviewed: true, confirm_slug_change: true }), makeParams('post-1'))
     expect(res.status).toBe(200)
     expect(db.posts[0].published_at).toBe('2026-01-01T00:00:00Z')
     expect(scheduleNewsletterSend).not.toHaveBeenCalled()
@@ -241,4 +240,21 @@ describe('DELETE /api/posts/[id]', () => {
     expect(json.success).toBe(true)
     expect(json.message).toBe('Post deleted successfully.')
   })
+})
+
+it('returns a slug field error for a PATCH uniqueness race', async () => {
+  const db = postClient([validPost]); db.simulateSlugRace()
+  mockCreateServiceClient.mockReturnValue(db.client)
+  const response = await PATCH(makeReq('PATCH', { slug: 'race-url' }), makeParams(validPost.id))
+  expect(response.status).toBe(409)
+  expect((await response.json()).details.field_errors.slug[0]).toContain('Choose another')
+  expect(db.posts[0].slug).toBe(validPost.slug)
+})
+it('requires explicit URL confirmation even when publication review is confirmed', async () => {
+  const db = postClient([{ ...validPost, status: 'published' }])
+  mockCreateServiceClient.mockReturnValue(db.client)
+  const response = await PATCH(makeReq('PATCH', { slug: 'new-public-url', editorial_reviewed: true }), makeParams(validPost.id))
+  expect(response.status).toBe(422)
+  expect((await response.json()).details.field_errors.slug[0]).toContain('Confirm')
+  expect(db.writes).toHaveLength(0)
 })

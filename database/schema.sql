@@ -141,3 +141,9 @@ alter table public.posts enable row level security;
 alter table public.categories enable row level security;
 alter table public.tags enable row level security;
 alter table public.post_tags enable row level security;
+
+-- POST URL RESERVATIONS AND PERMANENT REDIRECTS
+-- After this base schema, execute
+-- supabase/migrations/20261007055822_post_slug_routes.sql.
+-- That migration is the single source for reservation tables, policies and
+-- triggers, so manual setup and CLI migrations use identical definitions.
