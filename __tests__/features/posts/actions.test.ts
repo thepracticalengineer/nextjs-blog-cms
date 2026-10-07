@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('server-only', () => ({}))
 vi.mock('@/lib/auth/session', () => ({ getProfile: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 vi.mock('@/features/posts/cache', () => ({ refreshPostPaths: vi.fn(), refreshDraftPaths: vi.fn() }))
 vi.mock('@/features/newsletter/actions', () => ({ scheduleNewsletterSend: vi.fn(), cancelNewsletterSend: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn() }))
-import { createPost, publishPost, updatePost, unpublishPost } from '@/features/posts/actions'
+import { createPost, publishPost, updatePost, unpublishPost, retryNewsletterScheduling } from '@/features/posts/actions'
 import { getProfile } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
@@ -24,7 +25,9 @@ function useDb(posts = [validPost]) {
   return db
 }
 beforeEach(() => {
-  vi.clearAllMocks()
+  vi.resetAllMocks()
+  vi.mocked(scheduleNewsletterSend).mockResolvedValue(undefined)
+  vi.mocked(cancelNewsletterSend).mockResolvedValue(undefined)
   vi.mocked(getProfile).mockResolvedValue({ id: 'user-1', role: 'author', full_name: 'Frank Mendez' } as Awaited<ReturnType<typeof getProfile>>)
 })
 describe('dashboard publication actions', () => {
@@ -99,6 +102,67 @@ describe('dashboard publication actions', () => {
     expect((await unpublishPost('post-1')).error).toBeUndefined()
     expect(db.posts[0].status).toBe('draft')
     expect(cancelNewsletterSend).toHaveBeenCalledWith('post-1')
+  })
+  it('reports publish success separately from a scheduling failure', async () => {
+    const db = useDb()
+    vi.mocked(scheduleNewsletterSend).mockRejectedValueOnce(new Error('Database unavailable'))
+    const result = await publishPost('post-1', values)
+    expect(result.error).toBeUndefined()
+    expect(result.newsletterWarning).toContain('Post published')
+    expect(db.posts[0].status).toBe('published')
+  })
+  it('reports unpublish success even when queue cancellation fails', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    vi.mocked(cancelNewsletterSend).mockRejectedValueOnce(new Error('Database unavailable'))
+    const result = await unpublishPost('post-1')
+    expect(result.error).toBeUndefined()
+    expect(result.newsletterWarning).toContain('Post unpublished')
+    expect(db.posts[0].status).toBe('draft')
+    expect(refreshPostPaths).toHaveBeenCalled()
+  })
+})
+
+describe('newsletter scheduling retry authorization', () => {
+  it('allows the author to retry a missing notification', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    expect(await retryNewsletterScheduling('post-1', 'user-1')).toEqual({})
+    expect(scheduleNewsletterSend).toHaveBeenCalledExactlyOnceWith('post-1')
+    expect(db.writes).toEqual([])
+  })
+  it('allows a never-claimed failed send to be retried', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    db.sends.push({ post_id: 'post-1', status: 'failed', sending_started_at: null, sent_at: null })
+    expect(await retryNewsletterScheduling('post-1')).toEqual({})
+    expect(scheduleNewsletterSend).toHaveBeenCalledOnce()
+  })
+  it.each(['pending', 'sending', 'sent', 'failed'])('refuses retries of queued or previously claimed %s sends', async status => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    db.sends.push({ post_id: 'post-1', status, sending_started_at: status === 'pending' ? null : '2026-01-01T00:00:00Z' })
+    expect((await retryNewsletterScheduling('post-1')).error).toContain('duplicate')
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('refuses anonymous, changed-account, other-author and unpublished retries', async () => {
+    useDb([{ ...validPost, status: 'published' }])
+    vi.mocked(getProfile).mockResolvedValueOnce(null)
+    expect((await retryNewsletterScheduling('post-1')).error).toBe('Unauthorized')
+    expect((await retryNewsletterScheduling('post-1', 'other-user')).error).toContain('account changed')
+    useDb([{ ...validPost, status: 'published', author_id: 'other-user' }])
+    expect((await retryNewsletterScheduling('post-1')).error).toBe('Unauthorized')
+    useDb()
+    expect((await retryNewsletterScheduling('post-1')).error).toContain('Publish')
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('fails closed when queue status is unavailable', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    db.failQuery('newsletter_sends', 'select')
+    expect((await retryNewsletterScheduling('post-1')).error).toContain('unavailable')
+    expect(scheduleNewsletterSend).not.toHaveBeenCalled()
+  })
+  it('reports retry scheduling failure without modifying the published post', async () => {
+    const db = useDb([{ ...validPost, status: 'published' }])
+    vi.mocked(scheduleNewsletterSend).mockRejectedValueOnce(new Error('DB unavailable'))
+    expect((await retryNewsletterScheduling('post-1')).error).toContain('remains published')
+    expect(db.writes).toEqual([])
   })
 })
 

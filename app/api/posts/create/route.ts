@@ -97,10 +97,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, error, ...(error === SLUG_CONFLICT ? { details: { field_errors: { slug: [error] } } } : {}) }, { status: error === SLUG_CONFLICT || writeError?.code === '22023' ? 409 : 500 })
   }
 
+  let newsletterWarning: string | undefined
   if (post?.status === 'published' && !replayed) {
-    try { await scheduleNewsletterSend(post.id) } catch (err) { console.error('[API] Newsletter scheduling failed:', err) }
+    try { await scheduleNewsletterSend(post.id) } catch (err) {
+      console.error('[API] Newsletter scheduling failed:', err)
+      newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status in the dashboard before retrying.'
+    }
   }
   if (post?.status === 'published') refreshPostPaths(post.slug)
   else refreshDraftPaths()
-  return NextResponse.json({ success: true, data: { post } }, { status: 201, ...(replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : {}) })
+  return NextResponse.json({ success: true, data: { post }, ...(newsletterWarning ? { newsletter_warning: newsletterWarning } : {}) }, { status: 201, ...(replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : {}) })
 }

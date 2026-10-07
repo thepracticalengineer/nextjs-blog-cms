@@ -311,6 +311,18 @@ Readers subscribe via a widget at the bottom of every blog post. When a post is 
 3. A Vercel Cron Job (or any HTTP scheduler) calls `POST /api/newsletter/send` every minute
 4. The endpoint claims pending sends past their `scheduled_at`, emails all active subscribers via Resend, and marks the send as `sent`
 
+### Publishing, cancellation, and retries
+
+The post editor shows whether publishing will notify active subscribers, the configured delay (60 minutes by default), and the current notification status. **Refresh status** reads the latest queue state. The delay is the earliest eligible send time; actual delivery starts on a later dispatcher run.
+
+Unpublishing cancels pending or in-progress notifications while retaining their queue row. The dispatcher checks publication and queue status before each batch of up to 10 recipients. Emails already handed off cannot be recalled; withdrawing publication stops later batches.
+
+Republishing a canceled notification that was **never claimed** restores the same row with a fresh delay. Previously claimed, partially failed, or completed notifications are never restarted, even on republish. This conservative policy prevents duplicate emails when provider handoff is uncertain. The unique `post_id` constraint and conditional queue updates also protect concurrent scheduling and dispatch attempts.
+
+Publication remains successful if newsletter scheduling fails. The editor shows a separate warning and offers **Retry newsletter scheduling** only for published posts with a missing notification or a never-claimed failed notification. The server checks ownership, publication readiness, and queue state again; retries do not save unsaved editor input. Queue read failures block retries until status can be read. REST create/update responses also include `newsletter_warning` when scheduling or cancellation cannot be confirmed, while preserving the successful post response. Provider-returned errors mark delivery as failed rather than sent.
+
+Verification: run the Vitest newsletter/editor suites with isolated recipients and a mocked provider. Run `psql -v ON_ERROR_STOP=1 -f database/tests/newsletter_queue.sql` only against an isolated migrated database to check queue deduplication, republish, and claimed-cancellation invariants; fixtures roll back.
+
 ### Unsubscribe
 
 Every email contains a unique unsubscribe link: `GET /api/newsletter/unsubscribe?token=<token>`. Clicking it sets `unsubscribed_at` and redirects to `/newsletter/unsubscribed`.

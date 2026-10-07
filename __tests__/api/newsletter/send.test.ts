@@ -75,6 +75,7 @@ function makeSupabase({
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     single: vi.fn().mockImplementation(async () => ({ data: { status: sendStatuses[Math.min(statusRead++, sendStatuses.length - 1)] }, error: null })),
+    then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [pendingSend], error: null }).then(resolve),
   })
 
   return { from: vi.fn((table: string) => {

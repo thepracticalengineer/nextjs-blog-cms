@@ -20,6 +20,8 @@ import { createPost, updatePost, publishPost, unpublishPost } from '@/features/p
 import { useDraftRecovery, type DraftIdentity } from '@/features/posts/drafts/use-draft-recovery'
 import type { FieldErrors } from '@/features/posts/publication'
 import type { PostWithRelations, Category, Tag as TagType } from '@/features/posts/types'
+import type { PostNewsletterState } from '@/features/newsletter/types'
+import { PostNewsletter } from './PostNewsletter'
 
 const postSchema = z.object({
   title: z.string(),
@@ -41,6 +43,7 @@ interface PostEditorProps {
   readonly post?: PostWithRelations
   readonly categories: Category[]
   readonly tags: TagType[]
+  readonly newsletter?: PostNewsletterState
 }
 
 // Deterministic color palette for tags — muted, sophisticated hues
@@ -59,7 +62,7 @@ function getTagPalette(index: number) {
   return TAG_PALETTES[index % TAG_PALETTES.length]
 }
 
-export function PostEditor({ post, categories, tags, draftIdentity }: PostEditorProps) {
+export function PostEditor({ post, categories, tags, draftIdentity, newsletter }: PostEditorProps) {
   const router = useRouter()
   const [manuallyEditedSlug, setManuallyEditedSlug] = useState(false)
   const [generatedSlug, setGeneratedSlug] = useState('')
@@ -67,6 +70,7 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
   const [allowSlugChange, setAllowSlugChange] = useState(false)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [newsletterWarning, setNewsletterWarning] = useState<string | null>(null)
   const [publicationFieldErrors, setPublicationFieldErrors] = useState<FieldErrors>({})
   const [showBackToTop, setShowBackToTop] = useState(false)
 
@@ -186,6 +190,8 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
           await recovery.finishSave({ ...values, slug: result.data.slug }, result.data.updated_at)
         }
         toast.success(isPublished ? 'Post unpublished' : 'Post saved and published!')
+        setNewsletterWarning(result.newsletterWarning ?? null)
+        if (result.newsletterWarning) toast.warning(result.newsletterWarning)
         router.refresh()
       }
     } catch {
@@ -429,6 +435,12 @@ export function PostEditor({ post, categories, tags, draftIdentity }: PostEditor
 
           {/* Right: sidebar */}
           <div className="space-y-4">
+
+            {newsletter && (
+              <SidebarCard icon={Send} title="Newsletter">
+                <PostNewsletter key={`${post?.updated_at}:${newsletter.send?.status}:${newsletter.send?.scheduled_at}:${newsletter.error}`} state={newsletter} postId={post?.id} editorId={draftIdentity?.userId} published={isPublished} disabled={saving || publishing || recoveryPending} warning={newsletterWarning} onScheduled={() => setNewsletterWarning(null)} />
+              </SidebarCard>
+            )}
 
             <SidebarCard icon={Check} title="Publication readiness">
               <ul className="list-disc pl-4 text-xs text-muted-foreground space-y-2">

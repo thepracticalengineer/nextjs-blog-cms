@@ -2,16 +2,17 @@ import 'server-only'
 
 import { createServiceClient } from '@/lib/supabase/service'
 import { validatePublication } from '@/features/posts/publication'
+import { getNewsletterDelayMinutes } from './config'
 
 export async function scheduleNewsletterSend(postId: string): Promise<void> {
-  const parsed = parseInt(process.env.NEWSLETTER_DELAY_MINUTES ?? '', 10)
-  const delayMinutes = Number.isFinite(parsed) && parsed >= 0 ? parsed : 60
+  const delayMinutes = getNewsletterDelayMinutes()
   const scheduledAt = new Date(Date.now() + delayMinutes * 60 * 1000).toISOString()
   const supabase = createServiceClient()
-  const { data: post } = await supabase.from('posts').select('*').eq('id', postId).single()
-  if (!post || post.status !== 'published') return
+  const { data: post, error: postError } = await supabase.from('posts').select('*').eq('id', postId).single()
+  if (postError) throw postError
+  if (!post || post.status !== 'published') throw new Error('The post must be published before scheduling a newsletter.')
   const fieldErrors = await validatePublication(supabase, post, true, postId)
-  if (Object.keys(fieldErrors).length) return
+  if (Object.keys(fieldErrors).length) throw new Error('The published post is not ready for newsletter delivery.')
   const { error } = await supabase
     .from('newsletter_sends')
     .upsert(
@@ -36,5 +37,5 @@ export async function cancelNewsletterSend(postId: string): Promise<void> {
   // checks current publication state, including already-claimed sends.
   const { error } = await createServiceClient().from('newsletter_sends')
     .update({ status: 'failed' }).eq('post_id', postId).in('status', ['pending', 'sending'])
-  if (error) console.error('[cancelNewsletterSend] Failed to cancel send:', error.message)
+  if (error) throw error
 }

@@ -62,6 +62,15 @@ describe('POST /api/posts/create', () => {
     expect(db.posts[0]).toMatchObject({ status: 'published', title: validPost.title })
     expect(scheduleNewsletterSend).toHaveBeenCalledWith('created-post')
   })
+  it('returns creation success and a separate newsletter warning after scheduling failure', async () => {
+    const db = postClient()
+    vi.mocked(createServiceClient).mockReturnValue(db.client)
+    vi.mocked(scheduleNewsletterSend).mockRejectedValueOnce(new Error('Queue unavailable'))
+    const res = await POST(request({ ...validApiPost, status: 'published', editorial_reviewed: true }))
+    expect(res.status).toBe(201)
+    expect(await res.json()).toMatchObject({ success: true, newsletter_warning: expect.stringContaining('Post published') })
+    expect(db.posts[0].status).toBe('published')
+  })
   it('cannot publish under a missing or unnamed author', async () => {
     const db = postClient([], null)
     vi.mocked(createServiceClient).mockReturnValue(db.client)

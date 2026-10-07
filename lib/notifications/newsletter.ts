@@ -38,7 +38,7 @@ export async function sendNewsletterEmail(
   const title = escapeHtml(post.title)
   const excerpt = post.excerpt ? escapeHtml(post.excerpt) : ''
 
-  await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: fromEmail,
     to: subscriber.email,
     subject: sanitizeSubject(`New post: ${post.title}`),
@@ -56,4 +56,5 @@ export async function sendNewsletterEmail(
       </div>
     `,
   })
+  if (error) throw new Error(`Newsletter delivery failed: ${error.message}`)
 }

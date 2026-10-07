@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import { createPost, publishPost, updatePost } from '@/features/posts/actions'
+import { createPost, publishPost, updatePost, retryNewsletterScheduling } from '@/features/posts/actions'
+import { toast } from 'sonner'
+import type { NewsletterSend } from '@/features/newsletter/types'
 import { validPost } from '../helpers/publication'
 import type { PostWithRelations } from '@/features/posts/types'
 import { PostEditor } from '@/components/dashboard/PostEditor'
@@ -16,10 +18,11 @@ vi.mock('@/features/posts/actions', () => ({
   updatePost: vi.fn(),
   publishPost: vi.fn(),
   unpublishPost: vi.fn(),
+  retryNewsletterScheduling: vi.fn(),
 }))
 
 // ── Mock sonner ───────────────────────────────────────────────────────────────
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 
 // ── Mock TipTap Editor ────────────────────────────────────────────────────────
 vi.mock('@/components/editor/Editor', () => ({
@@ -89,6 +92,53 @@ describe('PostEditor — back to top button', () => {
 })
 
 const editorPost = { ...validPost, author: { id: 'user-1', full_name: 'Frank Mendez', avatar_url: null }, category: null, tags: [] } as PostWithRelations
+
+describe('newsletter visibility and scheduling recovery', () => {
+  beforeEach(() => vi.clearAllMocks())
+  const newsletter = { delayMinutes: 45, send: null }
+  const send = { id: 'send-1', post_id: editorPost.id, status: 'pending', scheduled_at: '2026-10-08T00:00:00Z', sending_started_at: null, sent_at: null, created_at: '2026-10-07T00:00:00Z' } as NewsletterSend
+  it('discloses the notification consequence and delay before publishing', () => {
+    render(<PostEditor {...minimalProps} post={editorPost} newsletter={newsletter} />)
+    expect(screen.getByRole('region', { name: 'Newsletter notification' })).toHaveTextContent('Publishing will notify active subscribers')
+    expect(screen.getByText(/Configured delay: 45 minutes/)).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Retry newsletter scheduling' })).not.toBeInTheDocument()
+  })
+  it.each(['pending', 'sending', 'sent', 'failed'] as const)('shows %s queue status and forbids retries after delivery starts', status => {
+    render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, send: { ...send, status, sending_started_at: '2026-10-07T00:00:00Z' } }} />)
+    expect(screen.getByRole('region', { name: 'Newsletter notification' })).toHaveTextContent({ pending: 'Queued', sending: 'Sending', sent: 'Sent', failed: 'Failed' }[status])
+    expect(screen.queryByRole('button', { name: 'Retry newsletter scheduling' })).not.toBeInTheDocument()
+  })
+  it('reports publication success separately from scheduling failure and preserves input', async () => {
+    const warning = 'Post published, but newsletter scheduling could not be confirmed.'
+    vi.mocked(publishPost).mockResolvedValueOnce({ data: { ...editorPost, status: 'published' }, newsletterWarning: warning })
+    render(<PostEditor {...minimalProps} post={editorPost} newsletter={newsletter} />)
+    fireEvent.change(screen.getByLabelText('Post title'), { target: { value: 'My Reviewed Engineering Article' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Publish' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(warning))
+    expect(toast.success).toHaveBeenCalledWith('Post saved and published!')
+    expect(toast.warning).toHaveBeenCalledWith(warning)
+    expect(screen.getByLabelText('Post title')).toHaveValue('My Reviewed Engineering Article')
+  })
+  it('retries only newsletter scheduling without saving or publishing unsaved editor input', async () => {
+    vi.mocked(retryNewsletterScheduling).mockResolvedValueOnce({})
+    render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={newsletter} />)
+    fireEvent.change(screen.getByLabelText('Post title'), { target: { value: 'Unsaved correction' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Retry newsletter scheduling' }))
+    await waitFor(() => expect(retryNewsletterScheduling).toHaveBeenCalledExactlyOnceWith(editorPost.id, undefined))
+    expect(updatePost).not.toHaveBeenCalled()
+    expect(publishPost).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Post title')).toHaveValue('Unsaved correction')
+  })
+  it('shows retry errors and fails closed when queue status is unavailable', async () => {
+    vi.mocked(retryNewsletterScheduling).mockResolvedValueOnce({ error: 'The post remains published.' })
+    const { rerender } = render(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={newsletter} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry newsletter scheduling' }))
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('The post remains published.'))
+    rerender(<PostEditor {...minimalProps} post={{ ...editorPost, status: 'published' }} newsletter={{ ...newsletter, error: 'Newsletter status is unavailable.' }} />)
+    expect(screen.queryByRole('button', { name: 'Retry newsletter scheduling' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh status' })).toBeVisible()
+  })
+})
 
 describe('PostEditor publication readiness', () => {
   beforeEach(() => { vi.clearAllMocks() })

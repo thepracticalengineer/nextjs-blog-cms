@@ -21,3 +21,9 @@ export type SubscriberStats = {
   sends_dispatched: number
   unsubscribed: number
 }
+
+export type PostNewsletterState = {
+  delayMinutes: number
+  send: NewsletterSend | null
+  error?: string
+}

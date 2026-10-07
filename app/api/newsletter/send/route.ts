@@ -48,11 +48,15 @@ export async function POST(req: NextRequest) {
 
   // Recovery: mark sends stuck in 'sending' for >10 minutes as failed
   const stuckCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-  await supabase
+  const { error: recoveryError } = await supabase
     .from('newsletter_sends')
     .update({ status: 'failed' })
     .eq('status', 'sending')
     .lt('sending_started_at', stuckCutoff)
+  if (recoveryError) {
+    console.error('[newsletter/send] Failed to recover stuck sends:', recoveryError.message)
+    return NextResponse.json({ error: 'DB error' }, { status: 500 })
+  }
 
   // Fetch pending sends that are due, then claim only the ones we actually update
   // (concurrent invocations will fail to claim rows already set to 'sending')
@@ -118,7 +122,9 @@ export async function POST(req: NextRequest) {
       const reason = postError || !postData ? 'post unavailable'
         : postData.status !== 'published' ? 'post unpublished' : 'publication validation failed'
       console.error(`[newsletter/send] Skipping post ${send.post_id}: ${reason}`, fieldErrors)
-      await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
+      const { error } = await supabase.from('newsletter_sends').update({ status: 'failed' })
+        .eq('id', send.id).eq('status', 'sending')
+      if (error) return NextResponse.json({ error: 'DB error' }, { status: 500 })
       continue
     }
 
@@ -134,17 +140,19 @@ export async function POST(req: NextRequest) {
 
     if (stopped) {
       console.warn(`[newsletter/send] Send ${send.id} stopped: publication withdrawn, queue canceled, or state unavailable`)
-      await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
     } else if (failures > 0) {
       console.error(`[newsletter/send] ${failures}/${activeSubscribers.length} emails failed for send ${send.id}`)
-      await supabase.from('newsletter_sends').update({ status: 'failed' }).eq('id', send.id)
-    } else {
-      await supabase
-        .from('newsletter_sends')
-        .update({ status: 'sent', sent_at: new Date().toISOString() })
-        .eq('id', send.id)
-      dispatched++
     }
+    // Do not overwrite a cancellation that raced with the final email batch.
+    const sent = !stopped && failures === 0
+    const { data: completed, error: completionError } = await supabase.from('newsletter_sends')
+      .update(sent ? { status: 'sent', sent_at: new Date().toISOString() } : { status: 'failed' })
+      .eq('id', send.id).eq('status', 'sending').select('id')
+    if (completionError) {
+      console.error('[newsletter/send] Failed to record delivery outcome:', completionError.message)
+      return NextResponse.json({ error: 'DB error' }, { status: 500 })
+    }
+    if (sent && completed?.length) dispatched++
   }
 
   return NextResponse.json({ dispatched })
