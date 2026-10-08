@@ -200,11 +200,11 @@ describe('editorial flags', () => {
   it('shows contextual unfinished-text warnings before review and keeps them visible after confirmation', () => {
     render(<PostEditor {...minimalProps} />)
     fireEvent.change(screen.getByLabelText('Article body'), { target: { value: 'Explain why TODO comments should be tracked.' } })
-    expect(screen.getByRole('status')).toHaveTextContent('Review flagged text')
+    expect(screen.getByText(/Review flagged text:/)).toHaveTextContent('Review flagged text')
     fireEvent.click(screen.getByRole('checkbox'))
-    expect(screen.getByRole('status')).toHaveTextContent('appropriate in context')
+    expect(screen.getByText(/Review flagged text:/)).toHaveTextContent('appropriate in context')
     fireEvent.change(screen.getByLabelText('Article body'), { target: { value: 'The article is complete.' } })
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Review flagged text:/)).not.toBeInTheDocument()
   })
 })
 

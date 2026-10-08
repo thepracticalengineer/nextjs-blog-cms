@@ -9,7 +9,7 @@ export default async function TagsPage() {
   await requirePermission('tags:write')
 
   const supabase = await createClient()
-  const { data: tags } = await supabase
+  const { data: tags, error } = await supabase
     .from('tags')
     .select('*')
     .order('name')
@@ -20,7 +20,7 @@ export default async function TagsPage() {
         <h1 className="text-2xl font-bold tracking-tight">Tags</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Label your posts with keywords</p>
       </div>
-      <TagsManager tags={tags ?? []} />
+      <TagsManager tags={(tags ?? []).filter(tag => !tag.merged_into)} loadError={!!error} />
     </div>
   )
 }

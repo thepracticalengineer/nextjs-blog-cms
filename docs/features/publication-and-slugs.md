@@ -85,3 +85,29 @@ Optional **Settings** and **SEO** sections start collapsed. SEO title and descri
 Cover images in reader preview and publication use the same image optimizer and configured HTTPS hosts as the public article. Unsupported cover hosts block preview and publication; remove the cover or configure its host with `IMAGE_REMOTE_HOSTS`. Supabase covers must use the public storage path.
 
 If a creation response is lost, retrying the same recovery document reports whether it was already saved as a draft or published. Reload to inspect the saved post and newsletter status before comparing your current input; retries never overwrite that post or queue another newsletter. Publication review remains open during the request and displays failures so authors can return to editing.
+
+## Tag selection and taxonomy
+
+The editor shows selected tags first with removal buttons, followed by a searchable,
+scrollable list. Native buttons support Tab and Enter/Space; pressed state and the
+selected count are exposed to assistive technology. Tag loading errors are distinct
+from an empty taxonomy. Administrators can open tag management in a new tab while
+keeping their writing form open; authors ask an administrator for taxonomy changes.
+
+Tag names use trimmed, single-spaced text (1–100 characters), preserving meaningful
+capitalization. New names are compared case-insensitively. Semantic variants such as
+`SoftwareEngineering` and `Software engineering` require a deliberate admin decision.
+The migration does not automatically merge existing tags.
+
+In **Dashboard → Admin → Tags**, choose the duplicate and the canonical tag, then
+confirm the merge. The transaction deduplicates post relationships and retains the
+old row as a URL/ID alias. `/blog/tag/<old-slug>` redirects permanently to the surviving
+URL; subsequent merges flatten aliases. Old draft IDs resolve to the canonical tag
+when saved. Direct relationship writers also resolve alias IDs through a database
+trigger. Sitemaps and build-time tag discovery include only canonical URLs. Used tags and URL aliases cannot be deleted; unused tags require deletion
+confirmation. Tag slugs cannot be changed in place.
+
+Apply `20261007165155_searchable_tag_taxonomy.sql` before deploying this application.
+Verify merges only in a disposable migrated database using
+`database/tests/tag_taxonomy.sql`. No production taxonomy cleanup is performed by
+this migration.

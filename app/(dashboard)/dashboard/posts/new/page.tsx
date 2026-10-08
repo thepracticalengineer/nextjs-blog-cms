@@ -23,7 +23,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   // the author is still typing, so a redirect here would replace the editor.
   const { data: created } = await supabase.from('posts').select('id, author_id').eq('id', draft).maybeSingle()
   if (created && created.author_id !== profile.id) notFound()
-  const [post, newsletter, { data: categories }, { data: tags }, { data: workingCopies }] = await Promise.all([
+  const [post, newsletter, { data: categories }, { data: tags, error: tagsError }, { data: workingCopies }] = await Promise.all([
     created ? getPostById(draft) : Promise.resolve(null),
     getPostNewsletterState(created?.id),
     supabase.from('categories').select('*').order('name'),
@@ -36,7 +36,7 @@ export default async function NewPostPage({ searchParams }: { searchParams: Prom
   return (
     <div className="p-4 md:p-8 pb-16 animate-page">
       <NewPostRecovery userId={profile.id} documentId={draft} serverCopies={(workingCopies ?? []).map(copy => ({ document_id: copy.document_id, title: draftValuesSchema.safeParse(copy.values).data?.title ?? '', updated_at: copy.updated_at }))} />
-      <PostEditor authorName={profile.full_name} key={`${profile.id}:${draft}`} draftIdentity={{ userId: profile.id, documentId: draft }} post={post ?? undefined} newsletter={newsletter} categories={categories ?? []} tags={tags ?? []} />
+      <PostEditor authorName={profile.full_name} key={`${profile.id}:${draft}`} draftIdentity={{ userId: profile.id, documentId: draft }} post={post ?? undefined} newsletter={newsletter} categories={categories ?? []} tags={tags ?? []} tagsError={!!tagsError} canManageTags={profile.role === 'admin'} />
     </div>
   )
 }

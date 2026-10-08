@@ -27,6 +27,7 @@ import { Editor } from '@/components/editor/Editor'
 import { createPost, updatePost, publishPost, unpublishPost } from '@/features/posts/actions'
 import { useDraftRecovery, type DraftIdentity } from '@/features/posts/drafts/use-draft-recovery'
 import type { FieldErrors } from '@/features/posts/publication'
+import { TagSelector } from '@/features/taxonomy/TagSelector'
 import type { PostWithRelations, Category, Tag as TagType } from '@/features/posts/types'
 import type { PostNewsletterState } from '@/features/newsletter/types'
 import { PostNewsletter } from './PostNewsletter'
@@ -53,26 +54,12 @@ interface PostEditorProps {
   readonly post?: PostWithRelations
   readonly categories: Category[]
   readonly tags: TagType[]
+  readonly tagsError?: boolean
+  readonly canManageTags?: boolean
   readonly newsletter?: PostNewsletterState
 }
 
-// Deterministic color palette for tags — muted, sophisticated hues
-const TAG_PALETTES = [
-  { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', activeBg: 'bg-rose-500', activeText: 'text-white', activeBorder: 'border-rose-500', dot: 'bg-rose-400' },
-  { bg: 'bg-violet-50', border: 'border-violet-200', text: 'text-violet-700', activeBg: 'bg-violet-500', activeText: 'text-white', activeBorder: 'border-violet-500', dot: 'bg-violet-400' },
-  { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', activeBg: 'bg-sky-500', activeText: 'text-white', activeBorder: 'border-sky-500', dot: 'bg-sky-400' },
-  { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', activeBg: 'bg-emerald-500', activeText: 'text-white', activeBorder: 'border-emerald-500', dot: 'bg-emerald-400' },
-  { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', activeBg: 'bg-amber-500', activeText: 'text-white', activeBorder: 'border-amber-500', dot: 'bg-amber-400' },
-  { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700', activeBg: 'bg-pink-500', activeText: 'text-white', activeBorder: 'border-pink-500', dot: 'bg-pink-400' },
-  { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', activeBg: 'bg-indigo-500', activeText: 'text-white', activeBorder: 'border-indigo-500', dot: 'bg-indigo-400' },
-  { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', activeBg: 'bg-teal-500', activeText: 'text-white', activeBorder: 'border-teal-500', dot: 'bg-teal-400' },
-]
-
-function getTagPalette(index: number) {
-  return TAG_PALETTES[index % TAG_PALETTES.length]
-}
-
-export function PostEditor({ post: initialPost, categories, tags, draftIdentity, newsletter: initialNewsletter, authorName }: PostEditorProps) {
+export function PostEditor({ post: initialPost, categories, tags, tagsError, canManageTags, draftIdentity, newsletter: initialNewsletter, authorName }: PostEditorProps) {
   const [createdPost, setCreatedPost] = useState<PostWithRelations>()
   const createdIsLatest = createdPost && (!initialPost?.updated_at || Date.parse(createdPost.updated_at ?? '') >= Date.parse(initialPost.updated_at))
   const post = createdIsLatest ? createdPost : initialPost
@@ -152,11 +139,11 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
 
   function toggleTag(tagId: string) {
     setValue('editorial_reviewed', false)
-    const current = selectedTagIds ?? []
+    const current = [...new Set((selectedTagIds ?? []).map(id => tags.find(tag => tag.id === id)?.merged_into ?? id))]
     if (current.includes(tagId)) {
-      setValue('tag_ids', current.filter((id) => id !== tagId))
+      setValue('tag_ids', current.filter((id) => id !== tagId), { shouldDirty: true })
     } else {
-      setValue('tag_ids', [...current, tagId])
+      setValue('tag_ids', [...current, tagId], { shouldDirty: true })
     }
   }
 
@@ -537,42 +524,7 @@ export function PostEditor({ post: initialPost, categories, tags, draftIdentity,
 
             {/* ── Tags card ──────────────────────────────── */}
             <SidebarCard icon={Tag} title="Tags">
-              {tags.length === 0 ? (
-                <p className="text-xs text-muted-foreground/60 italic">No tags created yet.</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {tags.map((tag, i) => {
-                    const palette = getTagPalette(i)
-                    const isSelected = selectedTagIds?.includes(tag.id)
-
-                    return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => toggleTag(tag.id)}
-                        className={[
-                          'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 select-none cursor-pointer',
-                          isSelected
-                            ? `${palette.activeBg} ${palette.activeText} ${palette.activeBorder} shadow-xs scale-[1.03]`
-                            : `${palette.bg} ${palette.text} ${palette.border} hover:scale-[1.03] hover:shadow-xs`,
-                        ].join(' ')}
-                      >
-                        {isSelected
-                          ? <Check className="h-3 w-3 shrink-0" />
-                          : <span className={`h-1.5 w-1.5 rounded-full ${palette.dot} shrink-0`} />
-                        }
-                        {tag.name}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-
-              {selectedTagIds && selectedTagIds.length > 0 && (
-                <p className="text-xs text-muted-foreground/60 mt-1">
-                  {selectedTagIds.length} tag{selectedTagIds.length === 1 ? '' : 's'} selected
-                </p>
-              )}
+              <TagSelector tags={tags} selectedIds={selectedTagIds ?? []} onToggle={toggleTag} error={tagsError} canManage={canManageTags} />
             </SidebarCard>
 
             {/* ── SEO card ───────────────────────────────── */}

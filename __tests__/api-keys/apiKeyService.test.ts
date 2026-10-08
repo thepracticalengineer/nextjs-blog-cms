@@ -263,6 +263,17 @@ describe('deleteApiKey', () => {
 })
 
 describe('resolveTagIds', () => {
+  it('resolves merged aliases and deduplicates canonical relationships', async () => {
+    const single = vi.fn()
+      .mockResolvedValueOnce({ data: { id: 'alias', merged_into: 'canonical' } })
+      .mockResolvedValueOnce({ data: { id: 'canonical', merged_into: null } })
+    const select = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ single }) })
+    const { createServiceClient } = await import('@/lib/supabase/service')
+    const supabase = { from: vi.fn().mockReturnValue({ select }) } as unknown as ReturnType<typeof createServiceClient>
+    const { resolveTagIds } = await import('@/features/api-keys/apiKeyService')
+    expect(await resolveTagIds(['SoftwareEngineering', 'Software engineering'], supabase)).toEqual(['canonical'])
+    expect(select).toHaveBeenCalledWith('id, merged_into')
+  })
   it('returns ids for existing tags', async () => {
     vi.resetModules()
     const { createServiceClient } = await import('@/lib/supabase/service')
