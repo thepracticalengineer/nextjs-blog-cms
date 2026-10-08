@@ -22,7 +22,7 @@ export function TagSelector({ tags, selectedIds, onToggle, error, canManage = fa
           <span className="min-w-0 break-words [overflow-wrap:anywhere]">{tag.name}</span><span aria-hidden="true">×</span>
         </Button>)}
       </div>
-      <p role="status" className="text-xs text-muted-foreground">{chosen.length} tags selected</p>
+      <p role="status" className="text-xs text-muted-foreground">{chosen.length} tag{chosen.length === 1 ? '' : 's'} selected</p>
       <Label htmlFor={id}>Search tags</Label>
       <Input id={id} value={search} onChange={event => setSearch(event.target.value)} placeholder="Search by name…" />
       <div aria-label="Available tags" className="flex max-h-48 flex-col gap-1 overflow-y-auto">

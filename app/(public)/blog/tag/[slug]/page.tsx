@@ -15,7 +15,7 @@ export async function generateStaticParams() {
   const { createStaticClient } = await import('@/lib/supabase/static')
   const supabase = createStaticClient()
   if (!supabase) return []
-  const { data } = await supabase.from('tags').select('slug')
+  const { data } = await supabase.from('tags').select('slug').is('merged_into', null)
   return ((data ?? []) as { slug: string }[]).map((t) => ({ slug: t.slug }))
 }
 
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: TagPageProps): Promise<Metada
 
   if (!tag) return {}
   if (tag.merged_into) {
-    const { data: canonical } = await supabase.from('tags').select('slug').eq('id', tag.merged_into).single()
+    const { data: canonical } = await supabase.from('tags').select('slug').is('merged_into', null).eq('id', tag.merged_into).single()
     if (canonical) permanentRedirect(`/blog/tag/${canonical.slug}`)
   }
   return {
@@ -51,7 +51,7 @@ export default async function TagPage({ params }: TagPageProps) {
 
   if (!tag) notFound()
   if (tag.merged_into) {
-    const { data: canonical } = await supabase.from('tags').select('slug').eq('id', tag.merged_into).single()
+    const { data: canonical } = await supabase.from('tags').select('slug').is('merged_into', null).eq('id', tag.merged_into).single()
     if (!canonical) notFound()
     permanentRedirect(`/blog/tag/${canonical.slug}`)
   }

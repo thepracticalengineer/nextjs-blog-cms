@@ -1,10 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
 import { test, expect } from '@playwright/test'
-import { readFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { assertDedicatedTestProject } from '../environment'
 
-const prefix = 'E2E taxonomy '
-const longName = `${prefix}${'LongName'.repeat(10)}`
+const fixtureId = randomUUID()
+const email = `taxonomy-${fixtureId}@playwright.local`
+const password = process.env.E2E_TEST_PASSWORD ?? 'E2eTestPassword123!'
+const prefix = `E2E taxonomy ${fixtureId.slice(0, 8)} `
+const longName = `${prefix}${'LongName'.repeat(9)}`
 let tagIds: string[] = []
 let userId: string
 let postId: string
@@ -14,14 +17,17 @@ const admin = () => {
 }
 
 test.beforeAll(async () => {
-  const state = JSON.parse(readFileSync('.e2e-state.json', 'utf8'))
-  userId = state.userId
-  postId = state.seedPostIds[0]
   const client = admin()
+  const { data: account, error: accountError } = await client.auth.admin.createUser({ email, password, email_confirm: true })
+  if (accountError) throw accountError
+  userId = account.user.id
+  const { data: post, error: postError } = await client.from('posts').insert({ author_id: userId, title: 'Taxonomy fixture', slug: `taxonomy-${fixtureId}`, status: 'draft' }).select('id').single()
+  if (postError) throw postError
+  postId = post.id
   const { error: roleError } = await client.from('profiles').update({ role: 'admin' }).eq('id', userId)
   if (roleError) throw roleError
-  const fixtures = Array.from({ length: 55 }, (_, i) => ({ name: `${prefix}${i}`, slug: `e2e-taxonomy-${i}` }))
-  fixtures.push({ name: longName, slug: 'e2e-taxonomy-long' }, { name: `${prefix}duplicate`, slug: 'e2e-taxonomy-duplicate' })
+  const fixtures = Array.from({ length: 55 }, (_, i) => ({ name: `${prefix}${i}`, slug: `e2e-taxonomy-${fixtureId}-${i}` }))
+  fixtures.push({ name: longName, slug: `e2e-taxonomy-${fixtureId}-long` }, { name: `${prefix}duplicate`, slug: `e2e-taxonomy-${fixtureId}-duplicate` })
   const { data, error } = await client.from('tags').insert(fixtures).select('id')
   if (error) throw error
   tagIds = data.map(tag => tag.id)
@@ -29,19 +35,28 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   const client = admin()
-  if (tagIds.length) {
-    await client.from('post_tags').delete().in('tag_id', tagIds)
-    await client.from('tags').update({ merged_into: null }).in('id', tagIds)
-    const { error } = await client.from('tags').delete().in('id', tagIds)
-    if (error) throw error
+  try {
+    if (tagIds.length) {
+      const { error: relationshipError } = await client.from('post_tags').delete().in('tag_id', tagIds)
+      if (relationshipError) throw relationshipError
+      const { error: aliasError } = await client.from('tags').update({ merged_into: null }).in('id', tagIds)
+      if (aliasError) throw aliasError
+      const { error } = await client.from('tags').delete().in('id', tagIds)
+      if (error) throw error
+    }
+  } finally {
+    if (userId) {
+      await client.from('posts').delete().eq('author_id', userId)
+      const { error } = await client.auth.admin.deleteUser(userId)
+      if (error) throw error
+    }
   }
-  await client.from('profiles').update({ role: 'author' }).eq('id', userId)
 })
 
 test('search, keyboard selection, mobile wrapping, saved relationships and merge redirects', async ({ page, request }) => {
   await page.goto('/login')
-  await page.getByLabel('Email address', { exact: true }).fill('e2e-test@playwright.local')
-  await page.getByLabel('Password', { exact: true }).fill(process.env.E2E_TEST_PASSWORD ?? 'E2eTestPassword123!')
+  await page.getByLabel('Email address', { exact: true }).fill(email)
+  await page.getByLabel('Password', { exact: true }).fill(password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await expect(page).toHaveURL(/\/dashboard$/)
   await page.goto(`/dashboard/posts/${postId}/edit`)
@@ -79,8 +94,11 @@ test('search, keyboard selection, mobile wrapping, saved relationships and merge
   const { data } = await admin().from('post_tags').select('tag_id').eq('post_id', postId)
   expect(data?.map(row => row.tag_id)).toContain(tagIds[0])
   expect(data?.map(row => row.tag_id)).not.toContain(tagIds.at(-1))
-  const response = await request.get('/blog/tag/e2e-taxonomy-duplicate', { maxRedirects: 0 })
+  const response = await request.get(`/blog/tag/e2e-taxonomy-${fixtureId}-duplicate`, { maxRedirects: 0 })
   expect(response.status()).toBe(308)
-  expect(response.headers().location).toBe('/blog/tag/e2e-taxonomy-0')
+  expect(response.headers().location).toBe(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)
+  const sitemap = await request.get('/sitemap.xml')
+  expect(await sitemap.text()).toContain(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)
+  expect(await sitemap.text()).not.toContain(`/blog/tag/e2e-taxonomy-${fixtureId}-duplicate`)
   await management.close()
 })

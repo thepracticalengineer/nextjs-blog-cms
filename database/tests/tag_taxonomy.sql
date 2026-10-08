@@ -28,6 +28,15 @@ do $$ begin
     raise exception 'Alias deleted';
   exception when check_violation then null; end;
 end $$;
+-- Direct AI-style inserts and updates must resolve aliases too.
+delete from public.post_tags where post_id='00000000-0000-4000-8000-000000000079';
+set role authenticated;
+insert into public.post_tags values ('00000000-0000-4000-8000-000000000079','00000000-0000-4000-8000-000000000076');
+update public.post_tags set tag_id='00000000-0000-4000-8000-000000000077' where post_id='00000000-0000-4000-8000-000000000079';
+reset role;
+do $$ begin
+ if not exists (select 1 from public.post_tags where post_id='00000000-0000-4000-8000-000000000079' and tag_id='00000000-0000-4000-8000-000000000078') then raise exception 'Direct writer retained an alias'; end if;
+end $$;
 -- Stale draft IDs plus their target must save to one canonical relationship.
 select public.save_post_atomic(
  p_actor_id=>'00000000-0000-4000-8000-000000000075',

@@ -104,24 +104,24 @@ export async function resolveTagIds(
 
     const { data: existing } = await supabase
       .from('tags')
-      .select('id')
+      .select('id, merged_into')
       .eq('slug', slug)
       .single()
 
     if (existing) {
-      ids.push(existing.id)
+      ids.push(existing.merged_into ?? existing.id)
     } else {
       const { data: created, error } = await supabase
         .from('tags')
         .insert({ name, slug })
-        .select('id')
+        .select('id, merged_into')
         .single()
 
-      if (!error && created) ids.push(created.id)
+      if (!error && created) ids.push(created.merged_into ?? created.id)
     }
   }
 
-  return ids
+  return [...new Set(ids)]
 }
 
 export async function resolveCategoryId(

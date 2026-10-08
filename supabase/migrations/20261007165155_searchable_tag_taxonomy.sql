@@ -35,6 +35,20 @@ end $$;
 create trigger validate_tag_taxonomy before insert or update or delete on public.tags
 for each row execute function public.validate_tag_taxonomy();
 
+-- Direct writers (including AI generation) must also use canonical IDs.
+create function public.canonicalize_post_tag() returns trigger
+language plpgsql security invoker set search_path = '' as $$
+declare canonical_id uuid;
+begin
+  -- Hold the row until this write commits so a concurrent merge cannot race it.
+  select coalesce(merged_into, id) into canonical_id from public.tags
+  where id = new.tag_id for share;
+  new.tag_id := coalesce(canonical_id, new.tag_id);
+  return new;
+end $$;
+create trigger canonicalize_post_tag before insert or update of tag_id on public.post_tags
+for each row execute function public.canonicalize_post_tag();
+
 create function public.merge_tags(source_id uuid, target_id uuid) returns void
 language plpgsql security invoker set search_path = '' as $$
 declare source public.tags; target public.tags;

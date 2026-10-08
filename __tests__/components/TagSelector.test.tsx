@@ -26,7 +26,7 @@ describe('tag selection', () => {
   })
   it('resolves old draft IDs without offering merged aliases', () => {
     render(<TagSelector tags={tags} selectedIds={['3', '1']} onToggle={() => {}} />)
-    expect(screen.getByRole('status')).toHaveTextContent('1 tags selected')
+    expect(screen.getByRole('status')).toHaveTextContent('1 tag selected')
     expect(screen.queryByRole('button', { name: 'SoftwareEngineering' })).not.toBeInTheDocument()
   })
   it('distinguishes load failures, empty taxonomy, and no search matches', () => {

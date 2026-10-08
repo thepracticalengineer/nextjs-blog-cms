@@ -17,6 +17,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { data: tags } = await supabase
     .from('tags')
     .select('slug, created_at')
+    .is('merged_into', null)
 
   const postUrls: MetadataRoute.Sitemap = (posts ?? []).map((post) => ({
     url: `${siteUrl}/blog/${post.slug}`,

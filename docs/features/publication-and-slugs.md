@@ -103,7 +103,8 @@ In **Dashboard → Admin → Tags**, choose the duplicate and the canonical tag,
 confirm the merge. The transaction deduplicates post relationships and retains the
 old row as a URL/ID alias. `/blog/tag/<old-slug>` redirects permanently to the surviving
 URL; subsequent merges flatten aliases. Old draft IDs resolve to the canonical tag
-when saved. Used tags and URL aliases cannot be deleted; unused tags require deletion
+when saved. Direct relationship writers also resolve alias IDs through a database
+trigger. Sitemaps and build-time tag discovery include only canonical URLs. Used tags and URL aliases cannot be deleted; unused tags require deletion
 confirmation. Tag slugs cannot be changed in place.
 
 Apply `20261007165155_searchable_tag_taxonomy.sql` before deploying this application.

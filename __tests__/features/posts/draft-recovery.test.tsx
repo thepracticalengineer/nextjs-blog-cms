@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
-import { renderHook, act, waitFor } from '@testing-library/react'
+import { renderHook, act } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 import { useDraftRecovery } from '@/features/posts/drafts/use-draft-recovery'
 import { loadWorkingCopy, saveWorkingCopy, discardWorkingCopy } from '@/features/posts/drafts/actions'
@@ -17,7 +17,12 @@ function mount(id = identity, postId: string | null = null, updatedAt: string | 
     return { form, recovery }
   })
 }
-async function ready(hook: ReturnType<typeof mount>) { await waitFor(() => expect(hook.result.current.recovery.ready).toBe(true)) }
+async function ready(hook: ReturnType<typeof mount>) {
+  // Initialization uses an immediately resolved mock. Flush its React updates
+  // before asserting, rather than racing waitFor's wall-clock timeout under coverage.
+  await act(async () => { await Promise.resolve() })
+  expect(hook.result.current.recovery.ready).toBe(true)
+}
 function type(hook: ReturnType<typeof mount>, value: string) { act(() => hook.result.current.form.setValue('content', value)) }
 async function retry(hook: ReturnType<typeof mount>) { await act(async () => { hook.result.current.recovery.retry() }) }
 function closeEvent() { const event = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(event); return event }
