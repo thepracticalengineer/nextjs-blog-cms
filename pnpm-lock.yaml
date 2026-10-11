@@ -117,8 +117,8 @@ importers:
         specifier: 3.9.17
         version: 3.9.17(next@16.3.8(@babel/core@7.29.7)(@playwright/test@1.63.0)(@types/node@24.19.1)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       openai:
-        specifier: 7.27.0
-        version: 7.27.0(undici@8.11.2)(ws@8.22.0)(zod@4.6.5)
+        specifier: 7.30.1
+        version: 7.30.1(undici@8.11.2)(ws@8.22.0)(zod@4.6.5)
       pdf-parse:
         specifier: 2.4.5
         version: 2.4.5
@@ -3871,8 +3871,8 @@ packages:
     resolution: {integrity: sha512-7x81NCL719oNbsq/3mh+hVrAWmFuEYUqrq/Iw3kUzH8ReypT9QQ0BLoJS7/G9k6N81XjW4qHWtjWwe/9eLy1EQ==}
     engines: {node: '>=12'}
 
-  openai@7.27.0:
-    resolution: {integrity: sha512-QDo1FvnRDZn15YwGVOhT9vpyypDiLphkd/7a4mcURWf5upMoEetgA6o4DJeII+ZZkC6m6DvlilCwii3+ynDcTw==}
+  openai@7.30.1:
+    resolution: {integrity: sha512-YgiPjBgXdItqTsgAR138bu9aHxBb3/L7qiiP8ucU8e9msRfF8cjRtp8y5qYW7E3Oe9O8UWejQZERf37dtdvoTg==}
     engines: {node: '>=22.0.0'}
     peerDependencies:
       '@aws-sdk/credential-provider-node': '>=3.972.0 <4'
@@ -8732,7 +8732,7 @@ snapshots:
       is-docker: 2.2.1
       is-wsl: 2.2.0
 
-  openai@7.27.0(undici@8.11.2)(ws@8.22.0)(zod@4.6.5):
+  openai@7.30.1(undici@8.11.2)(ws@8.22.0)(zod@4.6.5):
     optionalDependencies:
       undici: 8.11.2
       ws: 8.22.0
