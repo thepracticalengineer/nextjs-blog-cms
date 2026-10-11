@@ -43,7 +43,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0",
     "@base-ui/react": "1.8.0",
-    "@google/genai": "2.27.0",
+    "@google/genai": "2.28.0",
     "@hookform/resolvers": "5.9.1",
     "@next/third-parties": "16.3.8",
     "@supabase/ssr": "0.12.7",
