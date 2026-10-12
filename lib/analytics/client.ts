@@ -58,8 +58,8 @@ function createAnalytics(config: AnalyticsConfig) {
   pause()
 
   function eligible() {
-    return !disposed && getConsent() === 'granted' && page &&
-      page.pathname === window.location.pathname && publicLocation(window.location.href, config)
+    return !disposed && getConsent() === 'granted' &&
+      page?.pathname === window.location.pathname && publicLocation(window.location.href, config)
   }
 
   function command(...args: unknown[]) { win.gtag?.(...args) }
@@ -87,7 +87,7 @@ function createAnalytics(config: AnalyticsConfig) {
     context = {
       page_location: location,
       page_referrer: previousLocation,
-      page_title: page!.title.replace(/\S+@\S+/g, '[redacted]').slice(0, 200),
+      page_title: page!.title.replace(/\S+/g, token => token.includes('@') ? '[redacted]' : token).slice(0, 200),
     }
     command('consent', 'update', { ...denied, analytics_storage: 'granted' })
     command('config', config.measurementId, {

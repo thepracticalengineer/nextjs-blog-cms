@@ -11,8 +11,8 @@
   <a href="https://github.com/org/repo?token=link-secret#private" target="_blank">Repository</a>
   <p id="current"></p>
   <script type="module">
-    import { registerAnalyticsPage, startAnalytics, trackNewsletterEvent } from '/lib/analytics/client.ts'
-    import { setConsent } from '/lib/analytics/consent.ts'
+    import { registerAnalyticsPage, startAnalytics, trackNewsletterEvent } from '../../lib/analytics/client.ts'
+    import { setConsent } from '../../lib/analytics/consent.ts'
     history.replaceState(null, '', '/blog/article')
     let unregister
     function render() {

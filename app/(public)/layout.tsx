@@ -1,9 +1,13 @@
+import { Suspense } from 'react'
+import { AnalyticsPreferences } from '@/components/analytics/Analytics'
+import { analyticsConfig } from '@/lib/analytics/policy'
 import Link from 'next/link'
 import Image from 'next/image'
 import { NavAuthButton } from '@/components/NavAuthButton'
 import { HeaderSearch } from '@/components/HeaderSearch'
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
+  const analytics = analyticsConfig(process.env)
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -27,6 +31,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
       <main className="flex-1">{children}</main>
       <footer className="border-t py-8 text-center text-xs text-muted-foreground/60 tracking-wide">
         <p>&copy; {new Date().getFullYear()} The Practical Engineer. All rights reserved.</p>
+        {analytics && <Suspense fallback={null}><AnalyticsPreferences config={analytics} /></Suspense>}
       </footer>
     </div>
   )

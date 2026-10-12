@@ -25,14 +25,22 @@ export function analyticsConfig(env: Record<string, string | undefined>): Analyt
   }
 }
 
-const publicPath = /^(?:\/|\/blog|\/blog\/(?:[a-z0-9]+(?:-[a-z0-9]+)*|(?:category|tag)\/[a-z0-9]+(?:-[a-z0-9]+)*))$/
+function isPublicPath(pathname: string): boolean {
+  if (pathname === '/' || pathname === '/blog') return true
+  const segments = pathname.split('/')
+  if (segments[1] !== 'blog') return false
+  const slug = segments.at(-1) ?? ''
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return false
+  return segments.length === 3 ||
+    (segments.length === 4 && ['category', 'tag'].includes(segments[2]))
+}
 const campaignKeys = new Set(['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term'])
 
 /** Unknown query keys and all fragments fail closed (including OAuth/recovery tokens). */
 export function publicLocation(href: string, config: AnalyticsConfig): string | null {
   try {
     const url = new URL(href)
-    if (url.origin !== config.origin || url.hash || !publicPath.test(url.pathname)) return null
+    if (url.origin !== config.origin || url.hash || !isPublicPath(url.pathname)) return null
     const clean = new URL(url.pathname, config.origin)
     for (const [key, value] of url.searchParams) {
       if (key === 'page' && /^[1-9]\d{0,5}$/.test(value)) clean.searchParams.set(key, value)

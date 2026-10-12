@@ -46,6 +46,16 @@ describe('consented analytics lifecycle', () => {
     trackNewsletterEvent('newsletter_subscribe')
     expect(events()[1][1]).toBe('newsletter_subscribe')
   })
+  it('redacts email-like title tokens and bounds long public titles', () => {
+    unregister = registerAnalyticsPage({ ...page, title: 'Contact reader@example.com today' })
+    stop = startAnalytics(config)
+    setConsent('granted'); load()
+    expect(events()[0][2]).toMatchObject({ page_title: 'Contact [redacted] today' })
+    unregister()
+    history.pushState(null, '', '/blog/long-title')
+    unregister = registerAnalyticsPage({ pathname: '/blog/long-title', title: 'a'.repeat(100_000) })
+    expect(events()[1][2]).toMatchObject({ page_title: 'a'.repeat(200) })
+  })
   it('blocks immediately on private history navigation, even before React cleanup; resumes once on return', () => {
     setConsent('granted'); begin(); load()
     history.pushState(null, '', '/dashboard?token=secret')

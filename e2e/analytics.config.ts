@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { resolve } from 'node:path'
 
-// Runtime-only browser harness: no Next server, credentials, database, mail, or live Google calls.
+// Runtime and consent-component browser harness: no Next server, credentials, database, mail, or live Google calls.
 export default defineConfig({
   testDir: './analytics',
   outputDir: '../test-results/analytics',
@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   webServer: {
     cwd: resolve(__dirname, '..'),
-    command: 'pnpm exec vite --host 127.0.0.1 --port 3106 --strictPort',
+    command: 'pnpm exec vite --config e2e/analytics/vite.config.mts --host 127.0.0.1 --port 3106 --strictPort',
     url: 'http://127.0.0.1:3106/e2e/analytics/fixture.html',
     reuseExistingServer: false,
   },
