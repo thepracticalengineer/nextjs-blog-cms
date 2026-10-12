@@ -11,7 +11,8 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/.next/**', '**/dist/**'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      reporter: ['text', 'json', 'json-summary', 'html'],
+      reportOnFailure: true,
       include: [
         // lib core logic
         'lib/utils.ts',

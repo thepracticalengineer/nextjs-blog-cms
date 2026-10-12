@@ -6,12 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -29,6 +34,7 @@ jobs:
         run: |
           pnpm run docs:test
           pnpm run docs:check
+          node --test scripts/coverage/report.test.mjs
 
       - name: Type check
         run: pnpm run typecheck
@@ -38,9 +44,13 @@ jobs:
 
   test:
     name: Unit Tests
+    outputs:
+      artifact-id: ${{ steps.coverage.outputs.artifact-id }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -58,23 +68,27 @@ jobs:
         run: pnpm run test:coverage
 
       - name: Upload coverage report
+        id: coverage
         uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-report
           path: coverage/
           retention-days: 7
+          overwrite: true
 
   build:
     name: Build
     runs-on: ubuntu-latest
     needs: [lint, test]
     env:
-      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key' }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key' }}
+      NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -93,10 +107,16 @@ jobs:
 
   e2e:
     name: API and Browser Tests
+    outputs:
+      artifact-id: ${{ steps.e2e-reports.outputs.artifact-id }}
+    env:
+      E2E_COVERAGE: 1
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -111,6 +131,9 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium
+
+      - name: Verify coverage collection and failure reporting
+        run: node --test scripts/coverage/collection.test.mjs
 
       - name: Verify analytics collection with external requests blocked
         run: pnpm exec playwright test --config=e2e/analytics.config.ts
@@ -176,14 +199,75 @@ jobs:
       - name: Verify OAuth controls with isolated provider navigation
         run: pnpm exec playwright test --config=e2e/oauth-ui.config.ts
 
-      - name: Upload failed test artifacts
-        if: failure()
+      - name: Upload E2E reports and failure artifacts
+        id: e2e-reports
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-test-results
-          path: test-results/
+          name: e2e-reports
+          path: |
+            test-results/
+            playwright-report/
+            coverage/e2e/
           retention-days: 7
+          overwrite: true
 
       - name: Stop disposable Supabase
         if: always()
         run: pnpm dlx supabase@2.119.0 stop --no-backup
+
+  coverage:
+    name: Coverage report
+    if: always()
+    needs: [test, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Download unit coverage
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+          path: artifacts/unit
+
+      - name: Download E2E reports
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-reports
+          path: artifacts/e2e
+
+      - name: Find exact base-commit baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/coverage/baseline.mjs
+
+      - name: Publish coverage summary
+        if: always()
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          UNIT_STATUS: ${{ needs.test.result }}
+          UNIT_ARTIFACT_ID: ${{ needs.test.outputs.artifact-id }}
+          E2E_ARTIFACT_ID: ${{ needs.e2e.outputs.artifact-id }}
+        run: node scripts/coverage/report.mjs
+
+      - name: Save coverage baseline and summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-baseline
+          path: coverage-report/
+          retention-days: 7
+          overwrite: true

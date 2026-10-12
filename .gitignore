@@ -40,3 +40,7 @@
 /.playwright-cli/
 
 /.next-oauth-ui
+
+/coverage-report/
+/artifacts/
+/baseline/

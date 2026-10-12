@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from '../coverage/fixture'
 
 for (const path of ['/login', '/register']) {
   for (const provider of ['Google', 'GitHub']) {
