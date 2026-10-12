@@ -1,6 +1,6 @@
 // app/api/ai-assistant/chats/[chatId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authorizeApi, ownsResource } from '@/lib/auth/api'
 import { getChat, deleteChat } from '@/features/ai-assistant/chatService'
 
 type Params = { params: Promise<{ chatId: string }> }
@@ -11,12 +11,11 @@ type Params = { params: Promise<{ chatId: string }> }
 export async function DELETE(_req: NextRequest, props: Params) {
   const params = await props.params
   const { chatId } = params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
   const chat = await getChat(chatId)
-  if (!chat || chat.user_id !== user.id) {
+  if (!chat || !ownsResource(user, chat.user_id)) {
     return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
   }
 

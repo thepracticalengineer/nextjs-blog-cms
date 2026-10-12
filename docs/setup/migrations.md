@@ -13,6 +13,7 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261007121102_newsletter_delivery_handoff.sql` | Pause dispatcher, migrate, deploy, then resume |
 | `20261007155857_post_media_uploads.sql` | Public image bucket, server-only registry, retention and cover alt text |
 | `20261012031302_post_list_summaries.sql` | Stored reading time, stable listing indexes and authenticated dashboard pagination RPC |
+| `20261012103751_enforce_mfa_assurance.sql` | Restrictive private database/storage MFA policies; deploy before shared session/API guards |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 

@@ -71,3 +71,39 @@ checks validation, changes the password, verifies new-password sign-in and
 old-password rejection, and verifies that the same link cannot be reused.
 
 Accounts with Google/GitHub identities use this same verified email and MFA flow to set a first password or reset an existing one. This policy also applies to linked accounts that already have an email/password identity: their Security panel intentionally uses verified recovery instead of the current-password form. An email identity alone does not establish that the account has a usable password. See [social authentication](../setup/social-auth.md).
+
+## MFA enforcement across private interfaces
+
+Verified enrollment makes AAL2 mandatory for private session access, regardless of
+whether the first factor is a password or an OAuth provider. Accounts without a
+verified factor continue to work at AAL1. Unverified enrollment does not lock an
+account out.
+
+The dashboard proxy, server authorization helper and cookie-authenticated APIs
+check assurance. `authorizeSession` verifies the user with Auth before checking
+assurance and the private profile/role; `getProfile` remains the fail-closed action
+wrapper. `authorizeApi` returns structured errors before request parsing, private
+queries, provider calls or service-role access. AI chat/book ownership remains
+mandatory after authorization, including for administrators. Protected layouts
+redirect an incomplete session to `/mfa`; provider/database outages fail rendering
+instead of creating an MFA redirect loop.
+
+Migration `20261012103751_enforce_mfa_assurance.sql` adds restrictive policies for
+private profiles, working copies, AI data, API/provider keys and storage metadata
+and operations across all buckets, including authenticated avatar and post-media
+uploads. It also gates mutations of posts, taxonomy and comments, and
+private post/tag reads. The enrollment check reads `auth.mfa_factors` through a
+restricted, non-exposed helper bound to `auth.uid()`, so stale pre-enrollment JWTs
+cannot opt out. Existing ownership/role policies still apply. Published content,
+public taxonomy/comments, public image URLs and the limited owner-executed
+`public_author_profiles` projection remain public.
+
+Service-role clients bypass these policies: session callers must pass the shared
+guard first. Existing API keys are separate machine credentials, not Supabase
+sessions with an AAL claim; key use retains its existing contract, while key
+management requires the session guard. Cron, webhook, newsletter capability and
+password-recovery grants retain their own authorization contracts. MFA enrollment,
+challenge and recovery must remain reachable before completing MFA.
+
+Run the MFA checks in [testing](../development/testing.md#mfa-boundary-verification)
+before rollout. Apply the migration before deploying the application changes.

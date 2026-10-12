@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { getProfile } from '@/lib/auth/session'
-import { can, type Role } from '@/lib/permissions'
+import { authorizeApi } from '@/lib/auth/api'
 import { createServiceClient } from '@/lib/supabase/service'
 import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
 import { optimizeImage } from '@/features/posts/media/optimize'
@@ -11,9 +10,8 @@ export const runtime = 'nodejs'
 const failure = (error: string, status: number) => Response.json({ error }, { status })
 
 export async function POST(request: Request) {
-  const profile = await getProfile()
-  if (!profile) return failure('Sign in again, then retry. Your writing is preserved.', 401)
-  if (!can(profile.role as Role, 'posts:create')) return failure('You do not have permission to upload post images.', 403)
+  const { profile, response } = await authorizeApi('posts:create')
+  if (response) return response
   // Cookie-authenticated uploads must originate in this application.
   if (request.headers.get('origin') !== new URL(request.url).origin) return failure('Upload from the editor in this application.', 403)
   if (!checkRateLimit(`post-media:${profile.id}`, 30, 60_000).allowed) return failure('Too many image requests. Wait a minute, then retry.', 429)

@@ -4,7 +4,7 @@ import type { Post } from '@/features/posts/types'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { NextRequest, NextResponse } from 'next/server'
 import sanitizeHtml from 'sanitize-html'
-import { createClient } from '@/lib/supabase/server'
+import { authorizeApi, ownsResource } from '@/lib/auth/api'
 import { getMessages, getChat, getBookById } from '@/features/ai-assistant/chatService'
 import { generateBlogPost } from '@/features/ai-assistant/llmService'
 import { getDecryptedApiKey } from '@/features/ai-assistant/llmKeyService'
@@ -22,12 +22,11 @@ type Params = { params: Promise<{ chatId: string }> }
 export async function POST(_req: NextRequest, props: Params) {
   const params = await props.params
   const { chatId } = params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi('posts:create')
+  if (response) return response
 
   const chat = await getChat(chatId)
-  if (!chat || chat.user_id !== user.id) {
+  if (!chat || !ownsResource(user, chat.user_id)) {
     return NextResponse.json({ error: 'Chat not found' }, { status: 404 })
   }
 
@@ -75,14 +74,6 @@ export async function POST(_req: NextRequest, props: Params) {
     )
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('id', user.id)
-    .single()
-
-  if (!profile) return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
-
   const serviceClient = createServiceClient()
   const categoryId = await resolveCategoryId(postData.category ?? '', serviceClient)
 
@@ -111,7 +102,7 @@ export async function POST(_req: NextRequest, props: Params) {
         content: safeContent,
         seo_title: postData.meta_title ?? null,
         seo_description: postData.meta_description ?? null,
-        author_id: profile.id,
+        author_id: user.id,
         status: 'draft',
         category_id: categoryId,
         cover_image: null,

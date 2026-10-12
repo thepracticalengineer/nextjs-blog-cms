@@ -1,15 +1,11 @@
 import { type NextRequest, NextResponse } from 'next/server'
-import { getProfile } from '@/lib/auth/session'
-import { can } from '@/lib/permissions'
-import type { Role } from '@/lib/permissions'
+import { authorizeApi } from '@/lib/auth/api'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { NewsletterSubscription } from '@/features/newsletter/types'
 
 export async function GET(_req: NextRequest) {
-  const profile = await getProfile()
-  if (!profile || !can(profile.role as Role, 'users:read')) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const { response } = await authorizeApi('users:read')
+  if (response) return response
 
   const supabase = createServiceClient()
   const { data, error } = await supabase

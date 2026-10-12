@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authorizeApi } from '@/lib/auth/api'
 import { createChat, getChats } from '@/features/ai-assistant/chatService'
 import { AVAILABLE_MODELS } from '@/features/ai-assistant/types'
 import type { LLMProvider } from '@/features/ai-assistant/types'
@@ -11,9 +12,9 @@ const ALLOWED_PROVIDERS: Set<string> = new Set(AVAILABLE_MODELS.map((m) => m.pro
  * Body: { book_id: string, llm_provider: string, llm_model: string }
  */
 export async function POST(req: NextRequest) {
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json() as {
     book_id?: string
@@ -59,9 +60,8 @@ export async function POST(req: NextRequest) {
  * Returns recent chats for the current user, ordered by last_message_at desc.
  */
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
   const chats = await getChats(user.id)
   return NextResponse.json({ chats })

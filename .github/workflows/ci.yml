@@ -138,6 +138,9 @@ jobs:
                   output.write(f'{key}={value}\n')
           PY
 
+      - name: Verify MFA database and storage boundaries
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
+
       - name: Verify author profile database privacy
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/public_author_profiles.sql
 

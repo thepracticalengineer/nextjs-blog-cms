@@ -1,43 +1,67 @@
 import { redirect } from 'next/navigation'
+import { isAuthRetryableFetchError } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { can } from '@/lib/permissions'
 import type { Permission, Role } from '@/lib/permissions'
 import type { Profile } from '@/lib/supabase/types'
+import { checkAssurance } from '@/lib/auth/assurance'
+import { mfaDestination } from '@/lib/auth/navigation'
 
-/**
- * Returns the current user's full profile, or null if not authenticated.
- * Use this in server actions where you need to check auth without redirecting.
- */
-export async function getProfile(): Promise<Profile | null> {
+export type AuthorizationFailure = {
+  code: 'UNAUTHENTICATED' | 'MFA_REQUIRED' | 'AUTH_UNAVAILABLE' | 'FORBIDDEN'
+  status: 401 | 403 | 503
+  error: string
+}
+export type SessionAuthorization =
+  | { profile: Profile; failure: null }
+  | { profile: null; failure: AuthorizationFailure }
+
+/** Identity, assurance and role must be checked before privileged data access. */
+export async function authorizeSession(permission?: Permission): Promise<SessionAuthorization> {
+  // cookies() can signal dynamic rendering during a Next.js build. Keep client
+  // construction outside the provider-failure catch so Next can handle it.
   const supabase = await createClient()
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  if (userError || !user) return null
-
-  // Provider login is not an MFA exemption. Protect actions/APIs using this
-  // shared helper, including routes that do not pass through the dashboard proxy.
+  const unavailable: SessionAuthorization = { profile: null, failure: {
+    code: 'AUTH_UNAVAILABLE', status: 503, error: 'Authentication could not be verified. Try again shortly.',
+  } }
   try {
-    const { data: assurance, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    const enrolled = user.factors?.some(factor => factor.status === 'verified')
-    if (error || !assurance?.currentLevel || !assurance.nextLevel || ((enrolled || assurance.nextLevel === 'aal2') && assurance.currentLevel !== 'aal2')) return null
+    const { data: { user }, error } = await supabase.auth.getUser()
+    // GoTrue uses 400 for invalid refresh tokens and 403 for invalid JWTs or
+    // deleted users. Retrying cannot repair these sessions; require sign-in.
+    const rejectedSession = error && !isAuthRetryableFetchError(error) &&
+      (error.name === 'AuthSessionMissingError' || [400, 401, 403].includes(error.status ?? 0))
+    if (error && !rejectedSession) return unavailable
+    if (error || !user) return { profile: null, failure: { code: 'UNAUTHENTICATED', status: 401, error: 'Sign in again, then retry.' } }
+    const assurance = await checkAssurance(supabase, user)
+    if (assurance === 'AUTH_UNAVAILABLE') return unavailable
+    if (assurance) return { profile: null, failure: {
+      code: 'MFA_REQUIRED', status: 403, error: 'Complete two-factor authentication, then retry.',
+    } }
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
+    if (profileError) return unavailable
+    if (!profile || (permission && !can(profile.role as Role, permission))) {
+      return { profile: null, failure: { code: 'FORBIDDEN', status: 403, error: 'Forbidden' } }
+    }
+    return { profile, failure: null }
   } catch {
-    return null
+    return unavailable
   }
+}
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .single()
-
-  return profile
+/** Compatibility guard for actions: every failure denies access. */
+export async function getProfile(): Promise<Profile | null> {
+  return (await authorizeSession()).profile
 }
 
 /**
- * Returns the current user's profile or redirects to /login.
+ * Returns an authorized profile, redirects for sign-in/MFA, or fails on outages.
  * Use this in pages and layouts that require authentication.
  */
-export async function requireAuth(): Promise<Profile> {
-  const profile = await getProfile()
+export async function requireAuth(next = '/dashboard'): Promise<Profile> {
+  const { profile, failure } = await authorizeSession()
+  if (failure?.code === 'MFA_REQUIRED') redirect(mfaDestination(next))
+  // An outage cannot be solved by another MFA challenge; avoid redirect loops.
+  if (failure?.code === 'AUTH_UNAVAILABLE') throw new Error(failure.error)
   if (!profile) redirect('/login')
   return profile
 }

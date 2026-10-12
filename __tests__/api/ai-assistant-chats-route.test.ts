@@ -1,3 +1,4 @@
+vi.mock('@/lib/auth/session', async () => ({ authorizeSession: (await import('../helpers/session')).routeTestSession }))
 // __tests__/api/ai-assistant-chats-route.test.ts
 // Tests for app/api/ai-assistant/chats/route.ts (POST create chat, GET list chats)
 import { describe, it, expect, vi, beforeEach } from 'vitest'

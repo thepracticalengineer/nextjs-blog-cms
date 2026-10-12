@@ -3,10 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { encryptSecret } from '@/lib/encryption'
 import { validateProviderKey } from '@/features/ai-assistant/llmService'
-import { can } from '@/lib/permissions'
-import type { Role } from '@/lib/permissions'
 import type { LLMProvider, LLMProviderKeyRecord } from '@/features/ai-assistant/types'
-import { getProfile } from '@/lib/auth/session'
+import { authorizeApi } from '@/lib/auth/api'
 
 /**
  * GET /api/developer/llm-keys
@@ -14,9 +12,8 @@ import { getProfile } from '@/lib/auth/session'
  * Accessible to all authenticated users (authors need this to know which models are available).
  */
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
   const serviceClient = createServiceClient()
 
@@ -94,10 +91,8 @@ export async function GET() {
  * Body: { provider: 'claude' | 'gemini', api_key: string }
  */
 export async function POST(req: NextRequest) {
-  const profile = await getProfile()
-  if (!profile || !can(profile.role as Role, 'api_keys:write')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const { profile, response } = await authorizeApi('api_keys:write')
+  if (response) return response
 
   const body = await req.json() as { provider?: string; api_key?: string }
   const { provider, api_key } = body
@@ -151,10 +146,8 @@ export async function POST(req: NextRequest) {
  * Body: { provider: 'claude' | 'gemini' }
  */
 export async function DELETE(req: NextRequest) {
-  const profile = await getProfile()
-  if (!profile || !can(profile.role as Role, 'api_keys:write')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const { profile, response } = await authorizeApi('api_keys:write')
+  if (response) return response
 
   const { provider } = await req.json() as { provider?: string }
   if (!provider || !['claude', 'gemini', 'openai'].includes(provider)) {
