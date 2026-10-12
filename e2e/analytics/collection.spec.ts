@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page } from '../coverage/fixture'
 
 type Command = [string, string, Record<string, unknown>?]
 const commands = (page: Page): Promise<Command[]> => page.evaluate(() =>

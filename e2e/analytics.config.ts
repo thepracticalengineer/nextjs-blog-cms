@@ -1,11 +1,11 @@
 import { defineConfig, devices } from '@playwright/test'
+import { reporting } from './reporting'
 import { resolve } from 'node:path'
 
 // Runtime and consent-component browser harness: no Next server, credentials, database, mail, or live Google calls.
 export default defineConfig({
   testDir: './analytics',
-  outputDir: '../test-results/analytics',
-  reporter: 'list',
+  ...reporting('analytics'),
   use: { baseURL: 'http://127.0.0.1:3106', trace: 'retain-on-failure' },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },

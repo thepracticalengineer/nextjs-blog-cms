@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { test, expect } from '@playwright/test'
+import { test, expect } from '../coverage/fixture'
 import { randomUUID } from 'node:crypto'
 import { assertDedicatedTestProject } from '../environment'
 

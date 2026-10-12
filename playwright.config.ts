@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { reporting } from './e2e/reporting'
 import dotenv from 'dotenv'
 import { assertDedicatedTestProject } from './e2e/environment'
 
@@ -14,7 +15,7 @@ export default defineConfig({
   globalTeardown: './e2e/global-teardown.ts',
   workers: 1,
   timeout: 60_000,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  ...reporting(process.env.E2E_PRODUCTION === '1' ? 'publication' : 'main'),
   use: {
     baseURL,
     trace: 'retain-on-failure',

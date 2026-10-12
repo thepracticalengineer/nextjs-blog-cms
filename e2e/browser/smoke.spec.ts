@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Page } from '../coverage/fixture'
 import { readFileSync } from 'node:fs'
 import { readyArticle } from '../publication-fixture'
 

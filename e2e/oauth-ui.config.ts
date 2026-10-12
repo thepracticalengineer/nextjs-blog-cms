@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
+import { reporting } from './reporting'
 import { resolve } from 'node:path'
 
 // No global seeding or real Auth service. Provider navigation is intercepted by
@@ -6,10 +7,9 @@ import { resolve } from 'node:path'
 const baseURL = 'http://127.0.0.1:3105'
 export default defineConfig({
   testDir: './oauth-ui',
-  outputDir: '../test-results/oauth-ui',
   workers: 1,
   timeout: 60_000,
-  reporter: 'list',
+  ...reporting('oauth'),
   use: { baseURL, trace: 'retain-on-failure' },
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },

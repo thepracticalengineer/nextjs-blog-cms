@@ -1,4 +1,4 @@
-import { test as base, expect } from '@playwright/test'
+import { test as base, expect } from './coverage/fixture'
 import { readFileSync } from 'fs'
 
 interface E2EState {
