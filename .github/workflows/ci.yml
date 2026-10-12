@@ -65,9 +65,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run tests with coverage
-        run: |
-          printf '%s\n' "import { test, expect } from 'vitest'" "test('intentional CI reporting failure probe', () => { expect(1).toBe(2) })" > __tests__/ci-reporting-probe.test.ts
-          pnpm run test:coverage
+        run: pnpm run test:coverage
 
       - name: Upload coverage report
         id: coverage
@@ -108,7 +106,6 @@ jobs:
         run: pnpm run build
 
   e2e:
-    if: false # Temporary reporting failure probe; removed after validation.
     name: API and Browser Tests
     outputs:
       artifact-id: ${{ steps.e2e-reports.outputs.artifact-id }}
