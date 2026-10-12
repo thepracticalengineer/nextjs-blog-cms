@@ -34,7 +34,7 @@ jobs:
         run: |
           pnpm run docs:test
           pnpm run docs:check
-          node --test scripts/coverage/report.test.mjs
+          node --test scripts/coverage/report.test.mjs scripts/coverage/baseline.test.mjs
 
       - name: Type check
         run: pnpm run typecheck

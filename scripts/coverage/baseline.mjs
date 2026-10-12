@@ -16,6 +16,7 @@ if (!/^[a-f0-9]{40}$/.test(sha ?? '') || !/^[\w.-]+\/[\w.-]+$/.test(repo ?? ''))
   if (!run) console.log('Baseline unavailable: no successful main CI run for the exact base commit.')
   else {
     const download = spawnSync('gh', ['run', 'download', String(run.id), '--repo', repo, '--name', 'coverage-baseline', '--dir', 'baseline'], { encoding: 'utf8' })
+    if (download.status !== 0) rmSync('baseline', { recursive: true, force: true })
     console.log(download.status === 0 ? `Downloaded baseline for ${sha}.` : 'Baseline unavailable: artifact missing, expired, or inaccessible.')
   }
 }
