@@ -7,6 +7,7 @@ import { getPostBySlug, getPublishedPosts } from '@/features/posts/queries'
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPublishedPosts: vi.fn(), getPopularTags: vi.fn().mockResolvedValue([]) }))
 vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentProps<'a'>) => <a {...props}>{children}</a> }))
 vi.mock('@/components/editor/EditorContent', () => ({ EditorContent: () => null }))
+vi.mock('@/components/analytics/AnalyticsPage', () => ({ AnalyticsPage: () => null }))
 vi.mock('@/components/BackToTopButton', () => ({ BackToTopButton: () => null }))
 vi.mock('@/features/comments/components/CommentSection', () => ({ CommentSection: () => null }))
 vi.mock('@/components/ShareButton', () => ({ ShareButton: () => null }))

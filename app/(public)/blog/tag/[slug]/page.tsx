@@ -1,3 +1,4 @@
+import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
@@ -58,6 +59,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">
+      <AnalyticsPage pathname={`/blog/tag/${tag.slug}`} title={`#${tag.name} - Blog | The Practical Engineer`} />
       <div className="space-y-2 border-b pb-8">
         <Link
           href="/blog"

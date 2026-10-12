@@ -1,3 +1,4 @@
+import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -35,6 +36,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-6">
+      <AnalyticsPage pathname="/" title="Home | The Practical Engineer" />
       {/* 3-column grid — collapses to single column on small screens */}
       <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_220px] gap-0">
 

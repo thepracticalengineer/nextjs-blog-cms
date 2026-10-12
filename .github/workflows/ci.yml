@@ -112,6 +112,9 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium
 
+      - name: Verify analytics collection with external requests blocked
+        run: pnpm exec playwright test --config=e2e/analytics.config.ts
+
       - name: Start disposable Supabase
         run: |
           pnpm dlx supabase@2.119.0 start --exclude studio,imgproxy,vector,logflare,edge-runtime > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }

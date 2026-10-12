@@ -55,7 +55,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
-NEXT_PUBLIC_GA_MEASUREMENT_ID= # optional public Google Analytics measurement ID
+NEXT_PUBLIC_GA_MEASUREMENT_ID= # optional public ID; alone does not enable analytics
+GA_ENABLED=false # keep false locally and until the GA4 rollout checklist is complete
 LLM_KEY_ENCRYPTION_SECRET=   # exactly 32 UTF-8 bytes; 32 ASCII characters work
 
 # Optional server-side provider fallbacks (used by legacy provider lookup)
@@ -95,3 +96,7 @@ Supabase URL/anon key, trusted site URL and the optional Google Analytics measur
 ## Social sign-in
 
 See [Google and GitHub authentication](social-auth.md) for provider applications, exact callback allowlists, environment-specific configuration, identity policy, and rollout verification. The committed local providers remain disabled until their credentials are configured.
+
+## Analytics
+
+Analytics requires explicit production gating and visitor opt-in. Keep `GA_ENABLED=false` in development and previews. Follow [Google Analytics setup and rollout](google-analytics.md) before enabling production; the existing enhanced-measurement settings must be changed first.
