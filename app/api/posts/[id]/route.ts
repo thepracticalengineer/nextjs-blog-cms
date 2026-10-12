@@ -196,21 +196,25 @@ export async function PATCH(
     return apiError(updateError?.code === '40001' ? 'The post changed. Reload before trying again.' : 'The post and tags could not be saved. No changes were applied. Try again.', updateError?.code === '40001' ? 409 : 500)
   }
 
-  let newsletterWarning: string | undefined
-  if (candidate.status === 'draft' && existing.status === 'published') {
-    try { await cancelNewsletterSend(id) } catch (err) {
-      console.error('[API] Newsletter cancellation failed:', err)
-      newsletterWarning = 'Post unpublished, but newsletter cancellation could not be confirmed. Delivery checks block new batches while unpublished.'
+  const fullPostLookup = supabase.from('posts').select(POST_FULL_SELECT).eq('id', id).single()
+  const newsletterTransition = async () => {
+    let newsletterWarning: string | undefined
+    if (candidate.status === 'draft' && existing.status === 'published') {
+      try { await cancelNewsletterSend(id) } catch (err) {
+        console.error('[API] Newsletter cancellation failed:', err)
+        newsletterWarning = 'Post unpublished, but newsletter cancellation could not be confirmed. Delivery checks block new batches while unpublished.'
+      }
+    } else if (candidate.status === 'published' && existing.status !== 'published') {
+      try { await scheduleNewsletterSend(id, { resetPendingDelay: true }) } catch (err) {
+        console.error('[API] Newsletter scheduling failed:', err)
+        newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status in the dashboard before retrying.'
+      }
     }
-  } else if (candidate.status === 'published' && existing.status !== 'published') {
-    try { await scheduleNewsletterSend(id, { resetPendingDelay: true }) } catch (err) {
-      console.error('[API] Newsletter scheduling failed:', err)
-      newsletterWarning = 'Post published, but newsletter scheduling could not be confirmed. Check newsletter status in the dashboard before retrying.'
-    }
+    if (existing.status === 'published' || candidate.status === 'published') refreshPostPaths(existing.slug, updated.slug)
+    else refreshDraftPaths()
+    return newsletterWarning
   }
-  if (existing.status === 'published' || candidate.status === 'published') refreshPostPaths(existing.slug, updated.slug)
-  else refreshDraftPaths()
-  const { data: fullPost } = await supabase.from('posts').select(POST_FULL_SELECT).eq('id', id).single()
+  const [{ data: fullPost }, newsletterWarning] = await Promise.all([fullPostLookup, newsletterTransition()])
   return apiSuccess({ data: normalizeFullPost((fullPost ?? updated) as unknown as RawPostFull), ...(newsletterWarning ? { newsletter_warning: newsletterWarning } : {}) })
 }
 

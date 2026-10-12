@@ -3,20 +3,16 @@ import Link from 'next/link'
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
 import { PostList } from '@/features/posts/components/PostList'
-import type { PostWithRelations } from '@/features/posts/types'
+import { getPublishedPosts } from '@/features/posts/queries'
+import { parsePage, type ListSearchParams } from '@/features/posts/list-state'
+import { PostPagination } from '@/features/posts/components/PostPagination'
 
-export const revalidate = 60
+// These pages read request cookies; URLs created after the build must render dynamically.
+export const dynamic = 'force-dynamic'
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>
-}
-
-export async function generateStaticParams() {
-  const { createStaticClient } = await import('@/lib/supabase/static')
-  const supabase = createStaticClient()
-  if (!supabase) return []
-  const { data } = await supabase.from('categories').select('slug')
-  return ((data ?? []) as { slug: string }[]).map((c) => ({ slug: c.slug }))
+  searchParams: Promise<ListSearchParams>
 }
 
 export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
@@ -35,7 +31,7 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
   }
 }
 
-export default async function CategoryPage({ params }: CategoryPageProps) {
+export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { slug } = await params
   const supabase = await createClient()
 
@@ -47,23 +43,9 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
 
   if (!category) notFound()
 
-  const { data: postsData } = await supabase
-    .from('posts')
-    .select(`
-      *,
-      author:public_author_profiles!posts_author_id_fkey(id, full_name, avatar_url),
-      category:categories(id, name, slug),
-      tags:post_tags(tag:tags(id, name, slug))
-    `)
-    .eq('status', 'published')
-    .eq('category_id', category.id)
-    .order('published_at', { ascending: false })
-
-  const posts = (postsData ?? []).map((p) => ({
-    ...p,
-    // @ts-expect-error nested join shape
-    tags: (p.tags ?? []).map((pt) => pt.tag).filter(Boolean),
-  })) as PostWithRelations[]
+  const page = parsePage((await searchParams).page)
+  const pageSize = 12
+  const { posts, total } = await getPublishedPosts(page, pageSize, { categoryId: category.id })
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">
@@ -82,6 +64,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
         )}
       </div>
       <PostList posts={posts} />
+      <PostPagination path={`/blog/category/${slug}`} page={page} total={total} pageSize={pageSize} />
     </div>
   )
 }

@@ -1,3 +1,4 @@
+vi.mock('@/features/posts/cache', () => ({ refreshDraftPaths: vi.fn() }))
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/apiAuth', () => ({ requireApiKey: vi.fn() }))

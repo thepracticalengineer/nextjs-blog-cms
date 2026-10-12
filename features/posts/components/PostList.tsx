@@ -1,8 +1,8 @@
 import { PostCard } from './PostCard'
-import type { PostWithRelations } from '../types'
+import type { PublicPostSummary } from '../types'
 
 interface PostListProps {
-  posts: PostWithRelations[]
+  posts: PublicPostSummary[]
   showTags?: boolean
 }
 

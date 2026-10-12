@@ -2,7 +2,7 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Metadata } from 'next'
-import { getPostBySlug, getAllPublishedSlugs, getPostRedirect } from '@/features/posts/queries'
+import { getPostBySlug, getPostRedirect } from '@/features/posts/queries'
 import { PostBody } from '@/components/editor/PostBody'
 import { Badge } from '@/components/ui/badge'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
@@ -12,15 +12,11 @@ import { ShareButton } from '@/components/ShareButton'
 import { ChevronLeftIcon } from 'lucide-react'
 import { SubscribeForm } from '@/components/newsletter/SubscribeForm'
 
-export const revalidate = 3600
+// These pages read request cookies; URLs created after the build must render dynamically.
+export const dynamic = 'force-dynamic'
 
 interface PostPageProps {
   params: Promise<{ slug: string }>
-}
-
-export async function generateStaticParams() {
-  const slugs = await getAllPublishedSlugs()
-  return slugs.map((slug) => ({ slug }))
 }
 
 export async function generateMetadata({ params }: PostPageProps): Promise<Metadata> {

@@ -3,7 +3,7 @@
 import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { PAGE_SIZE_OPTIONS, buildPageNumbers } from './utils'
@@ -53,6 +53,7 @@ export function PostTablePagination({
           ) : (
             <button
               key={p}
+              aria-current={currentPage === p ? 'page' : undefined}
               onClick={() => onPageChange(p as number)}
               className={cn(
                 'inline-flex items-center justify-center h-8 w-8 rounded-lg border text-xs font-medium transition-colors',
@@ -83,15 +84,17 @@ export function PostTablePagination({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-36">
           <DropdownMenuSeparator />
-          {PAGE_SIZE_OPTIONS.map(size => (
-            <DropdownMenuItem
-              key={size}
-              onClick={() => onPageSizeChange(size)}
-              className={cn(pageSize === size && 'text-blue-600 font-medium')}
-            >
-              {size} per page
-            </DropdownMenuItem>
-          ))}
+          <DropdownMenuGroup>
+            {PAGE_SIZE_OPTIONS.map(size => (
+              <DropdownMenuItem
+                key={size}
+                onClick={() => onPageSizeChange(size)}
+                className={cn(pageSize === size && 'text-blue-600 font-medium')}
+              >
+                {size} per page
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

@@ -118,10 +118,39 @@ confirm the merge. The transaction deduplicates post relationships and retains t
 old row as a URL/ID alias. `/blog/tag/<old-slug>` redirects permanently to the surviving
 URL; subsequent merges flatten aliases. Old draft IDs resolve to the canonical tag
 when saved. Direct relationship writers also resolve alias IDs through a database
-trigger. Sitemaps and build-time tag discovery include only canonical URLs. Used tags and URL aliases cannot be deleted; unused tags require deletion
+trigger. Sitemaps include only canonical tag URLs. Article and taxonomy routes render dynamically so URLs created after a build can read request cookies safely. Used tags and URL aliases cannot be deleted; unused tags require deletion
 confirmation. Tag slugs cannot be changed in place.
 
 Apply `20261007165155_searchable_tag_taxonomy.sql` before deploying this application.
 Verify merges only in a disposable migrated database using
 `database/tests/tag_taxonomy.sql`. No production taxonomy cleanup is performed by
 this migration.
+
+## Post lists and publication refresh
+
+The dashboard loads a server-filtered page of summaries, with an exact result count
+and categories drawn from all accessible posts. Authors see their own posts; admins
+see all posts. Search is a case-insensitive, literal title substring: submit the
+search field with Enter or **Search**. Page, page size (5/10/25/50), search, category,
+sort and direction are stored in the URL, so reload, bookmarks and Back preserve the
+view. Filters and sort changes reset the page; deleted/out-of-range pages return to
+the last available page. Equal sort values use the post ID as a stable tie-breaker.
+
+Home, blog, author, category and tag listings select summary fields without article
+bodies. Blog/category/tag pages show 12 articles per page. Reading time is stored by
+the database from TipTap text nodes or legacy HTML/plain text at 200 words/minute,
+with a minimum of one minute; it updates automatically for all content writers.
+
+Dashboard and REST publication mutations use `features/posts/cache.ts` to refresh
+home, the blog layout (including current/former article URLs and taxonomy pages),
+author pages and sitemap. This covers old/new taxonomy membership without another
+relationship lookup on the write path. It does not invalidate the root layout.
+Draft saves and AI-generated drafts refresh only the dashboard. Route-handler
+invalidation takes effect on the next visit; it does not push updates into another
+already-open browser tab. Article metadata and page reads share a request-scoped
+React cache, with no cross-user or persistent post cache.
+
+Author and slug validation lookups run concurrently. REST response hydration overlaps
+newsletter transitions, and editor newsletter loading begins after ownership is
+verified while taxonomy loads continue. Publication validation, atomic writes,
+optimistic concurrency, working-copy cleanup and newsletter handoff remain required.

@@ -4,13 +4,14 @@ import { Search, X, ChevronDown, FolderOpen } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuTrigger, DropdownMenuSeparator,
+  DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 
 interface ToolbarProps {
   search: string
   onSearch: (val: string) => void
+  onSubmit: () => void
   categories: { id: string; name: string }[]
   categoryFilter: string | null
   onCategoryFilter: (id: string | null) => void
@@ -21,6 +22,7 @@ interface ToolbarProps {
 export function PostTableToolbar({
   search,
   onSearch,
+  onSubmit,
   categories,
   categoryFilter,
   onCategoryFilter,
@@ -31,24 +33,31 @@ export function PostTableToolbar({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="relative flex-1 min-w-[180px] max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        <Input
-          value={search}
-          onChange={e => onSearch(e.target.value)}
-          placeholder="Search posts..."
-          className="pl-9 h-9 text-sm"
-        />
-        {search && (
-          <button
-            onClick={() => onSearch('')}
-            aria-label="Clear search"
-            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-sm hover:bg-gray-100 text-muted-foreground"
-          >
-            <X className="h-3.5 w-3.5" />
-          </button>
-        )}
-      </div>
+      <form onSubmit={e => { e.preventDefault(); onSubmit() }} role="search" className="flex flex-1 items-center gap-2 min-w-[180px] max-w-md">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            aria-label="Search posts"
+            maxLength={200}
+            value={search}
+            onChange={e => onSearch(e.target.value)}
+            placeholder="Search posts..."
+            className="pl-9 h-9 text-sm"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => onSearch('')}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-sm hover:bg-gray-100 text-muted-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        <button type="submit" className="h-9 rounded-lg border px-3 text-sm hover:bg-muted">Search</button>
+      </form>
 
       {categories.length > 0 && (
         <DropdownMenu>
@@ -63,19 +72,21 @@ export function PostTableToolbar({
             <ChevronDown className="h-3.5 w-3.5 ml-0.5 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-44">
-            <DropdownMenuItem onClick={() => onCategoryFilter(null)}>
-              All categories
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            {categories.map(cat => (
-              <DropdownMenuItem
-                key={cat.id}
-                onClick={() => onCategoryFilter(cat.id)}
-                className={cn(categoryFilter === cat.id && 'text-blue-600 font-medium')}
-              >
-                {cat.name}
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => onCategoryFilter(null)}>
+                All categories
               </DropdownMenuItem>
-            ))}
+              <DropdownMenuSeparator />
+              {categories.map(cat => (
+                <DropdownMenuItem
+                  key={cat.id}
+                  onClick={() => onCategoryFilter(cat.id)}
+                  className={cn(categoryFilter === cat.id && 'text-blue-600 font-medium')}
+                >
+                  {cat.name}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           </DropdownMenuContent>
         </DropdownMenu>
       )}

@@ -5,8 +5,8 @@ import type { Metadata } from 'next'
 import { getPublishedPosts } from '@/features/posts/queries'
 import { getPopularTags } from '@/features/posts/queries'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
-import { readTime, cn } from '@/lib/utils'
-import type { PostWithRelations } from '@/features/posts/types'
+import { cn } from '@/lib/utils'
+import type { PublicPostSummary } from '@/features/posts/types'
 
 export const metadata: Metadata = {
   title: 'Home',
@@ -148,8 +148,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
 // ── Article card sub-component ────────────────────────────────────────────────
 
-function ArticleCard({ post, featured }: { post: PostWithRelations; featured: boolean }) {
-  const mins = readTime(post.content ?? '')
+function ArticleCard({ post, featured }: { post: PublicPostSummary; featured: boolean }) {
+  const mins = post.reading_time_minutes
   const publishedDate = post.published_at
     ? format(new Date(post.published_at), 'MMM d')
     : null

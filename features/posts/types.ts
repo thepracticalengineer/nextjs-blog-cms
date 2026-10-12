@@ -23,3 +23,22 @@ export type PostFormValues = {
 }
 
 export type { Post, Category, Tag }
+
+// List contracts deliberately exclude content and editor-only fields.
+export type PublicPostSummary = Pick<Post, 'id' | 'title' | 'slug' | 'excerpt' | 'cover_image' | 'cover_image_alt' | 'published_at'> & {
+  reading_time_minutes: number
+  author: PostWithRelations['author']
+  category: PostWithRelations['category']
+  tags: Pick<Tag, 'id' | 'name' | 'slug'>[]
+}
+export type DashboardPostSummary = Pick<Post, 'id' | 'title' | 'slug' | 'excerpt' | 'status' | 'updated_at'> & {
+  author: Pick<Profile, 'id' | 'full_name'> | null
+  category: PostWithRelations['category']
+  tags: Pick<Tag, 'id' | 'name'>[]
+}
+export type DashboardPostPage = {
+  posts: DashboardPostSummary[]
+  total: number
+  page: number
+  categories: { id: string; name: string }[]
+}

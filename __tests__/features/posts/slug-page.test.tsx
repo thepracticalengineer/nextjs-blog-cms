@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPostRedirect: vi.fn(), getAllPublishedSlugs: vi.fn() }))
+vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPostRedirect: vi.fn() }))
 vi.mock('@/components/editor/EditorContent', () => ({ EditorContent: () => null }))
 vi.mock('@/features/comments/components/CommentSection', () => ({ CommentSection: () => null }))
 vi.mock('@/components/newsletter/SubscribeForm', () => ({ SubscribeForm: () => null }))

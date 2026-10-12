@@ -32,7 +32,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm exec next dev --port ${port}`,
+    command: `pnpm exec next ${process.env.E2E_PRODUCTION === '1' ? 'start' : 'dev'} --port ${port}`,
     url: baseURL,
     reuseExistingServer: !process.env.CI && process.env.E2E_REUSE_SERVER === '1',
     timeout: 120_000,

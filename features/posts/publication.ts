@@ -82,6 +82,10 @@ function hasPlaceholderImage(value: unknown): boolean {
 const placeholderTitle = /^(?:hello this is for test|test(?: post| article)?|e2e(?: .*)?|untitled(?: post| article)?|sample(?: post| article)?|placeholder(?: .*)?)[.!]*$/i
 const filler = /hello this is for test|\blorem ipsum\b|\b(?:insert|add|write) (?:your )?(?:title|content|text|excerpt) here\b|\[(?:insert|add|your) [^\]]+\]/i
 
+function isValidSlugFormat(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 200 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)
+}
+
 export function publicationErrors(input: PublicationInput, authorName: unknown, editorialReviewed: unknown): FieldErrors {
   const errors: FieldErrors = {}
   const add = (field: string, message: string) => { (errors[field] ??= []).push(message) }
@@ -90,7 +94,7 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
   const excerpt = readableText(input.excerpt)
   if (title.length < PUBLICATION_LIMITS.titleMin || title.length > PUBLICATION_LIMITS.titleMax) add('title', 'Use a descriptive title of 10–160 readable characters.')
   if (placeholderTitle.test(title) || filler.test(title)) add('title', 'Replace the test or placeholder title with a meaningful engineering topic.')
-  if (typeof input.slug !== 'string' || input.slug.length > 200 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)) add('slug', 'Use a unique slug of up to 200 lowercase letters, numbers and hyphens.')
+  if (!isValidSlugFormat(input.slug)) add('slug', 'Use a unique slug of up to 200 lowercase letters, numbers and hyphens.')
   const words = content.match(/[\p{L}\p{N}]+(?:['’_-][\p{L}\p{N}]+)*/gu)?.length ?? 0
   if (words < PUBLICATION_LIMITS.bodyWords) add('content', `Write at least 200 readable words; this article has ${words}. Include practical examples and useful takeaways.`)
   if (excerpt.length < PUBLICATION_LIMITS.excerptMin || excerpt.length > PUBLICATION_LIMITS.excerptMax) add('excerpt', 'Write an accurate excerpt of 40–500 readable characters.')
@@ -109,15 +113,17 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
 export async function validatePublication(
   client: ReturnType<typeof createServiceClient>, input: PublicationInput, editorialReviewed: unknown, excludeId?: string, automaticSlug = false
 ): Promise<FieldErrors> {
-  const { data: author, error: authorError } = await client.from('profiles').select('full_name').eq('id', input.author_id).maybeSingle()
-  const errors = publicationErrors(input, authorError ? null : author?.full_name, editorialReviewed)
-  if (!errors.slug && !automaticSlug) {
+  const authorLookup = client.from('profiles').select('full_name').eq('id', input.author_id).maybeSingle()
+  let slugLookup = null
+  if (isValidSlugFormat(input.slug) && !automaticSlug) {
     let query = client.from('posts').select('id').eq('slug', input.slug)
     if (excludeId) query = query.neq('id', excludeId)
-    const { data: conflict, error } = await query.maybeSingle()
-    if (error) errors.slug = ['Could not verify slug uniqueness. Try again.']
-    else if (conflict) errors.slug = ['This slug is already in use. Choose another.']
+    slugLookup = query.maybeSingle()
   }
+  const [{ data: author, error: authorError }, conflict] = await Promise.all([authorLookup, slugLookup])
+  const errors = publicationErrors(input, authorError ? null : author?.full_name, editorialReviewed)
+  if (conflict?.error) errors.slug = ['Could not verify slug uniqueness. Try again.']
+  else if (conflict?.data) errors.slug = ['This slug is already in use. Choose another.']
   return errors
 }
 

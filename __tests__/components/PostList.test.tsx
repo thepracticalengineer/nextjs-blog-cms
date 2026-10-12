@@ -18,6 +18,7 @@ vi.mock('next/image', () => ({
 
 const makePost = (id: string, title: string): PostWithRelations => ({
   id,
+  reading_time_minutes: 1,
   title,
   slug: `post-${id}`,
   content: '<p>Content</p>',

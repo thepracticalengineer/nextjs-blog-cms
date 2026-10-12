@@ -6,7 +6,6 @@ const tags = [
 ]
 const client = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => client }))
-vi.mock('@/lib/supabase/static', () => ({ createStaticClient: () => client }))
 vi.mock('@/features/posts/components/PostList', () => ({ PostList: () => null }))
 
 function installTaxonomy() {
@@ -33,9 +32,9 @@ describe('canonical tag discovery', () => {
     expect(urls.some(url => url.endsWith('/blog/tag/canonical'))).toBe(true)
     expect(urls.some(url => url.endsWith('/blog/tag/alias'))).toBe(false)
   })
-  it('prerenders only canonical tag pages', async () => {
+  it('renders new taxonomy URLs dynamically after a production build', async () => {
     installTaxonomy()
-    const { generateStaticParams } = await import('@/app/(public)/blog/tag/[slug]/page')
-    expect(await generateStaticParams()).toEqual([{ slug: 'canonical' }])
+    const { dynamic } = await import('@/app/(public)/blog/tag/[slug]/page')
+    expect(dynamic).toBe('force-dynamic')
   })
 })

@@ -17,14 +17,18 @@ export default async function EditPostPage({ params }: EditPostPageProps) {
   const profile = await requirePermission('posts:create')
   const { id } = await params
   const supabase = await createClient()
-  const [post, { data: categories }, { data: tags, error: tagsError }] = await Promise.all([
-    getPostById(id),
+  const postLookup = getPostById(id).then(post => {
+    if (!post || (profile.role !== 'admin' && post.author_id !== profile.id)) notFound()
+    return post
+  })
+  // Newsletter access stays behind the ownership check, but need not wait for
+  // unrelated taxonomy queries before starting.
+  const [post, { data: categories }, { data: tags, error: tagsError }, newsletter] = await Promise.all([
+    postLookup,
     supabase.from('categories').select('*').order('name'),
     supabase.from('tags').select('*').order('name'),
+    postLookup.then(post => getPostNewsletterState(post.id)),
   ])
-
-  if (!post || (profile.role !== 'admin' && post.author_id !== profile.id)) notFound()
-  const newsletter = await getPostNewsletterState(id)
 
   return (
     <div className="p-4 md:p-8 space-y-6">
