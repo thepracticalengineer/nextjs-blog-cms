@@ -41,7 +41,7 @@
     ]
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.131.0",
+    "@anthropic-ai/sdk": "0.132.1",
     "@base-ui/react": "1.8.0",
     "@google/genai": "2.28.0",
     "@hookform/resolvers": "5.9.1",
