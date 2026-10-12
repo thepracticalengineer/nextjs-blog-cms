@@ -14,6 +14,7 @@ test('real collection retains passing/failing/retry reports, excludes harnesses,
   const directory = mkdtempSync(join(tmpdir(), 'e2e-coverage-'))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   mkdirSync(join(directory, 'lib'))
+  mkdirSync(join(directory, 'nested'))
   const source = 'function choose(flag) {\n  if (flag) return 1;\n  return 2;\n}\nchoose(true);\n'
   writeFileSync(join(directory, 'lib/sample.js'), source)
   const map = { version: 3, sources: ['sample.js'], sourcesContent: [source], names: [], mappings: 'AAAA;AACA;AACA;AACA;AACA' }
@@ -21,14 +22,22 @@ test('real collection retains passing/failing/retry reports, excludes harnesses,
   writeFileSync(join(directory, 'playwright.config.ts'), `
     export default {
       testDir: '.', testMatch: 'probe.spec.ts', workers: 1, retries: 1,
-      metadata: { coverageSuite: 'analytics' },
+      metadata: { coverageSuite: 'analytics', coverageRoot: ${JSON.stringify(directory)} },
       outputDir: './test-results/analytics',
       reporter: [['list'], ['html', { outputFolder: './playwright-report/analytics', open: 'never' }],
-        [${JSON.stringify(join(root, 'e2e/coverage/reporter.ts'))}, { suite: 'analytics' }]],
+        [${JSON.stringify(join(root, 'e2e/coverage/reporter.ts'))}, { suite: 'analytics', root: ${JSON.stringify(directory)} }]],
     }
   `)
   writeFileSync(join(directory, 'probe.spec.ts'), `
     import { test, expect } from ${JSON.stringify(join(root, 'e2e/coverage/fixture.ts'))}
+    import { CoverageReport } from ${JSON.stringify(require.resolve('monocart-coverage-reports'))}
+    if (process.env.PROBE_SLOW_COLLECTION === '1') {
+      const original = CoverageReport.prototype.add
+      CoverageReport.prototype.add = async function(data) {
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        return original.call(this, data)
+      }
+    }
     test.beforeEach(async ({ page }) => {
       await page.route('http://127.0.0.1:3009/**', route => route.fulfill({
         contentType: route.request().url().endsWith('.js') ? 'text/javascript' : 'text/html',
@@ -37,6 +46,7 @@ test('real collection retains passing/failing/retry reports, excludes harnesses,
       await page.goto('http://127.0.0.1:3009/')
     })
     test('application branch', async ({ page }) => {
+      if (process.env.PROBE_SLOW_COLLECTION === '1') test.setTimeout(2000)
       expect(await page.evaluate(() => choose(true))).toBe(1)
       expect(process.env.PROBE_FAIL).not.toBe('1')
     })
@@ -46,9 +56,9 @@ test('real collection retains passing/failing/retry reports, excludes harnesses,
     })
     test.skip('skipped outcome', async () => {})
   `)
-  const run = (failure = false, brokenMap = false) => spawnSync(process.execPath, [cli, 'test', '--config=playwright.config.ts'], {
-    cwd: directory, encoding: 'utf8', timeout: 45_000,
-    env: { ...process.env, E2E_COVERAGE: '1', PROBE_FAIL: failure ? '1' : '0', PROBE_BROKEN_MAP: brokenMap ? '1' : '0' },
+  const run = (failure = false, brokenMap = false, slow = false) => spawnSync(process.execPath, [cli, 'test', `--config=${join(directory, 'playwright.config.ts')}`, ...(slow ? ['--grep', 'application branch'] : [])], {
+    cwd: join(directory, 'nested'), encoding: 'utf8', timeout: 45_000,
+    env: { ...process.env, E2E_COVERAGE: '1', PROBE_FAIL: failure ? '1' : '0', PROBE_BROKEN_MAP: brokenMap ? '1' : '0', PROBE_SLOW_COLLECTION: slow ? '1' : '0' },
   })
   const status = () => JSON.parse(readFileSync(join(directory, 'coverage/e2e/analytics/status.json'), 'utf8'))
   const first = run()
@@ -65,6 +75,10 @@ test('real collection retains passing/failing/retry reports, excludes harnesses,
   assert.equal(status().status, 'failed')
   assert.ok(existsSync(join(directory, 'coverage/e2e/analytics/coverage-summary.json')))
   assert.ok(existsSync(join(directory, 'coverage/e2e/main/marker')))
+  const slow = run(false, false, true)
+  assert.equal(slow.status, 0, slow.stdout + slow.stderr)
+  assert.equal(status().counts.passed, 1)
+  assert.equal(status().errors, 0)
   const broken = run(false, true)
   assert.equal(broken.status, 0, broken.stdout + broken.stderr)
   assert.match(status().coverage, /incomplete/)

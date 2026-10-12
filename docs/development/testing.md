@@ -88,8 +88,7 @@ with mail/webhooks and LLM provider keys disabled; it makes no LLM requests.
 
 ## Pull request coverage reports
 
-The **Coverage report** Actions job publishes a summary on every CI run, including
-failed runs. Open the PR's Checks tab, then that job/run summary. It shows unit
+The **Coverage report** Actions job publishes a summary on CI runs, including failures (cancelled runs skip reporting). Open the PR's Checks tab, then that job/run summary. It shows unit
 lines, statements, branches and functions, and separate E2E client coverage and
 passed/failed/skipped/flaky counts for `main`, `analytics`, `oauth` and
 `publication`. Flaky means a test passed after retry; suites currently default to
@@ -110,7 +109,9 @@ cannot erase the main or analytics reports. Uploads run after success or failure
 A server startup/build failure may prevent a suite from producing any report;
 this is labeled unavailable/skipped or interrupted, never zero passing tests.
 Coverage collection errors are reported as incomplete without overriding the test
-exit status. Unit coverage is also generated on assertion failures, and the
+exit status. The coverage fixture has a separate 60-second budget, and source-map
+collection requests share a 15-second abort deadline so they do not consume the
+test's timeout. Unit coverage is also generated on assertion failures, and the
 existing **80% thresholds on all four metrics remain unchanged**.
 
 ### Scope and limitations
@@ -139,8 +140,9 @@ This is **limited client coverage**, not coverage of the entire application:
 - Zero-denominator metrics and missing source maps are unavailable, not 100%.
 
 The summary compares each metric with a retained compatible artifact from a
-successful `main` push CI run for the **exact PR base SHA** (the previous SHA on
-main push runs). No code from that baseline is executed. First rollout, missing or
+successful `main` push CI run for the **first parent of the tested PR merge commit** (the previous SHA on
+main push runs). The reporting checkout fetches that parent explicitly, avoiding
+stale base SHAs from the event payload. No code from that baseline is executed. First rollout, missing or
 expired artifacts, read permission failures and incompatible report formats show
 `baseline unavailable`. Changes are percentage points; loaded-file denominators
 can change between commits, so inspect detailed reports when interpreting deltas.
@@ -169,7 +171,8 @@ node --test scripts/coverage/*.test.mjs
 
 Run unit coverage before E2E when retaining both locally: Vitest cleans its own
 `coverage/` directory. Each E2E run only replaces its own suite's reports.
-`e2e/reporting.ts` controls report paths; `e2e/coverage/options.ts` controls source
+`e2e/reporting.ts` resolves report paths from the repository location, independent
+of the calling directory; `e2e/coverage/options.ts` controls source
 filtering; `scripts/coverage/report.mjs` renders the CI summary. Coverage collection
 is opt-in locally and enabled in the CI E2E job. No external coverage service or
 additional repository secret is required.

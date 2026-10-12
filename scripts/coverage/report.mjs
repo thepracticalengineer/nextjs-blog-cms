@@ -17,7 +17,11 @@ const escape = value => String(value).replace(/[|<>\r\n]/g, ' ')
 const count = value => Number.isInteger(value) && value >= 0 ? value : 'unavailable'
 export function metric(value, baseline) {
   if (!Number.isFinite(value)) return 'unavailable'
-  const delta = Number.isFinite(baseline) ? `${value - baseline >= 0 ? '+' : ''}${(value - baseline).toFixed(2)} pp` : 'baseline unavailable'
+  let delta = 'baseline unavailable'
+  if (Number.isFinite(baseline)) {
+    const sign = value >= baseline ? '+' : ''
+    delta = `${sign}${(value - baseline).toFixed(2)} pp`
+  }
   return `${value.toFixed(2)}% (${delta})`
 }
 
