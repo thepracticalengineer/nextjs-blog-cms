@@ -314,3 +314,7 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Keep the last page content reachable above the optional fixed consent prompt. */
+body { padding-bottom: var(--analytics-prompt-height, 0px); }
+html { scroll-padding-bottom: var(--analytics-prompt-height, 0px); }

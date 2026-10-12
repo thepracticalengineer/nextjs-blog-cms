@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Analytics test harness</title></head>
+<body>
+  <button id="grant">Allow analytics</button><button id="deny">Turn off analytics</button>
+  <button data-route="/blog/second">Second article</button>
+  <button data-route="/dashboard?token=private-secret">Dashboard</button>
+  <button data-route="/blog/article">First article</button>
+  <button data-route="/blog?q=reader%40example.com">Search</button>
+  <button data-route="/blog/article?code=private-secret">Token URL</button>
+  <button id="subscribe">New subscription</button>
+  <a href="https://github.com/org/repo?token=link-secret#private" target="_blank">Repository</a>
+  <p id="current"></p>
+  <script type="module">
+    import { registerAnalyticsPage, startAnalytics, trackNewsletterEvent } from '../../lib/analytics/client.ts'
+    import { setConsent } from '../../lib/analytics/consent.ts'
+    history.replaceState(null, '', '/blog/article')
+    let unregister
+    function render() {
+      unregister?.()
+      document.querySelector('#current').textContent = location.pathname
+      if (location.pathname.startsWith('/blog')) {
+        unregister = registerAnalyticsPage({ pathname: location.pathname, title: 'Public article' })
+      }
+    }
+    render()
+    startAnalytics({ measurementId: 'G-TEST123', origin: location.origin })
+    document.querySelector('#grant').onclick = () => setConsent('granted')
+    document.querySelector('#deny').onclick = () => setConsent('denied')
+    document.querySelector('#subscribe').onclick = () => trackNewsletterEvent('newsletter_subscribe')
+    document.querySelector('a').onclick = e => e.preventDefault()
+    for (const button of document.querySelectorAll('[data-route]')) {
+      button.onclick = () => {
+        history.pushState(null, '', button.dataset.route)
+        // Simulate the interval between Next's history update and committed page effects.
+        trackNewsletterEvent('newsletter_subscribe')
+        queueMicrotask(render)
+      }
+    }
+    window.addEventListener('popstate', () => queueMicrotask(render))
+  </script>
+</body></html>

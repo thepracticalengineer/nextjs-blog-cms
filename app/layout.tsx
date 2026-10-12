@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display, DM_Sans } from "next/font/google";
-import { GoogleAnalytics } from "@next/third-parties/google";
+import { Suspense } from "react";
+import { Analytics } from "@/components/analytics/Analytics";
+import { analyticsConfig } from "@/lib/analytics/policy";
 import NextTopLoader from "nextjs-toploader";
 import "./globals.css";
 
@@ -39,6 +41,7 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const analytics = analyticsConfig(process.env);
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
       <body
@@ -46,10 +49,8 @@ export default function RootLayout({
       >
         <NextTopLoader showSpinner={false} />
         {children}
+        {analytics && <Suspense fallback={null}><Analytics config={analytics} /></Suspense>}
       </body>
-      {process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID && (
-        <GoogleAnalytics gaId={process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID} />
-      )}
     </html>
   );
 }

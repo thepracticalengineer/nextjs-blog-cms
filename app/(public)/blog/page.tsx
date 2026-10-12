@@ -1,3 +1,4 @@
+import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import type { Metadata } from 'next'
 import { parsePage } from '@/features/posts/list-state'
 import { PostPagination } from '@/features/posts/components/PostPagination'
@@ -24,6 +25,7 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">
+      <AnalyticsPage pathname="/blog" title="Articles | The Practical Engineer" />
       {/* Page header */}
       <div className="space-y-2 border-b pb-8">
         <p className="text-sm font-medium text-primary uppercase tracking-widest">The Practical Engineer</p>

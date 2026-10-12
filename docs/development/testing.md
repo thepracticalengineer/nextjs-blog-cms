@@ -61,3 +61,7 @@ Optional `--before-url` and `--after-url` compare two local production builds ag
 the same disposable database. The script seeds 1,500 synthetic posts, makes seven
 warm measurements per query/flow, reports JSON payload bytes and timings, and removes
 its fixtures. See [recorded measurements](../operations/post-list-performance.md).
+
+## Analytics isolation
+
+Run `pnpm exec vitest run __tests__/analytics __tests__/api/newsletter/subscribe.test.ts` for collection boundaries and newsletter event contracts. Run `pnpm exec playwright test --config=e2e/analytics.config.ts` for the standalone desktop/mobile runtime and consent-component harness; it stubs the Google loader and blocks external requests, with no database or mail. This does not validate live Google ingestion or the rendered Next.js integration. See [the analytics verification matrix](../setup/google-analytics.md#verification) for the remaining app/property rollout checks.

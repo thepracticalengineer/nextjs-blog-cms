@@ -1,3 +1,4 @@
+import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
@@ -64,6 +65,7 @@ export default async function PostPage({ params }: PostPageProps) {
 
   return (
     <>
+      <AnalyticsPage pathname={`/blog/${post.slug}`} title={`${post.seo_title || post.title} | The Practical Engineer`} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}

@@ -7,3 +7,7 @@ After release, inspect home/blog navigation, article pages, taxonomy, public aut
 Keep AI output in drafts until a human editor reviews accuracy, attribution, taxonomy and SEO. See [content cleanup and dated audit](content-cleanup.md) and [publication rules](../features/publication-and-slugs.md). Production cleanup and publication require deliberate editorial decisions.
 
 Before enabling Google/GitHub sign-in, configure provider credentials and exact callback allowlists, then complete the dedicated-account [social authentication rollout checklist](../setup/social-auth.md#verification-and-rollout). The mocked SDK/browser tests do not verify live provider consent or account linking.
+
+## Analytics rollout
+
+Keep `GA_ENABLED=false` until the [Google Analytics rollout order](../setup/google-analytics.md#rollout-order) is complete. Deploy the disabled implementation first, configure the existing stream for manual collection, then enable only on the canonical production host. Record the collection pause and verification evidence; this deployment alone does not complete issue #129.
