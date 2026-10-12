@@ -27,6 +27,8 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 120_000,
     env: {
+      // This fake-Auth server must not reuse the main suite's Turbopack cache.
+      NEXT_DIST_DIR: '.next-oauth-ui',
       NEXT_PUBLIC_SITE_URL: baseURL,
       NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54999',
       NEXT_PUBLIC_SUPABASE_ANON_KEY: 'oauth-ui-test-anon-key',

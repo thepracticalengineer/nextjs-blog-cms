@@ -1,3 +1,4 @@
+import { AuthApiError, AuthRetryableFetchError, AuthSessionMissingError } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { NextRequest } from 'next/server'
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
@@ -31,7 +32,7 @@ import * as subscribers from '@/app/api/newsletter/subscribers/export/route'
 
 function clientFor(currentLevel = 'aal1', enrolled = true) {
   const profile = { id: 'owner', role: 'author' }
-  const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), single: vi.fn().mockResolvedValue({ data: profile, error: null }) }
+  const query = { select: vi.fn().mockReturnThis(), eq: vi.fn().mockReturnThis(), maybeSingle: vi.fn().mockResolvedValue({ data: profile, error: null }) }
   const client = {
     auth: {
       getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'owner', factors: enrolled ? [{ status: 'verified' }] : [] } }, error: null }),
@@ -95,7 +96,7 @@ it('denies a stale AAL1 session even when cached factors say no enrollment', asy
 })
 it('fails closed when the profile lookup fails', async () => {
   const client = clientFor('aal2')
-  client.from().single.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
+  client.from().maybeSingle.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
   expect((await authorizeSession()).failure?.code).toBe('AUTH_UNAVAILABLE')
 })
 it('redirects protected pages to MFA with a safe return path', async () => {
@@ -109,16 +110,50 @@ it('never treats a different owner or missing owner as authorized', () => {
 })
 it('fails page rendering on outages without entering a challenge redirect loop', async () => {
   const client = clientFor('aal2')
-  client.from().single.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
+  client.from().maybeSingle.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
   await expect(requireAuth('/dashboard/ai-assistant')).rejects.toThrow('Authentication could not be verified')
 })
-it.each([{ name: 'AuthSessionMissingError' }, { status: 401 }])('classifies an absent or expired session as unauthenticated', async error => {
+it.each([
+  new AuthSessionMissingError(),
+  new AuthApiError('Expired', 401, 'session_expired'),
+  new AuthApiError('Refresh token missing', 400, 'refresh_token_not_found'),
+  new AuthApiError('Refresh token reused', 400, 'refresh_token_already_used'),
+  new AuthApiError('Invalid JWT', 403, 'bad_jwt'),
+  new AuthApiError('Deleted user', 403, 'user_not_found'),
+])('classifies an absent or expired session as unauthenticated', async error => {
   const client = clientFor()
   client.auth.getUser.mockResolvedValue({ data: { user: null }, error })
   expect((await authorizeSession()).failure?.code).toBe('UNAUTHENTICATED')
+  const response = await keys.GET()
+  expect(response.status).toBe(401)
+  expect(await response.json()).toMatchObject({ code: 'UNAUTHENTICATED', error: expect.stringContaining('Sign in again') })
+  expect(client.from).not.toHaveBeenCalled()
 })
 it('preserves Next.js request-context signals during client construction', async () => {
   const signal = new Error('Dynamic server usage: cookies')
   vi.mocked(createClient).mockRejectedValueOnce(signal)
   await expect(authorizeSession()).rejects.toBe(signal)
+})
+
+it.each([
+  new AuthRetryableFetchError('Network failure', 0),
+  new AuthRetryableFetchError('Retryable fetch failure', 400),
+  new AuthApiError('Service unavailable', 503, 'unexpected_failure'),
+  new AuthApiError('Rate limited', 429, 'over_request_rate_limit'),
+])('retains unavailable classification for retryable/provider errors', async error => {
+  const client = clientFor()
+  client.auth.getUser.mockResolvedValue({ data: { user: null }, error })
+  const response = await keys.GET()
+  expect(response.status).toBe(503)
+  expect(await response.json()).toMatchObject({ code: 'AUTH_UNAVAILABLE' })
+  expect(client.from).not.toHaveBeenCalled()
+})
+it('treats a missing profile as forbidden and redirects pages to login', async () => {
+  const client = clientFor('aal2')
+  client.from().maybeSingle.mockResolvedValue({ data: null, error: null })
+  const response = await keys.GET()
+  expect(response.status).toBe(403)
+  expect(await response.json()).toMatchObject({ code: 'FORBIDDEN' })
+  await expect(requireAuth()).rejects.toThrow('/login')
+  expect(createServiceClient).not.toHaveBeenCalled()
 })

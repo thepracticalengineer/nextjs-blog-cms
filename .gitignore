@@ -38,3 +38,5 @@
 # Interactive Playwright CLI configuration, browser sessions and snapshots
 /.playwright/
 /.playwright-cli/
+
+/.next-oauth-ui

@@ -34,7 +34,7 @@ function makeSupabase(userId: string | null, profile: unknown = fakeProfile) {
     from: vi.fn().mockReturnValue({
       select: vi.fn().mockReturnValue({
         eq: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({ data: profile }),
+          maybeSingle: vi.fn().mockResolvedValue({ data: profile }),
         }),
       }),
     }),

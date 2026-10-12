@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { isAuthRetryableFetchError } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { can } from '@/lib/permissions'
 import type { Permission, Role } from '@/lib/permissions'
@@ -25,14 +26,18 @@ export async function authorizeSession(permission?: Permission): Promise<Session
   } }
   try {
     const { data: { user }, error } = await supabase.auth.getUser()
-    if (error && error.name !== 'AuthSessionMissingError' && error.status !== 401) return unavailable
+    // GoTrue uses 400 for invalid refresh tokens and 403 for invalid JWTs or
+    // deleted users. Retrying cannot repair these sessions; require sign-in.
+    const rejectedSession = error && !isAuthRetryableFetchError(error) &&
+      (error.name === 'AuthSessionMissingError' || [400, 401, 403].includes(error.status ?? 0))
+    if (error && !rejectedSession) return unavailable
     if (error || !user) return { profile: null, failure: { code: 'UNAUTHENTICATED', status: 401, error: 'Sign in again, then retry.' } }
     const assurance = await checkAssurance(supabase, user)
     if (assurance === 'AUTH_UNAVAILABLE') return unavailable
     if (assurance) return { profile: null, failure: {
       code: 'MFA_REQUIRED', status: 403, error: 'Complete two-factor authentication, then retry.',
     } }
-    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+    const { data: profile, error: profileError } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle()
     if (profileError) return unavailable
     if (!profile || (permission && !can(profile.role as Role, permission))) {
       return { profile: null, failure: { code: 'FORBIDDEN', status: 403, error: 'Forbidden' } }

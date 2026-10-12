@@ -90,7 +90,8 @@ instead of creating an MFA redirect loop.
 
 Migration `20261012103751_enforce_mfa_assurance.sql` adds restrictive policies for
 private profiles, working copies, AI data, API/provider keys and storage metadata
-and operations. It also gates mutations of posts, taxonomy and comments, and
+and operations across all buckets, including authenticated avatar and post-media
+uploads. It also gates mutations of posts, taxonomy and comments, and
 private post/tag reads. The enrollment check reads `auth.mfa_factors` through a
 restricted, non-exposed helper bound to `auth.uid()`, so stale pre-enrollment JWTs
 cannot opt out. Existing ownership/role policies still apply. Published content,
