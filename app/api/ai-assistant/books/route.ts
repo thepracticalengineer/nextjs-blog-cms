@@ -1,6 +1,6 @@
 // app/api/ai-assistant/books/route.ts
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { authorizeApi } from '@/lib/auth/api'
 import { createBook, getBooks } from '@/features/ai-assistant/chatService'
 import { extractTextFromPdf } from '@/features/ai-assistant/pdfService'
 
@@ -10,9 +10,8 @@ import { extractTextFromPdf } from '@/features/ai-assistant/pdfService'
  * Extracts text server-side — the PDF file is NOT stored.
  */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -89,9 +88,8 @@ export async function POST(req: NextRequest) {
  * Returns all books for the current user.
  */
 export async function GET(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
   const books = await getBooks(user.id)
   return NextResponse.json({ books })

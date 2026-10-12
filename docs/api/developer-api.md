@@ -103,3 +103,21 @@ Delete a post by ID.
 See [publication and write contracts](publication-and-writes.md) for published requests, concurrency and idempotency. AI generation creates drafts requiring human editorial review.
 
 Cover metadata uses `image_url` and optional `image_alt` (at most 1000 characters) on create/update. Read endpoints return both. See [post images](../features/post-images.md) for authenticated dashboard upload and storage policy.
+
+## Session MFA errors
+
+Cookie-authenticated AI, developer-key, provider-key, post-media and subscriber
+export endpoints use a shared session guard. Errors include a human-readable
+`error` and stable `code`, with `Cache-Control: no-store`:
+
+| Status | Code | Meaning |
+| --- | --- | --- |
+| 401 | `UNAUTHENTICATED` | Sign in again; no valid session is available. |
+| 403 | `MFA_REQUIRED` | Complete `/mfa` before retrying the private operation. |
+| 403 | `FORBIDDEN` | The profile or required permission is unavailable. |
+| 503 | `AUTH_UNAVAILABLE` | Identity, assurance or profile lookup failed; retry later. |
+
+A verified MFA factor requires an AAL2 session. Accounts without verified factors
+can continue at AAL1. These errors do not change Bearer API-key authentication:
+existing keys remain machine credentials, while creating/listing/revoking/deleting
+keys through a session requires the appropriate assurance and permission.

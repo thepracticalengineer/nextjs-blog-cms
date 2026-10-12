@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers'
+import { checkAssurance } from '@/lib/auth/assurance'
 import { createOAuthClient } from '@/lib/auth/oauth-server'
 import { isOAuthProvider, OAUTH_CONTEXT_COOKIE, oauthErrorCode } from '@/lib/auth/oauth'
 import { mfaDestination, safeReturnPath } from '@/lib/auth/navigation'
@@ -30,13 +31,12 @@ export async function completeOAuth(params: URLSearchParams): Promise<string> {
     if (userError || !user) return failure('auth_callback_failed')
     if (!user.email || !user.email_confirmed_at) return failure('oauth_email')
     if (!user.identities?.some(identity => identity.provider === context.provider)) return failure('oauth_identity')
-    const { data: assurance, error: assuranceError } = await client.supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    if (assuranceError || !assurance?.currentLevel || !assurance.nextLevel) return failure('oauth_mfa')
+    const assuranceFailure = await checkAssurance(client.supabase, user)
+    if (assuranceFailure === 'AUTH_UNAVAILABLE') return failure('oauth_mfa')
     const next = safeReturnPath(context.next)
     // AAL1 cookies are needed only to complete the existing MFA challenge.
     // Shared server guards and the dashboard proxy still reject sensitive access.
-    const enrolled = user.factors?.some(factor => factor.status === 'verified')
-    const needsMfa = (enrolled || assurance.nextLevel === 'aal2') && assurance.currentLevel !== 'aal2'
+    const needsMfa = assuranceFailure === 'MFA_REQUIRED'
     if (!needsMfa) {
       const { data: profile, error: profileError } = await client.supabase.from('profiles').select('id').eq('id', user.id).single()
       if (profileError || !profile) return failure('oauth_profile')

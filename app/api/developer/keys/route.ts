@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getProfile } from '@/lib/auth/session'
-import { can } from '@/lib/permissions'
-import type { Role } from '@/lib/permissions'
+import { authorizeApi } from '@/lib/auth/api'
 import { createApiKey, listApiKeys } from '@/features/api-keys/apiKeyService'
 
 export async function GET() {
-  const user = await getProfile()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!can(user.role as Role, 'api_keys:write')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { profile: user, response } = await authorizeApi('api_keys:write')
+  if (response) return response
 
   try {
     const keys = await listApiKeys(user.id)
@@ -19,9 +16,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const user = await getProfile()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!can(user.role as Role, 'api_keys:write')) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const { profile: user, response } = await authorizeApi('api_keys:write')
+  if (response) return response
 
   let body: unknown
   try {

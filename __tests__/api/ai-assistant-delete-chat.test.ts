@@ -1,3 +1,4 @@
+vi.mock('@/lib/auth/session', async () => ({ authorizeSession: (await import('../helpers/session')).routeTestSession }))
 // __tests__/api/ai-assistant-delete-chat.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { NextRequest } from 'next/server'

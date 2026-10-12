@@ -26,6 +26,8 @@ export default defineConfig({
         'lib/encryption.ts',
         'lib/api/auth.ts',
         'lib/auth/session.ts',
+        'lib/auth/assurance.ts',
+        'lib/auth/api.ts',
         'lib/auth/password-policy.ts',
         'lib/auth/navigation.ts',
         'lib/auth/oauth.ts',

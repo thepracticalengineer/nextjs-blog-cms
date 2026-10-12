@@ -1,6 +1,7 @@
 // app/api/ai-assistant/books/[bookId]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authorizeApi, ownsResource } from '@/lib/auth/api'
 import { deleteBook } from '@/features/ai-assistant/chatService'
 
 type Params = { params: Promise<{ bookId: string }> }
@@ -12,10 +13,10 @@ type Params = { params: Promise<{ bookId: string }> }
 export async function DELETE(_req: NextRequest, props: Params) {
   const params = await props.params
   const { bookId } = params
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const { profile: user, response } = await authorizeApi()
+  if (response) return response
 
+  const supabase = await createClient()
   // Fetch only the fields needed for ownership check — avoids loading extracted_text
   const { data: book } = await supabase
     .from('ai_books')
@@ -23,7 +24,7 @@ export async function DELETE(_req: NextRequest, props: Params) {
     .eq('id', bookId)
     .single()
 
-  if (!book || book.user_id !== user.id) {
+  if (!book || !ownsResource(user, book.user_id)) {
     return NextResponse.json({ error: 'Book not found' }, { status: 404 })
   }
 

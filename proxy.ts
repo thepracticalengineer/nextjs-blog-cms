@@ -1,3 +1,4 @@
+import { checkAssurance } from '@/lib/auth/assurance'
 import { mfaDestination, safeReturnPath } from '@/lib/auth/navigation'
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -70,10 +71,7 @@ export async function proxy(request: NextRequest) {
     if (!user) return redirectWithCookies('/login')
 
     // Only leave the challenge when assurance is known and no step-up is needed.
-    const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    const enrolled = user.factors?.some(factor => factor.status === 'verified')
-    if (!aalError && aal?.currentLevel && aal.nextLevel &&
-      (aal.currentLevel === 'aal2' || (!enrolled && aal.nextLevel === 'aal1'))) {
+    if (!await checkAssurance(supabase, user)) {
       return redirectWithCookies(safeReturnPath(request.nextUrl.searchParams.get('next')))
     }
 
@@ -87,9 +85,7 @@ export async function proxy(request: NextRequest) {
     // Enforce MFA for users who have it enrolled.
     // Fail-closed: if the AAL lookup fails, redirect to /mfa rather than
     // allowing the request through without MFA verification.
-    const { data: aal, error: aalError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    const enrolled = user.factors?.some(factor => factor.status === 'verified')
-    if (aalError || !aal?.currentLevel || !aal.nextLevel || ((enrolled || aal.nextLevel === 'aal2') && aal.currentLevel !== 'aal2')) {
+    if (await checkAssurance(supabase, user)) {
       return isPostAction ? denyPostAction(403) : redirectWithCookies(mfaDestination(pathname + request.nextUrl.search))
     }
 

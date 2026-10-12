@@ -3,11 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import sharp from 'sharp'
 import { crc32 } from 'node:zlib'
 vi.mock('server-only', () => ({}))
-vi.mock('@/lib/auth/session', () => ({ getProfile: vi.fn() }))
+vi.mock('@/lib/auth/session', () => ({ authorizeSession: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 vi.mock('@/lib/rateLimit', () => ({ checkRateLimit: vi.fn(() => ({ allowed: true })) }))
 import { POST } from '@/app/api/post-media/route'
-import { getProfile } from '@/lib/auth/session'
+import { authorizeSession } from '@/lib/auth/session'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkRateLimit } from '@/lib/rateLimit'
 import { optimizeImage } from '@/features/posts/media/optimize'
@@ -28,7 +28,7 @@ const fixture = async (format: 'png' | 'jpeg' | 'webp' = 'png', width = 48) => n
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(checkRateLimit).mockReturnValue({ allowed: true })
-  vi.mocked(getProfile).mockResolvedValue({ id: actor, role: 'author' } as Awaited<ReturnType<typeof getProfile>>)
+  vi.mocked(authorizeSession).mockResolvedValue({ profile: { id: actor, role: 'author' }, failure: null } as Awaited<ReturnType<typeof authorizeSession>>)
   upload.mockResolvedValue({ error: null })
   insert.mockResolvedValue({ error: null })
   vi.mocked(createServiceClient).mockReturnValue({
@@ -55,9 +55,9 @@ describe('owned, decoded post image upload', () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ owner_id: actor }))
   })
   it('rejects anonymous, unauthorized-role, changed-account and cross-origin requests before storage', async () => {
-    vi.mocked(getProfile).mockResolvedValueOnce(null)
+    vi.mocked(authorizeSession).mockResolvedValueOnce({ profile: null, failure: { code: 'UNAUTHENTICATED', status: 401, error: 'Sign in again' } })
     expect((await POST(request())).status).toBe(401)
-    vi.mocked(getProfile).mockResolvedValueOnce({ id: actor, role: 'reader' } as unknown as Awaited<ReturnType<typeof getProfile>>)
+    vi.mocked(authorizeSession).mockResolvedValueOnce({ profile: null, failure: { code: 'FORBIDDEN', status: 403, error: 'Forbidden' } })
     expect((await POST(request())).status).toBe(403)
     expect((await POST(request(await fixture(), 'other-user'))).status).toBe(403)
     expect((await POST(request(await fixture(), actor, 'https://attacker.example'))).status).toBe(403)

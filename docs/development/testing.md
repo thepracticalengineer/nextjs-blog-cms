@@ -65,3 +65,23 @@ its fixtures. See [recorded measurements](../operations/post-list-performance.md
 ## Analytics isolation
 
 Run `pnpm exec vitest run __tests__/analytics __tests__/api/newsletter/subscribe.test.ts` for collection boundaries and newsletter event contracts. Run `pnpm exec playwright test --config=e2e/analytics.config.ts` for the standalone desktop/mobile runtime and consent-component harness; it stubs the Google loader and blocks external requests, with no database or mail. This does not validate live Google ingestion or the rendered Next.js integration. See [the analytics verification matrix](../setup/google-analytics.md#verification) for the remaining app/property rollout checks.
+
+## MFA boundary verification
+
+`pnpm exec vitest run __tests__/auth/mfa-authorization.test.ts __tests__/lib/auth/session.test.ts __tests__/lib/proxy.test.ts`
+checks every protected cookie API against AAL1, absent sessions, missing assurance,
+Auth failures and thrown provider errors before private reads/service-role access.
+It also covers AAL2, non-enrolled sessions, roles, ownership and layout redirects.
+
+`database/tests/mfa_assurance.sql` runs against a migrated disposable database in
+CI. Its rolled-back fixtures cover enrolled AAL1/AAL2, stale/missing assurance,
+unverified enrollment, private data, storage mutations and public projections.
+Run the existing database assertions too, to retain recovery/publication/privacy
+contracts.
+
+`pnpm exec playwright test e2e/api/mfa-assurance.spec.ts --project=api` uses real
+local Auth and TOTP, cookie-authenticated HTTP requests, direct PostgREST and
+Storage requests. It verifies non-enrolled access, AAL1 rejection, the dashboard
+MFA redirect, and restored access after verification. It creates and removes its
+own disposable account and storage object. Use the dedicated environment above
+with mail/webhooks and LLM provider keys disabled; it makes no LLM requests.
