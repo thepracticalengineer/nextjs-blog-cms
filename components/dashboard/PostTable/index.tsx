@@ -35,7 +35,7 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
   const hasFilters = state.search !== '' || categoryFilter !== null
 
   function navigate(change: Partial<DashboardListState>) {
-    startTransition(() => router.push(dashboardListUrl({ ...state, search: search.trim().slice(0, 200), ...change }), { scroll: false }))
+    startTransition(() => router.push(dashboardListUrl({ ...state, ...change }), { scroll: false }))
   }
   function handleSort(field: SortField) {
     navigate({ sort: field, direction: sortField === field && sortDir === 'asc' ? 'desc' : 'asc', page: 1 })
@@ -76,7 +76,7 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
         <PostTableToolbar
           search={search}
           onSearch={setSearch}
-          onSubmit={() => navigate({ page: 1 })}
+          onSubmit={() => navigate({ search: search.trim().slice(0, 200), page: 1 })}
           categories={categories}
           categoryFilter={categoryFilter}
           onCategoryFilter={handleCategoryFilter}

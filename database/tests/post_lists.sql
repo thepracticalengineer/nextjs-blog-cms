@@ -34,6 +34,21 @@ do $$ begin
  if (select reading_time_minutes from public.posts where slug='list-fixture-1') <> 1 then raise exception 'Summary did not update'; end if;
 end $$;
 
+-- Exercise backfill, INSERT and UPDATE with JSON text that jsonb cannot represent.
+create temporary table reading_time_backfill(content text);
+insert into reading_time_backfill values ('{"type":"text","text":"a\u0000b"}'), ('{"value":1e1000000}');
+alter table reading_time_backfill add column minutes integer
+ generated always as (public.post_reading_minutes(content)) stored;
+insert into reading_time_backfill(content) values ('{"type":"text","text":"a\u0000b"}');
+update public.posts set content = '{"type":"text","text":"a\u0000b"}' where slug = 'list-fixture-1';
+do $$ declare separator text; begin
+ if exists(select 1 from reading_time_backfill where minutes <> 1) then raise exception 'Unsupported JSON backfill/insert'; end if;
+ if (select reading_time_minutes from public.posts where slug='list-fixture-1') <> 1 then raise exception 'Unsupported JSON update'; end if;
+ foreach separator in array array[chr(160), chr(8239), chr(65279)] loop
+   if public.post_reading_minutes(jsonb_build_object('type', 'text', 'text', repeat('word' || separator, 201))::text) <> 2 then raise exception 'Unicode whitespace reading time'; end if;
+ end loop;
+end $$;
+
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-000000000771","role":"authenticated"}', true);
 do $$ declare result jsonb; other jsonb; field text; direction text; begin

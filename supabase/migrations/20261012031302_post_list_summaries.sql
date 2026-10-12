@@ -18,9 +18,12 @@ begin
     )
     select string_agg(value->>'text', ' ') into readable from nodes
       where value->>'type' = 'text' and jsonb_typeof(value->'text') = 'string';
-  exception when invalid_text_representation then
+  -- JSON text can contain escapes or numbers unsupported by jsonb.
+  exception when invalid_text_representation or untranslatable_character or numeric_value_out_of_range then
     readable := regexp_replace(body, '<[^>]+>', ' ', 'g');
   end;
+  -- Explicit ECMAScript whitespace avoids locale-dependent NBSP handling.
+  readable := regexp_replace(readable, U&'[\0009-\000D\0020\00A0\1680\2000-\200A\2028\2029\202F\205F\3000\FEFF]+', ' ', 'g');
   select count(*) into words from regexp_split_to_table(coalesce(readable, ''), '\s+') word
     where word <> '';
   return greatest(1, ceil(words / 200.0)::integer);

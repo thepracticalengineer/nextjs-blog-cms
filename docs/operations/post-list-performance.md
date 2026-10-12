@@ -16,7 +16,10 @@ Public lists select `PUBLIC_POST_SELECT`, including stored `reading_time_minutes
 Category and tag lists now paginate; tag filtering uses a separate inner relationship
 so matching one tag does not remove other tags from the summary. Reading time is a
 stored generated column, computed for existing content by the migration and for
-subsequent writes by Postgres. The public author projection and existing RLS policies
+subsequent writes by Postgres. JSON text that cannot be represented as `jsonb`
+(including escaped NUL characters and out-of-range numbers) uses the plain-text
+fallback so reading-time calculation does not reject those saves or backfills.
+Unicode whitespace is normalized before counting. The public author projection and existing RLS policies
 remain unchanged.
 
 Publication refresh is centralized in `features/posts/cache.ts`. It invalidates
@@ -32,6 +35,10 @@ build-time static params conflicted with cookie-dependent rendering. Article,
 category and tag routes now explicitly render dynamically and no longer enumerate
 build-time params. Metadata and article reads use request-scoped React caching;
 this is not a persistent cache or a measured claim of duplicate baseline queries.
+These routes do not use ISR: every request reads Supabase, so deployed database
+latency and traffic directly affect page cost. Path invalidation does not provide a
+server response cache for these dynamic routes. A future cookie-free anonymous
+read path could restore caching after verifying publication and redirect freshness.
 
 ## Reproducible benchmark
 

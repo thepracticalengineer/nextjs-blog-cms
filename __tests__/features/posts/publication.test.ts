@@ -73,3 +73,12 @@ describe('publication readiness', () => {
     expect(await validatePublication(client, validPost, true, validPost.id)).toEqual({})
   })
 })
+
+describe('slug format lookup gating', () => {
+  it.each(['', 'UPPERCASE', 'two--hyphens', 'a'.repeat(201), null])('preserves format errors without a uniqueness query for %s', async slug => {
+    const { client } = postClient([{ ...validPost, slug }])
+    const result = await validatePublication(client, { ...validPost, slug }, true)
+    expect(result.slug).toEqual(['Use a unique slug of up to 200 lowercase letters, numbers and hyphens.'])
+    expect(client.from).not.toHaveBeenCalledWith('posts')
+  })
+})
