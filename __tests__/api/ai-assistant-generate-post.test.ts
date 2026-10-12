@@ -1,3 +1,4 @@
+vi.mock('@/features/posts/cache', () => ({ refreshDraftPaths: vi.fn() }))
 import { beforeEach, expect, it, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))

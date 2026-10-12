@@ -9,10 +9,10 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuTrigger, DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import type { PostWithRelations } from '@/features/posts/types'
+import type { DashboardPostSummary } from '@/features/posts/types'
 
 interface PostRowProps {
-  post: PostWithRelations
+  post: DashboardPostSummary
   onPublish: (id: string) => void
   onUnpublish: (id: string) => void
   onDelete: (id: string, title: string) => void

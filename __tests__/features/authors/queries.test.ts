@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
 import { getAuthorPublishedPosts, getPublicAuthor, parseAuthorPage } from '@/features/authors/queries'
-import { POST_SELECT } from '@/features/posts/queries'
+import { PUBLIC_POST_SELECT } from '@/features/posts/queries'
 
 const id = 'bc565d83-86ca-49b0-b23f-90db6c099567'
 const mockCreateClient = vi.mocked(createClient)
@@ -63,15 +63,15 @@ describe('author published articles', () => {
     const { chain, from } = mockQuery({ data: [{ id: 'post-1', tags: [{ tag }, { tag: null }] }], count: 30, error: null })
     expect(await getAuthorPublishedPosts(id, 2, 12)).toEqual({ posts: [{ id: 'post-1', tags: [tag] }], total: 30 })
     expect(from).toHaveBeenCalledWith('posts')
-    expect(chain.select).toHaveBeenCalledWith(POST_SELECT, { count: 'exact' })
+    expect(chain.select).toHaveBeenCalledWith(PUBLIC_POST_SELECT, { count: 'exact' })
     expect(chain.eq.mock.calls).toEqual([['author_id', id], ['status', 'published']])
     expect(chain.order.mock.calls).toEqual([
       ['published_at', { ascending: false, nullsFirst: false }], ['id', { ascending: false }],
     ])
     expect(chain.range).toHaveBeenCalledWith(12, 23)
-    expect(POST_SELECT).toContain('author:public_author_profiles')
-    expect(POST_SELECT).not.toMatch(/\b(email|role|confirmed_at|auth_metadata)\b/)
-    expect(POST_SELECT).toContain('(id, full_name, avatar_url)')
+    expect(PUBLIC_POST_SELECT).toContain('author:public_author_profiles')
+    expect(PUBLIC_POST_SELECT).not.toMatch(/\b(email|role|confirmed_at|auth_metadata)\b/)
+    expect(PUBLIC_POST_SELECT).toContain('(id, full_name, avatar_url)')
   })
 
   it.each([[], null])('returns an empty list and zero when no posts/count exist %#', async (data) => {

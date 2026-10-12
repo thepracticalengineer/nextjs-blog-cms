@@ -1,17 +1,19 @@
 import Link from 'next/link'
 import { PenLine } from 'lucide-react'
 import type { Metadata } from 'next'
-import { getAllPostsForDashboard } from '@/features/posts/queries'
+import { getDashboardPosts } from '@/features/posts/queries'
 import { PostTable } from '@/components/dashboard/PostTable'
-import { getProfile } from '@/lib/auth/session'
+import { requirePermission } from '@/lib/auth/session'
+import { redirect } from 'next/navigation'
+import { dashboardListUrl, parseDashboardListState, type ListSearchParams } from '@/features/posts/list-state'
 
 export const metadata: Metadata = { title: 'Posts' }
 
-export default async function PostsPage() {
-  const profile = await getProfile()
-  const posts = await getAllPostsForDashboard(
-    profile?.role === 'admin' ? undefined : profile?.id
-  )
+export default async function PostsPage({ searchParams }: { searchParams: Promise<ListSearchParams> }) {
+  await requirePermission('posts:create')
+  const state = parseDashboardListState(await searchParams)
+  const { posts, total, page, categories } = await getDashboardPosts(state)
+  if (page !== state.page) redirect(dashboardListUrl({ ...state, page }))
 
   return (
     <div className="p-4 md:p-8 space-y-6 animate-page">
@@ -19,7 +21,7 @@ export default async function PostsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Posts</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {posts.length} post{posts.length !== 1 ? 's' : ''} total
+            {total} post{total !== 1 ? 's' : ''}{state.search || state.category ? ' matching' : ' total'}
           </p>
         </div>
         <Link
@@ -30,7 +32,7 @@ export default async function PostsPage() {
           New Post
         </Link>
       </div>
-      <PostTable posts={posts} />
+      <PostTable key={dashboardListUrl(state)} posts={posts} total={total} categories={categories} state={state} />
     </div>
   )
 }

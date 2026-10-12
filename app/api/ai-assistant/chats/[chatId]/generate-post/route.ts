@@ -1,3 +1,4 @@
+import { refreshDraftPaths } from '@/features/posts/cache'
 import { savePostAtomic, creationIdentity, findCreatedPost } from '@/features/posts/persistence'
 import type { Post } from '@/features/posts/types'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
@@ -129,5 +130,6 @@ export async function POST(_req: NextRequest, props: Params) {
     return NextResponse.json({ error }, { status: isSlugConflict(postError) || postError?.code === '22023' ? 409 : status })
   }
 
+  refreshDraftPaths()
   return NextResponse.json({ post_id: post.id, post_slug: post.slug }, replayed ? { headers: { 'Idempotent-Replayed': 'true' } } : undefined)
 }

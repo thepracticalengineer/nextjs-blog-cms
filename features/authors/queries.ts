@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
-import { normalizePost, POST_SELECT } from '@/features/posts/queries'
-import type { PostWithRelations } from '@/features/posts/types'
+import { normalizeSummary, PUBLIC_POST_SELECT } from '@/features/posts/queries'
+import type { PublicPostSummary } from '@/features/posts/types'
 import type { PublicAuthor } from './types'
 
 const AUTHOR_SELECT = 'id, full_name, avatar_url, bio, website, twitter_url, linkedin_url, github_url, instagram_url, facebook_url, youtube_url, tiktok_url'
@@ -28,12 +28,12 @@ export async function getAuthorPublishedPosts(id: string, page = 1, limit = 12) 
   const from = (safePage - 1) * safeLimit
   const supabase = await createClient()
   const { data, error, count } = await supabase.from('posts')
-    .select(POST_SELECT, { count: 'exact' })
+    .select(PUBLIC_POST_SELECT, { count: 'exact' })
     .eq('author_id', id)
     .eq('status', 'published')
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
     .range(from, from + safeLimit - 1)
   if (error) throw error
-  return { posts: (data ?? []).map(normalizePost) as PostWithRelations[], total: count ?? 0 }
+  return { posts: (data ?? []).map(normalizeSummary) as PublicPostSummary[], total: count ?? 0 }
 }

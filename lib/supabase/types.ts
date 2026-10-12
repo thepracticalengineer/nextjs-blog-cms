@@ -184,6 +184,7 @@ export type Database = {
           created_at: string | null
           excerpt: string | null
           id: string
+          reading_time_minutes: number
           published_at: string | null
           seo_description: string | null
           seo_title: string | null
@@ -347,6 +348,12 @@ export type Database = {
       }
     }
     Functions: {
+      post_reading_minutes: { Args: { body: string }; Returns: number }
+      get_dashboard_posts: {
+        Args: { p_page?: number; p_page_size?: number; p_search?: string; p_category_id?: string | null; p_sort?: string; p_direction?: string }
+        Returns: Json
+      }
+
       merge_tags: { Args: { source_id: string; target_id: string }; Returns: undefined }
     }
     Enums: {

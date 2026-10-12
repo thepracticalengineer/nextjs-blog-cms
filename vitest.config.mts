@@ -43,6 +43,9 @@ export default defineConfig({
         // features
         'features/posts/components/**/*.{ts,tsx}',
         'features/posts/actions.ts',
+        'features/posts/queries.ts',
+        'features/posts/list-state.ts',
+        'features/posts/cache.ts',
         'features/posts/media/**/*.{ts,tsx}',
         'features/posts/drafts/**/*.{ts,tsx}',
         'features/posts/publication.ts',

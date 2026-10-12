@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
-import type { PostWithRelations } from './types'
+import { cache } from 'react'
+import { parsePage, type DashboardListState } from './list-state'
+import type { PostWithRelations, PublicPostSummary, DashboardPostPage } from './types'
 
 export const POST_SELECT = `
   *,
@@ -7,6 +9,18 @@ export const POST_SELECT = `
   category:categories(id, name, slug),
   tags:post_tags(tag:tags(id, name, slug))
 `
+
+export const PUBLIC_POST_SELECT = `
+  id, title, slug, excerpt, cover_image, cover_image_alt, published_at, reading_time_minutes,
+  author:public_author_profiles!posts_author_id_fkey(id, full_name, avatar_url),
+  category:categories(id, name, slug),
+  tags:post_tags(tag:tags(id, name, slug))
+`
+
+export function normalizeSummary(raw: unknown): PublicPostSummary {
+  const post = raw as Omit<PublicPostSummary, 'tags'> & { tags: { tag: PublicPostSummary['tags'][number] | null }[] }
+  return { ...post, tags: (post.tags ?? []).map(pt => pt.tag).filter((tag): tag is PublicPostSummary['tags'][number] => !!tag) }
+}
 
 export function normalizePost(raw: PostWithRelations): PostWithRelations {
   return {
@@ -16,26 +30,25 @@ export function normalizePost(raw: PostWithRelations): PostWithRelations {
   }
 }
 
-export async function getPublishedPosts(page = 1, limit = 10) {
+export async function getPublishedPosts(page = 1, limit = 10, filter?: { categoryId?: string; tagId?: string; authorId?: string }) {
   const supabase = await createClient()
-  const from = (page - 1) * limit
-  const to = from + limit - 1
-
-  const { data, error, count } = await supabase
-    .from('posts')
-    .select(POST_SELECT, { count: 'exact' })
-    .eq('status', 'published')
-    .order('published_at', { ascending: false })
-    .range(from, to)
-
+  const safePage = parsePage(String(page))
+  const safeLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 100 ? limit : 10
+  const from = (safePage - 1) * safeLimit
+  // A separate inner join filters posts while preserving the full tag list.
+  const selection = filter?.tagId ? `${PUBLIC_POST_SELECT}, matching_tags:post_tags!inner(tag_id)` : PUBLIC_POST_SELECT
+  let query = supabase.from('posts').select(selection, { count: 'exact' }).eq('status', 'published')
+  if (filter?.categoryId) query = query.eq('category_id', filter.categoryId)
+  if (filter?.tagId) query = query.eq('matching_tags.tag_id', filter.tagId)
+  if (filter?.authorId) query = query.eq('author_id', filter.authorId)
+  const { data, error, count } = await query
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false }).range(from, from + safeLimit - 1)
   if (error) throw error
-  return {
-    posts: (data ?? []).map(normalizePost) as PostWithRelations[],
-    total: count ?? 0,
-  }
+  return { posts: (data ?? []).map(normalizeSummary), total: count ?? 0 }
 }
 
-export async function getPostBySlug(slug: string) {
+export const getPostBySlug = cache(async (slug: string) => {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('posts')
@@ -46,22 +59,16 @@ export async function getPostBySlug(slug: string) {
 
   if (error) return null
   return normalizePost(data as PostWithRelations)
-}
+})
 
-export async function getAllPostsForDashboard(authorId?: string) {
+export async function getDashboardPosts(state: DashboardListState): Promise<DashboardPostPage> {
   const supabase = await createClient()
-  let query = supabase
-    .from('posts')
-    .select(POST_SELECT)
-    .order('updated_at', { ascending: false })
-
-  if (authorId) {
-    query = query.eq('author_id', authorId)
-  }
-
-  const { data, error } = await query
+  const { data, error } = await supabase.rpc('get_dashboard_posts', {
+    p_page: state.page, p_page_size: state.pageSize, p_search: state.search,
+    p_category_id: state.category, p_sort: state.sort, p_direction: state.direction,
+  })
   if (error) throw error
-  return (data ?? []).map(normalizePost) as PostWithRelations[]
+  return data as DashboardPostPage
 }
 
 export async function getPostById(id: string) {
@@ -74,39 +81,6 @@ export async function getPostById(id: string) {
 
   if (error) return null
   return normalizePost(data as PostWithRelations)
-}
-
-export async function getPostsByCategory(categorySlug: string, page = 1, limit = 10) {
-  const supabase = await createClient()
-  const from = (page - 1) * limit
-  const to = from + limit - 1
-
-  const { data, error, count } = await supabase
-    .from('posts')
-    .select(POST_SELECT, { count: 'exact' })
-    .eq('status', 'published')
-    .eq('category.slug', categorySlug)
-    .order('published_at', { ascending: false })
-    .range(from, to)
-
-  if (error) throw error
-  return {
-    posts: (data ?? []).map(normalizePost) as PostWithRelations[],
-    total: count ?? 0,
-  }
-}
-
-export async function getAllPublishedSlugs() {
-  const { createStaticClient } = await import('@/lib/supabase/static')
-  const supabase = createStaticClient()
-  if (!supabase) return []
-
-  const { data } = await supabase
-    .from('posts')
-    .select('slug')
-    .eq('status', 'published')
-
-  return ((data ?? []) as { slug: string }[]).map((p) => p.slug)
 }
 
 export type TagWithCount = { id: string; name: string; slug: string; count: number }

@@ -2,8 +2,11 @@ import { revalidatePath } from 'next/cache'
 
 export function refreshPostPaths(...slugs: (string | null | undefined)[]) {
   refreshDraftPaths()
-  // Invalidate public listings, author/taxonomy pages and article pages together.
-  revalidatePath('/', 'layout')
+  // Blog layout covers current/former article URLs and old/new taxonomy pages,
+  // including historical redirects, without flushing unrelated site layouts.
+  revalidatePath('/')
+  revalidatePath('/blog', 'layout')
+  revalidatePath('/authors/[id]', 'page')
   revalidatePath('/sitemap.xml')
   for (const slug of new Set(slugs.filter(Boolean))) revalidatePath(`/blog/${slug}`)
 }

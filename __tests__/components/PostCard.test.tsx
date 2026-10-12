@@ -18,6 +18,7 @@ vi.mock('next/image', () => ({
 
 const basePost: PostWithRelations = {
   id: '1',
+  reading_time_minutes: 1,
   title: 'Hello World',
   slug: 'hello-world',
   content: '<p>Content</p>',
@@ -100,7 +101,7 @@ describe('PostCard', () => {
 })
 
 it('includes relevant tag links when requested by an author listing', () => {
-  render(<PostCard post={{ ...basePost, tags: [{ id: 'tag', name: 'Engineering', slug: 'engineering', created_at: '2026-10-07T00:00:00Z' }] }} showTags />)
+  render(<PostCard post={{ ...basePost, tags: [{ id: 'tag', name: 'Engineering', slug: 'engineering' }] }} showTags />)
   expect(screen.getByRole('link', { name: '#Engineering' })).toHaveAttribute('href', '/blog/tag/engineering')
 })
 

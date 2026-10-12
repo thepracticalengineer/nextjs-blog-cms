@@ -109,15 +109,18 @@ export function publicationErrors(input: PublicationInput, authorName: unknown, 
 export async function validatePublication(
   client: ReturnType<typeof createServiceClient>, input: PublicationInput, editorialReviewed: unknown, excludeId?: string, automaticSlug = false
 ): Promise<FieldErrors> {
-  const { data: author, error: authorError } = await client.from('profiles').select('full_name').eq('id', input.author_id).maybeSingle()
-  const errors = publicationErrors(input, authorError ? null : author?.full_name, editorialReviewed)
-  if (!errors.slug && !automaticSlug) {
+  const authorLookup = client.from('profiles').select('full_name').eq('id', input.author_id).maybeSingle()
+  const validSlug = typeof input.slug === 'string' && input.slug.length <= 200 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug)
+  let slugLookup = null
+  if (validSlug && !automaticSlug) {
     let query = client.from('posts').select('id').eq('slug', input.slug)
     if (excludeId) query = query.neq('id', excludeId)
-    const { data: conflict, error } = await query.maybeSingle()
-    if (error) errors.slug = ['Could not verify slug uniqueness. Try again.']
-    else if (conflict) errors.slug = ['This slug is already in use. Choose another.']
+    slugLookup = query.maybeSingle()
   }
+  const [{ data: author, error: authorError }, conflict] = await Promise.all([authorLookup, slugLookup])
+  const errors = publicationErrors(input, authorError ? null : author?.full_name, editorialReviewed)
+  if (conflict?.error) errors.slug = ['Could not verify slug uniqueness. Try again.']
+  else if (conflict?.data) errors.slug = ['This slug is already in use. Choose another.']
   return errors
 }
 

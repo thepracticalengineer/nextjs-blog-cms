@@ -4,10 +4,10 @@ import { format } from 'date-fns'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
-import type { PostWithRelations } from '../types'
+import type { PublicPostSummary } from '../types'
 
 interface PostCardProps {
-  post: PostWithRelations
+  post: PublicPostSummary
   showTags?: boolean
 }
 

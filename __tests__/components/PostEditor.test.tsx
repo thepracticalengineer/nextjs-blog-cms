@@ -101,7 +101,7 @@ describe('PostEditor — back to top button', () => {
   })
 })
 
-const editorPost = { ...validPost, author: { id: 'user-1', full_name: 'Frank Mendez', avatar_url: null }, category: null, tags: [] } as PostWithRelations
+const editorPost = { ...validPost, reading_time_minutes: 2, author: { id: 'user-1', full_name: 'Frank Mendez', avatar_url: null }, category: null, tags: [] } as PostWithRelations
 
 describe('newsletter visibility and scheduling recovery', () => {
   beforeEach(() => vi.clearAllMocks())

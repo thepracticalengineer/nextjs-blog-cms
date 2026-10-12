@@ -1,3 +1,4 @@
+import { refreshDraftPaths } from '@/features/posts/cache'
 import { planSlug, writeWithSlug, isSlugConflict, SLUG_CONFLICT } from '@/features/posts/slugs'
 import { type NextRequest } from 'next/server'
 import { requireApiKey } from '@/lib/apiAuth'
@@ -210,6 +211,7 @@ export async function POST(req: NextRequest) {
   if (chatError || !chat) {
     console.error('[POST /api/ai-assistant/generate] Chat insert failed:', chatError?.message)
     // Non-fatal — post was created; still return success
+    refreshDraftPaths()
     return apiSuccess(
       {
         data: {
@@ -241,6 +243,7 @@ export async function POST(req: NextRequest) {
     console.error('[POST /api/ai-assistant/generate] ai_generated_posts insert failed:', genPostError.message)
   }
 
+  refreshDraftPaths()
   return apiSuccess(
     {
       data: {
