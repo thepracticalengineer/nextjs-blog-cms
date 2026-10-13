@@ -13,7 +13,9 @@ Account settings validates both passwords and an optional six-digit email code
 at runtime before password verification or an Auth update. The current password only needs to be a
 nonempty string, so legacy six-character passwords remain usable. Passwords are
 never trimmed. The action verifies the current password through a stateless
-client, then updates the original authorized session to preserve MFA assurance.
+client, revokes that temporary verification session with local scope, then
+updates the original authorized session to preserve MFA assurance. Cleanup is
+best effort on Auth outages and never revokes the caller's session.
 
 Local Auth enables secure password change. Auth permits sessions created within
 the last 24 hours to change a password without an email code; this is a provider

@@ -158,6 +158,15 @@ export async function updatePassword(currentPassword: unknown, newPassword: unkn
       return { error: isInvalidCredentials ? 'Current password is incorrect' : signInError.message }
     }
 
+    // Password verification creates a real refresh session even with persistence
+    // disabled. Revoke only that temporary session, never the caller's AAL2
+    // session. Cleanup outages must not report valid credentials as incorrect.
+    try {
+      await anonClient.auth.signOut({ scope: 'local' })
+    } catch {
+      // Leave the original session untouched if Auth cleanup is unavailable.
+    }
+
     // Auth decides whether the original session qualifies for its 24-hour
     // exception. A separate password sign-in is not provider reauthentication.
     const { error } = await supabase.auth.updateUser({

@@ -45,6 +45,7 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
     }
     setSaving(true)
     setError('')
+    if (!reauthenticationRequired) setMessage('')
     try {
       const result = await updatePassword(values.currentPassword, values.newPassword, values.nonce || undefined)
       if (result.reauthenticationRequired) setReauthenticationRequired(true)
@@ -101,7 +102,7 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          {message && <p role="status" className="text-sm">{message}</p>}
+          {message && <output className="text-sm">{message}</output>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="space-y-1.5">
             <Label htmlFor="currentPassword">Current Password</Label>

@@ -6,9 +6,10 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 // Mock the stateless @supabase/supabase-js client used in updatePassword
 const mockAnonSignIn = vi.fn()
+const mockAnonSignOut = vi.fn()
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
-    auth: { signInWithPassword: mockAnonSignIn },
+    auth: { signInWithPassword: mockAnonSignIn, signOut: mockAnonSignOut },
   })),
 }))
 
@@ -79,7 +80,10 @@ function makeSupabase({
   }
 }
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockAnonSignOut.mockResolvedValue({ error: null })
+})
 
 // ─── updateProfile ────────────────────────────────────────────────────────────
 
@@ -401,4 +405,42 @@ it('keeps the email challenge and resend available if initial delivery throws', 
   const result = await updatePassword('legacy', '12345678')
   expect(result.reauthenticationRequired).toBe(true)
   expect(result.error).toContain('try again')
+})
+
+
+describe('temporary password-verification session cleanup', () => {
+  beforeEach(() => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    mockAnonSignIn.mockResolvedValue({ error: null })
+  })
+
+  it.each([undefined, '012345'])('revokes only the stateless session before updating the original session (nonce %s)', async nonce => {
+    const client = makeSupabase()
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await updatePassword('legacy', '12345678', nonce)).toEqual({ success: true })
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+    expect(mockAnonSignOut.mock.invocationCallOrder[0]).toBeLessThan(client.auth.updateUser.mock.invocationCallOrder[0])
+  })
+
+  it('does not attempt revocation when the password check failed', async () => {
+    mockAnonSignIn.mockResolvedValue({ error: { code: 'invalid_credentials', message: 'Invalid login credentials' } })
+    expect((await updatePassword('wrong', '12345678')).error).toBe('Current password is incorrect')
+    expect(mockAnonSignOut).not.toHaveBeenCalled()
+  })
+
+  it.each(['returned', 'thrown'])('does not turn a valid password change into a failure if cleanup has a %s error', async kind => {
+    if (kind === 'returned') mockAnonSignOut.mockResolvedValue({ error: { message: 'Offline' } })
+    else mockAnonSignOut.mockRejectedValue(new Error('Offline'))
+    mockCreateClient.mockResolvedValue(makeSupabase() as any)
+    expect(await updatePassword('legacy', '12345678')).toEqual({ success: true })
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+  })
+
+  it('revokes the temporary session even when the original session requires a nonce', async () => {
+    const client = makeSupabase({ authUpdateError: { code: 'reauthentication_needed', message: 'Reauthenticate' } })
+    mockCreateClient.mockResolvedValue(client as any)
+    expect((await updatePassword('legacy', '12345678')).reauthenticationRequired).toBe(true)
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+    expect(client.auth.reauthenticate).toHaveBeenCalledOnce()
+  })
 })

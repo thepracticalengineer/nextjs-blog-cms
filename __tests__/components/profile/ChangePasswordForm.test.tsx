@@ -90,3 +90,16 @@ it('offers resend after a delivery failure, preserves the challenge on invalid c
   expect(await screen.findByRole('alert')).toHaveTextContent('invalid or expired')
   expect(code).toBeInTheDocument()
 })
+
+it('clears a previous success status before showing a subsequent password error', async () => {
+  mockUpdatePassword.mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ error: 'Current password is incorrect' })
+  render(<ChangePasswordForm />)
+  submitPasswords()
+  expect(await screen.findByRole('status')).toHaveTextContent('Password updated')
+  fireEvent.change(screen.getByLabelText(/^current password/i), { target: { value: 'wrong-current' } })
+  fireEvent.change(screen.getByLabelText(/^new password/i), { target: { value: 'otherpass123' } })
+  fireEvent.change(screen.getByLabelText(/confirm new password/i), { target: { value: 'otherpass123' } })
+  fireEvent.click(screen.getByRole('button', { name: /update password/i }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Current password is incorrect')
+  expect(screen.queryByRole('status')).not.toBeInTheDocument()
+})

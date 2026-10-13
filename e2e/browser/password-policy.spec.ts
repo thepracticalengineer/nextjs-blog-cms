@@ -19,13 +19,17 @@ function localAuthFixture(userId: string, sql: string) {
   const container = process.env.E2E_AUTH_DB_CONTAINER ?? 'supabase_db_nextjs-blog-cms'
   if (!['supabase_db_nextjs-blog-cms', 'supabase_db_cms-issue104'].includes(container)) throw new Error('Unexpected test database container')
   if (!/^[0-9a-f-]{36}$/.test(userId)) throw new Error('Invalid fixture UUID')
-  execFileSync('docker', ['exec', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-c',
-    sql])
+  return execFileSync('docker', ['exec', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-c',
+    sql], { encoding: 'utf8' })
 }
 
 function ageLocalSession(userId: string, sessionId: string) {
   if (!/^[0-9a-f-]{36}$/.test(sessionId)) throw new Error('Invalid session UUID')
   localAuthFixture(userId, `UPDATE auth.sessions SET created_at = now() - interval '25 hours' WHERE id = '${sessionId}'::uuid AND user_id = '${userId}'::uuid;`)
+}
+
+function localSessionCount(userId: string) {
+  return Number(localAuthFixture(userId, `SELECT count(*) FROM auth.sessions WHERE user_id = '${userId}'::uuid;`).trim())
 }
 
 function totp(secret: string) {
@@ -134,8 +138,10 @@ test('account settings reject bypassed browser validation and complete an old-se
     const session = JSON.parse(Buffer.from(serialized.replace(/^base64-/, ''), 'base64url').toString())
     const sessionId = JSON.parse(Buffer.from(session.access_token.split('.')[1], 'base64url').toString()).session_id
     ageLocalSession(userId, sessionId)
+    const sessionCount = localSessionCount(userId)
     await page.getByRole('button', { name: 'Update Password', exact: true }).click()
     await expect(page.getByLabel('Email verification code')).toBeVisible()
+    expect(localSessionCount(userId)).toBe(sessionCount)
     const mail = await mailbox(request, email, 'Verify your password change')
     const nonce = mail.Text.match(/\b\d{6}\b/)?.[0]
     expect(nonce).toBeTruthy()
@@ -143,6 +149,7 @@ test('account settings reject bypassed browser validation and complete an old-se
     await page.getByLabel('Email verification code').fill(invalid)
     await page.getByRole('button', { name: 'Update Password', exact: true }).click()
     await expect(page.getByRole('alert').filter({ hasText: 'invalid or expired' })).toBeVisible()
+    expect(localSessionCount(userId)).toBe(sessionCount)
     await page.getByLabel('Email verification code').fill(nonce!)
     await page.getByRole('button', { name: 'Update Password', exact: true }).click()
     await expect(page.getByRole('status').filter({ hasText: 'Password updated' })).toBeVisible()
