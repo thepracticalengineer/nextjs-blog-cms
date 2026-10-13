@@ -15,11 +15,25 @@ createServer((request, response) => {
   let claims = {}
   try { claims = JSON.parse(Buffer.from(bearer.split('.')[1], 'base64url').toString()) } catch { /* anonymous */ }
   if (path === '/auth/v1/logout') {
+    if (claims.exp <= Math.floor(Date.now() / 1000)) return send(403, { message: 'Synthetic expired session' })
     if (claims.outage) return send(503, { message: 'Synthetic outage' })
     if (!claims.sub) return send(401, { message: 'Missing synthetic session' })
     response.writeHead(204); response.end(); return
   }
-  if (path === '/auth/v1/token') return send(503, { message: 'Synthetic refresh outage' })
+  if (path === '/auth/v1/token') {
+    let body = ''
+    request.on('data', chunk => { body += chunk })
+    request.on('end', () => {
+      let token
+      try { token = JSON.parse(body).refresh_token } catch { return send(400, { message: 'Invalid refresh request' }) }
+      if (token === 'synthetic-refresh-outage') return send(503, { message: 'Synthetic refresh outage' })
+      if (token !== 'synthetic-refresh') return send(400, { message: 'Invalid synthetic refresh token' })
+      const exp = Math.floor(Date.now() / 1000) + 3600
+      const access_token = `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ sub: user.id, exp, aal: 'aal1' })).toString('base64url')}.synthetic-signature`
+      return send(200, { access_token, refresh_token: 'synthetic-refresh', expires_in: 3600, token_type: 'bearer', user })
+    })
+    return
+  }
   if (path === '/auth/v1/user') return claims.sub ? send(200, user) : send(401, { message: 'No session' })
   if (path === '/rest/v1/profiles') return send(200, profile)
   return send(200, [])

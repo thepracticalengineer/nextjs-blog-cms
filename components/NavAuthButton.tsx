@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu'
-import { LayoutDashboard, LogOut, Loader2 } from 'lucide-react'
+import { LayoutDashboard, LogOut, MonitorX, Loader2 } from 'lucide-react'
 
 const COLORS = [
   '#f59e0b', '#10b981', '#6366f1', '#ec4899',
@@ -166,7 +166,7 @@ export function NavAuthButton() {
               onClick={() => void handleSignOut('global')}
               disabled={busy}
             >
-              <LogOut />
+              {signingOut ? <Loader2 className="size-4 animate-spin" /> : <MonitorX />}
               Sign out all devices
             </DropdownMenuItem>
           </DropdownMenuGroup>

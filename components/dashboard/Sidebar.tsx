@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, Menu, X, MessageSquare, Loader2, Code, Bot, UserCircle, Mail,
+  LayoutDashboard, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Code, Bot, UserCircle, Mail,
 } from 'lucide-react'
 import { useSignOut } from '@/components/auth/use-signout'
 import { cn } from '@/lib/utils'
@@ -160,8 +160,9 @@ export function Sidebar({ profile }: SidebarProps) {
         <button
           onClick={() => void handleSignOut('global')}
           disabled={isPending}
-          className="w-full px-3 py-2 text-left text-xs text-slate-400 hover:text-white disabled:opacity-50"
+          className="flex items-center gap-3 w-full px-3 py-2 text-left text-xs text-slate-400 hover:text-white disabled:opacity-50"
         >
+          {isPending ? <Loader2 className="h-4 w-4 shrink-0 animate-spin" /> : <MonitorX className="h-4 w-4 shrink-0" />}
           Sign out all devices
         </button>
         {signOutError && <p role="alert" className="px-3 py-2 text-sm text-red-400">{signOutError}</p>}

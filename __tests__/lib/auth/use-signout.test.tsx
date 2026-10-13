@@ -50,6 +50,14 @@ describe('logout control flow', () => {
     expect(result.current.signOutError).toContain('could not finish')
     expect(result.current.signingOut).toBe(false)
   })
+  it('keeps controls busy and blocks another scope after navigation starts', async () => {
+    const { result } = renderHook(useSignOut)
+    await act(() => result.current.handleSignOut('local'))
+    expect(result.current.signingOut).toBe(true)
+    await act(() => result.current.handleSignOut('global'))
+    expect(signOut).toHaveBeenCalledOnce()
+    expect(replace).toHaveBeenCalledOnce()
+  })
   it('ignores duplicate activation while logout is running', async () => {
     let finish!: (value: { localCleared: boolean; remoteRevoked: boolean }) => void
     vi.mocked(signOut).mockReturnValue(new Promise(resolve => { finish = resolve }))

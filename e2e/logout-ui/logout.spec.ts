@@ -6,7 +6,7 @@ const key = 'sb-127-auth-token'
 async function seedSession(context: BrowserContext, outage = false, expired = false) {
   const exp = Math.floor(Date.now() / 1000) + (expired ? -3600 : 3600)
   const jwt = `eyJhbGciOiJIUzI1NiJ9.${Buffer.from(JSON.stringify({ sub: '00000000-0000-0000-0000-000000000105', exp, aal: 'aal1', outage })).toString('base64url')}.synthetic-signature`
-  const session = { access_token: jwt, refresh_token: 'synthetic-refresh', token_type: 'bearer', expires_in: 3600, expires_at: exp, user: { id: '00000000-0000-0000-0000-000000000105', email: 'logout@disposable.test', user_metadata: { full_name: 'Logout Test', padding: 'x'.repeat(7000) }, factors: [] } }
+  const session = { access_token: jwt, refresh_token: outage ? 'synthetic-refresh-outage' : 'synthetic-refresh', token_type: 'bearer', expires_in: 3600, expires_at: exp, user: { id: '00000000-0000-0000-0000-000000000105', email: 'logout@disposable.test', user_metadata: { full_name: 'Logout Test', padding: 'x'.repeat(7000) }, factors: [] } }
   const chunks = createChunks(key, `base64-${stringToBase64URL(JSON.stringify(session))}`)
   expect(chunks.length).toBeGreaterThan(1)
   await context.addCookies([...chunks, { name: `${key}-code-verifier`, value: 'synthetic' }].map(cookie => ({ ...cookie, url: 'http://127.0.0.1:3106', sameSite: 'Lax' as const })))
@@ -74,3 +74,12 @@ test('editor logout asks once, honors cancellation, and preserves recovery after
   expect(recoveries.join('\n')).toContain('Writing retained after logout')
   await expectPrivateAccessDenied(page, context)
 })
+
+for (const scope of ['local', 'global'] as const) {
+  test(`expired ${scope} session refreshes before remote revocation`, async ({ page, context }) => {
+    await seedSession(context, false, true)
+    const response = await context.request.post(`/api/auth/signout?scope=${scope}`)
+    expect(response.status()).toBe(204)
+    await expectPrivateAccessDenied(page, context)
+  })
+}

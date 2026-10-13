@@ -23,7 +23,9 @@ fails. Other projects' cookies, password-recovery grants and editor recovery dat
 are preserved. A full navigation to login discards cached private UI and client
 Auth state. If browser cleanup fails, the control stays in place and offers retry.
 
-Remote revocation has a five-second timeout. When it cannot be confirmed, the
+Remote revocation has one five-second deadline. A logout 401/403 triggers one refresh
+with the existing refresh token and one revocation retry within that deadline;
+renewed or provider credentials are never persisted. When it cannot be confirmed, the
 login page explains that this browser is signed out but other sessions may remain
 active. Clearing browser credentials does not revoke a copied access token:
 Supabase access tokens remain valid until expiry. See
@@ -36,4 +38,4 @@ Unconfirmed revocation returns `503` with
 and cookie deletions. Invalid scopes return `400` without changing credentials.
 Responses use `Cache-Control: no-store`; provider errors and credentials are never
 returned. The endpoint uses the supplied cookie token only for remote revocation,
-without refreshing it or trusting its contents for application authorization.
+without trusting its contents for application authorization.

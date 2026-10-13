@@ -15,6 +15,7 @@ export function useSignOut() {
     running.current = true
     setSigningOut(true)
     setSignOutError(null)
+    let navigating = false
     try {
       const result = await signOut(scope)
       if (!result.localCleared) {
@@ -25,11 +26,14 @@ export function useSignOut() {
       // A fresh document discards the SDK singleton and cached private RSC/UI.
       commitEditorNavigation()
       window.location.replace(result.remoteRevoked ? '/login' : `/login?logout=${warning}`)
+      navigating = true
     } catch {
       setSignOutError('Sign out could not finish. Please retry.')
     } finally {
-      running.current = false
-      setSigningOut(false)
+      if (!navigating) {
+        running.current = false
+        setSigningOut(false)
+      }
     }
   }
   return { handleSignOut, signingOut, signOutError }
