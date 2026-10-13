@@ -176,3 +176,22 @@ of the calling directory; `e2e/coverage/options.ts` controls source
 filtering; `scripts/coverage/report.mjs` renders the CI summary. Coverage collection
 is opt-in locally and enabled in the CI E2E job. No external coverage service or
 additional repository secret is required.
+
+## Logout verification
+
+`pnpm exec vitest run __tests__/api/signout.test.ts __tests__/lib/auth/signout.test.ts __tests__/lib/auth/signout-client.test.ts __tests__/lib/auth/use-signout.test.tsx`
+checks explicit scopes, chunk and verifier cleanup, returned/thrown/network/timeout
+errors, warning messages, duplicate activation and cancelled editor navigation.
+
+`pnpm exec playwright test --config=e2e/logout.config.ts` runs the real Next.js
+logout controls, route, login warnings and subsequent private-access checks on
+desktop and mobile. It forces loopback synthetic Auth/database responses, disables
+external integrations and uses a separate `.next-logout-ui` cache. It needs no
+Supabase database or seeding. These tests cover provider outages, blocked app
+requests and expired chunked cookies, but do not prove live Auth revocation.
+
+`pnpm exec playwright test e2e/api/signout.spec.ts --project=api` verifies real
+local/global session revocation against the dedicated migrated Supabase E2E
+project described above. It creates and removes disposable accounts, checks
+post-logout private API/dashboard denial, and verifies whether a second session
+can refresh. Never run it against production; disable external mail/webhooks.

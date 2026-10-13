@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { useSignOut } from '@/components/auth/use-signout'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -50,7 +51,7 @@ type UserState = { email: string; name: string } | null | undefined
 
 export function NavAuthButton() {
   const [user, setUser] = useState<UserState>(undefined)
-  const [signingOut, setSigningOut] = useState(false)
+  const { handleSignOut, signingOut, signOutError } = useSignOut()
   const [goingToDashboard, startDashboard] = useTransition()
   const router = useRouter()
 
@@ -95,79 +96,82 @@ export function NavAuthButton() {
     })
   }
 
-  const handleSignOut = async () => {
-    setSigningOut(true)
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
-    setSigningOut(false)
-  }
-
   const initials = getInitials(user.name)
   const color = nameToColor(user.name)
   const busy = signingOut || goingToDashboard
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        className="rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/30 focus-visible:ring-offset-2 transition-opacity disabled:opacity-50"
-        aria-label="Account menu"
-        disabled={busy}
-      >
-        <div
-          style={{
-            width: 32,
-            height: 32,
-            background: color,
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 11,
-            fontWeight: 700,
-            color: '#fff',
-            userSelect: 'none',
-            letterSpacing: '0.05em',
-            flexShrink: 0,
-            opacity: busy ? 0.5 : 1,
-            transition: 'opacity 150ms',
-          }}
-          aria-hidden="true"
+    <>
+      {signOutError && <span role="alert" className="text-sm text-destructive">{signOutError}</span>}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          className="rounded-full focus:outline-hidden focus-visible:ring-2 focus-visible:ring-foreground/30 focus-visible:ring-offset-2 transition-opacity disabled:opacity-50"
+          aria-label="Account menu"
+          disabled={busy}
         >
-          {busy ? <Loader2 className="size-3.5 animate-spin" style={{ color: '#fff' }} /> : initials}
-        </div>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={8}>
-        <DropdownMenuGroup>
-          <DropdownMenuLabel className="truncate max-w-52 font-normal">
-            {user.email}
-          </DropdownMenuLabel>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            className="cursor-pointer gap-2"
-            onClick={handleDashboard}
-            disabled={busy}
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              background: color,
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 11,
+              fontWeight: 700,
+              color: '#fff',
+              userSelect: 'none',
+              letterSpacing: '0.05em',
+              flexShrink: 0,
+              opacity: busy ? 0.5 : 1,
+              transition: 'opacity 150ms',
+            }}
+            aria-hidden="true"
           >
-            {goingToDashboard ? <Loader2 className="size-4 animate-spin" /> : <LayoutDashboard />}
-            Dashboard
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem
-            variant="destructive"
-            className="cursor-pointer gap-2"
-            onClick={handleSignOut}
-            disabled={busy}
-          >
-            {signingOut ? <Loader2 className="size-4 animate-spin" /> : <LogOut />}
-            Sign out
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+            {busy ? <Loader2 className="size-3.5 animate-spin" style={{ color: '#fff' }} /> : initials}
+          </div>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" sideOffset={8}>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel className="truncate max-w-52 font-normal">
+              {user.email}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              className="cursor-pointer gap-2"
+              onClick={handleDashboard}
+              disabled={busy}
+            >
+              {goingToDashboard ? <Loader2 className="size-4 animate-spin" /> : <LayoutDashboard />}
+              Dashboard
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+          <DropdownMenuGroup>
+            <DropdownMenuItem
+              variant="destructive"
+              className="cursor-pointer gap-2"
+              onClick={() => void handleSignOut('local')}
+              disabled={busy}
+            >
+              {signingOut ? <Loader2 className="size-4 animate-spin" /> : <LogOut />}
+              Sign out
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              className="cursor-pointer gap-2"
+              onClick={() => void handleSignOut('global')}
+              disabled={busy}
+            >
+              <LogOut />
+              Sign out all devices
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
   )
 }
