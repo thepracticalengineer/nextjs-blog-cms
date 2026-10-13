@@ -3,6 +3,16 @@ import { createReport, readJson } from './report.mjs'
 
 const marker = '<!-- codex-test-coverage -->'
 
+async function testedCommit(github, owner, repo, headSha, root) {
+  const snapshot = readJson(join(root, 'source/baseline.json'))
+  if (!/^[a-f0-9]{40}$/.test(snapshot?.sha ?? '')) return { sha: 'unavailable' }
+  try {
+    const { data: commit } = await github.rest.repos.getCommit({ owner, repo, ref: snapshot.sha })
+    if (commit.parents?.[1]?.sha === headSha) return { sha: snapshot.sha, baseSha: commit.parents[0].sha }
+  } catch { /* Missing or fabricated identity remains unavailable. */ }
+  return { sha: 'unavailable' }
+}
+
 /** Run from trusted default-branch code. Downloaded artifacts are data only. */
 export async function publishCoverageComment({ github, owner, repo, runId, prNumber, root }) {
   if (!Number.isSafeInteger(runId) || !Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('Invalid coverage identity')
@@ -16,14 +26,7 @@ export async function publishCoverageComment({ github, owner, repo, runId, prNum
   const oldRun = previous?.body.match(/<!-- coverage-run:(\d+):(\d+) -->/)
   if (oldRun && (Number(oldRun[1]) > runId || (Number(oldRun[1]) === runId && Number(oldRun[2]) > run.run_attempt))) return
 
-  let testedSha = 'unavailable', baseSha
-  const snapshot = readJson(join(root, 'source/baseline.json'))
-  if (/^[a-f0-9]{40}$/.test(snapshot?.sha ?? '')) {
-    try {
-      const { data: commit } = await github.rest.repos.getCommit({ owner, repo, ref: snapshot.sha })
-      if (commit.parents?.[1]?.sha === run.head_sha) { testedSha = snapshot.sha; baseSha = commit.parents[0].sha }
-    } catch { /* Missing or fabricated commit identity remains unavailable. */ }
-  }
+  const { sha: testedSha, baseSha } = await testedCommit(github, owner, repo, run.head_sha, root)
   const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner, repo, run_id: runId, per_page: 100 })
   const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { owner, repo, run_id: runId, per_page: 100 })
   const artifact = name => artifacts.find(item => item.name === name && !item.expired)?.id

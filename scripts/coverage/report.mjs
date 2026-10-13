@@ -13,7 +13,7 @@ export function totals(summary) {
     return [key, value && Number.isFinite(value.pct) && value.pct >= 0 && value.pct <= 100 && value.total > 0 ? value.pct : null]
   }))
 }
-const escape = value => String(value).replace(/[|<>\r\n@\[\]()`\\]/g, ' ')
+const escape = value => String(value).replace(/[|<>\r\n@[\]()`\\]/g, ' ')
 const count = value => Number.isInteger(value) && value >= 0 ? value : 'unavailable'
 export function metric(value, baseline) {
   if (!Number.isFinite(value)) return 'unavailable'
