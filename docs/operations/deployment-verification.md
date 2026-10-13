@@ -11,3 +11,8 @@ Before enabling Google/GitHub sign-in, configure provider credentials and exact 
 ## Analytics rollout
 
 Keep `GA_ENABLED=false` until the [Google Analytics rollout order](../setup/google-analytics.md#rollout-order) is complete. Deploy the disabled implementation first, configure the existing stream for manual collection, then enable only on the canonical production host. Record the collection pause and verification evidence; this deployment alone does not complete issue #129.
+
+## Password policy rollout
+
+Deploy the nonce-capable application before enabling hosted secure password change.
+Follow the [password policy requirements and verification](../features/password-recovery.md#deployment-requirements-and-verification), including the eight-character provider minimum, six-digit reauthentication email, password-change notifications, hosted leaked-password protection when supported, legacy login, and recovery/MFA compatibility. Record actual hosted settings and designated-account results with the deployment SHA; local `config.toml` and local passing tests do not verify production configuration.

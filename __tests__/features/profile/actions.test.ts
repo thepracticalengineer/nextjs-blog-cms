@@ -6,16 +6,17 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 
 // Mock the stateless @supabase/supabase-js client used in updatePassword
 const mockAnonSignIn = vi.fn()
+const mockAnonSignOut = vi.fn()
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
-    auth: { signInWithPassword: mockAnonSignIn },
+    auth: { signInWithPassword: mockAnonSignIn, signOut: mockAnonSignOut },
   })),
 }))
 
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/session'
 import { revalidatePath } from 'next/cache'
-import { updateProfile, updateAvatar, deleteAvatar, updatePassword } from '@/features/profile/actions'
+import { updateProfile, updateAvatar, deleteAvatar, updatePassword, requestPasswordReauthentication } from '@/features/profile/actions'
 
 const mockCreateClient = vi.mocked(createClient)
 const mockGetProfile = vi.mocked(getProfile)
@@ -58,7 +59,8 @@ function makeSupabase({
   removeError = null as { message: string } | null,
   publicUrl = 'https://example.com/avatars/user-1/avatar.jpg',
   authSignInError = null as { message: string } | null,
-  authUpdateError = null as { message: string } | null,
+  authUpdateError = null as { message: string; code?: string } | null,
+  reauthenticationError = null as { message: string; status?: number } | null,
 } = {}) {
   return {
     from: vi.fn().mockReturnValue(makeChain(dbResult)),
@@ -71,13 +73,17 @@ function makeSupabase({
       }),
     },
     auth: {
+      reauthenticate: vi.fn().mockResolvedValue({ error: reauthenticationError }),
       signInWithPassword: vi.fn().mockResolvedValue({ error: authSignInError }),
       updateUser: vi.fn().mockResolvedValue({ error: authUpdateError }),
     },
   }
 }
 
-beforeEach(() => { vi.clearAllMocks() })
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockAnonSignOut.mockResolvedValue({ error: null })
+})
 
 // ─── updateProfile ────────────────────────────────────────────────────────────
 
@@ -258,21 +264,21 @@ describe('updatePassword', () => {
   it('returns "Current password is incorrect" when error code is invalid_credentials', async () => {
     mockGetProfile.mockResolvedValue(fakeProfile as any)
     mockAnonSignIn.mockResolvedValue({ error: { code: 'invalid_credentials', status: 400, message: 'Invalid login credentials' } })
-    const result = await updatePassword('wrong', 'newpass')
+    const result = await updatePassword('wrong', 'newpass123')
     expect(result).toEqual({ error: 'Current password is incorrect' })
   })
 
   it('returns "Current password is incorrect" when status is 400 and no code', async () => {
     mockGetProfile.mockResolvedValue(fakeProfile as any)
     mockAnonSignIn.mockResolvedValue({ error: { code: null, status: 400, message: 'Invalid login credentials' } })
-    const result = await updatePassword('wrong', 'newpass')
+    const result = await updatePassword('wrong', 'newpass123')
     expect(result).toEqual({ error: 'Current password is incorrect' })
   })
 
   it('surfaces non-credential errors as-is', async () => {
     mockGetProfile.mockResolvedValue(fakeProfile as any)
     mockAnonSignIn.mockResolvedValue({ error: { code: 'over_email_send_rate_limit', status: 429, message: 'Email rate limit exceeded' } })
-    const result = await updatePassword('any', 'newpass')
+    const result = await updatePassword('any', 'newpass123')
     expect(result).toEqual({ error: 'Email rate limit exceeded' })
   })
 
@@ -282,7 +288,7 @@ describe('updatePassword', () => {
     mockCreateClient.mockResolvedValue(
       makeSupabase({ authUpdateError: { message: 'Update failed' } }) as any
     )
-    const result = await updatePassword('correct', 'newpass')
+    const result = await updatePassword('correct', 'newpass123')
     expect(result).toEqual({ error: 'Update failed' })
   })
 
@@ -292,5 +298,149 @@ describe('updatePassword', () => {
     mockCreateClient.mockResolvedValue(makeSupabase() as any)
     const result = await updatePassword('correct', 'newpass123')
     expect(result).toEqual({ success: true })
+  })
+})
+
+
+describe('password policy and provider reauthentication', () => {
+  beforeEach(() => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    mockAnonSignIn.mockResolvedValue({ error: null })
+  })
+
+  it.each(['123456', '1234567', '', null, undefined, 12345678, {}])('rejects invalid new password %j before contacting Auth', async value => {
+    const result = await updatePassword('legacy', value as any)
+    expect(result.error).toBeTruthy()
+    expect(mockAnonSignIn).not.toHaveBeenCalled()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it.each(['', null, undefined, 123456, {}])('rejects invalid current password %j before contacting Auth', async value => {
+    expect((await updatePassword(value as any, '12345678')).error).toBeTruthy()
+    expect(mockAnonSignIn).not.toHaveBeenCalled()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it.each(['12345', '1234567', 'abcdef', null, 123456, {}])('rejects invalid nonce %j before contacting Auth', async value => {
+    expect((await updatePassword('legacy', '12345678', value as any)).error).toBeTruthy()
+    expect(mockAnonSignIn).not.toHaveBeenCalled()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it('accepts a legacy six-character current password and an eight-character new password without a nonce', async () => {
+    const client = makeSupabase()
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await updatePassword('legacy', '12345678')).toEqual({ success: true })
+    expect(mockAnonSignIn).toHaveBeenCalledWith({ email: fakeProfile.email, password: 'legacy' })
+    expect(client.auth.updateUser).toHaveBeenCalledWith({ password: '12345678' })
+    expect(client.auth.reauthenticate).not.toHaveBeenCalled()
+  })
+
+  it('requests the provider nonce on the original session only when Auth requires it', async () => {
+    const client = makeSupabase({ authUpdateError: { code: 'reauthentication_needed', message: 'Reauthenticate' } })
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await updatePassword('legacy', '12345678')).toEqual({ reauthenticationRequired: true, codeSent: true })
+    expect(client.auth.reauthenticate).toHaveBeenCalledOnce()
+    expect(client.auth.updateUser).toHaveBeenCalledOnce()
+  })
+
+  it('passes the nonce with the new password on the original session', async () => {
+    const client = makeSupabase()
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await updatePassword('legacy', '12345678', '012345')).toEqual({ success: true })
+    expect(client.auth.updateUser).toHaveBeenCalledWith({ password: '12345678', nonce: '012345' })
+    expect(client.auth.reauthenticate).not.toHaveBeenCalled()
+  })
+
+  it('retains the challenge after an invalid nonce without automatically resending', async () => {
+    const client = makeSupabase({ authUpdateError: { code: 'reauthentication_not_valid', message: 'Invalid nonce' } })
+    mockCreateClient.mockResolvedValue(client as any)
+    const result = await updatePassword('legacy', '12345678', '012345')
+    expect(result.reauthenticationRequired).toBe(true)
+    expect(result.error).toContain('invalid or expired')
+    expect(client.auth.reauthenticate).not.toHaveBeenCalled()
+  })
+
+  it('reports delivery throttling while preserving the challenge', async () => {
+    const client = makeSupabase({ authUpdateError: { code: 'reauthentication_needed', message: 'Reauthenticate' }, reauthenticationError: { message: 'Rate limited', status: 429 } })
+    mockCreateClient.mockResolvedValue(client as any)
+    const result = await updatePassword('legacy', '12345678')
+    expect(result.reauthenticationRequired).toBe(true)
+    expect(result.error).toContain('wait')
+    expect(result.codeSent).not.toBe(true)
+  })
+
+  it('denies password change and resend when session/MFA authorization fails', async () => {
+    mockGetProfile.mockResolvedValue(null)
+    expect(await updatePassword('legacy', '12345678', '012345')).toEqual({ error: 'Unauthorized' })
+    expect(await requestPasswordReauthentication()).toEqual({ error: 'Unauthorized' })
+    expect(mockAnonSignIn).not.toHaveBeenCalled()
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+
+  it('allows an authorized user to explicitly resend on the original session', async () => {
+    const client = makeSupabase()
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await requestPasswordReauthentication()).toEqual({ reauthenticationRequired: true, codeSent: true })
+    expect(client.auth.reauthenticate).toHaveBeenCalledOnce()
+    expect(client.auth.updateUser).not.toHaveBeenCalled()
+  })
+
+  it('fails safely on thrown Auth errors', async () => {
+    mockAnonSignIn.mockRejectedValue(new Error('Offline'))
+    expect((await updatePassword('legacy', '12345678')).error).toContain('try again')
+    const client = makeSupabase()
+    client.auth.reauthenticate.mockRejectedValue(new Error('Offline'))
+    mockCreateClient.mockResolvedValue(client as any)
+    expect((await requestPasswordReauthentication()).error).toContain('try again')
+  })
+})
+
+it('keeps the email challenge and resend available if initial delivery throws', async () => {
+  mockGetProfile.mockResolvedValue(fakeProfile as any)
+  mockAnonSignIn.mockResolvedValue({ error: null })
+  const client = makeSupabase({ authUpdateError: { code: 'reauthentication_needed', message: 'Reauthenticate' } })
+  client.auth.reauthenticate.mockRejectedValue(new Error('Offline'))
+  mockCreateClient.mockResolvedValue(client as any)
+  const result = await updatePassword('legacy', '12345678')
+  expect(result.reauthenticationRequired).toBe(true)
+  expect(result.error).toContain('try again')
+})
+
+
+describe('temporary password-verification session cleanup', () => {
+  beforeEach(() => {
+    mockGetProfile.mockResolvedValue(fakeProfile as any)
+    mockAnonSignIn.mockResolvedValue({ error: null })
+  })
+
+  it.each([undefined, '012345'])('revokes only the stateless session before updating the original session (nonce %s)', async nonce => {
+    const client = makeSupabase()
+    mockCreateClient.mockResolvedValue(client as any)
+    expect(await updatePassword('legacy', '12345678', nonce)).toEqual({ success: true })
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+    expect(mockAnonSignOut.mock.invocationCallOrder[0]).toBeLessThan(client.auth.updateUser.mock.invocationCallOrder[0])
+  })
+
+  it('does not attempt revocation when the password check failed', async () => {
+    mockAnonSignIn.mockResolvedValue({ error: { code: 'invalid_credentials', message: 'Invalid login credentials' } })
+    expect((await updatePassword('wrong', '12345678')).error).toBe('Current password is incorrect')
+    expect(mockAnonSignOut).not.toHaveBeenCalled()
+  })
+
+  it.each(['returned', 'thrown'])('does not turn a valid password change into a failure if cleanup has a %s error', async kind => {
+    if (kind === 'returned') mockAnonSignOut.mockResolvedValue({ error: { message: 'Offline' } })
+    else mockAnonSignOut.mockRejectedValue(new Error('Offline'))
+    mockCreateClient.mockResolvedValue(makeSupabase() as any)
+    expect(await updatePassword('legacy', '12345678')).toEqual({ success: true })
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+  })
+
+  it('revokes the temporary session even when the original session requires a nonce', async () => {
+    const client = makeSupabase({ authUpdateError: { code: 'reauthentication_needed', message: 'Reauthenticate' } })
+    mockCreateClient.mockResolvedValue(client as any)
+    expect((await updatePassword('legacy', '12345678')).reauthenticationRequired).toBe(true)
+    expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
+    expect(client.auth.reauthenticate).toHaveBeenCalledOnce()
   })
 })

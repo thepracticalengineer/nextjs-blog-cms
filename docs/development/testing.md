@@ -210,3 +210,9 @@ local/global session revocation against the dedicated migrated Supabase E2E
 project described above. It creates and removes disposable accounts, checks
 post-logout private API/dashboard denial, and verifies whether a second session
 can refresh. Never run it against production; disable external mail/webhooks.
+
+## Password policy verification
+
+Run `pnpm exec vitest run __tests__/features/profile/actions.test.ts __tests__/components/profile/ChangePasswordForm.test.tsx __tests__/auth` for runtime password/nonce validation, legacy current-password support, original-session updates, email delivery failures, retry/resend, and recovery/MFA boundaries.
+
+Run `pnpm exec playwright test e2e/browser/password-policy.spec.ts e2e/browser/password-recovery.spec.ts --project=browser` against the dedicated local stack with `E2E_MAILPIT_URL` set. The policy suite requires Docker for its fixture that ages only a disposable session beyond 24 hours. The default container is `supabase_db_nextjs-blog-cms`; set `E2E_AUTH_DB_CONTAINER=supabase_db_cms-issue104` only for that separate isolated local stack. Remote URLs and other container names are rejected. The suite verifies real Auth password enforcement and nonce/replay behavior, browser validation bypass, security notifications, and normal/MFA recovery under secure password change. See [hosted password policy rollout](../features/password-recovery.md#deployment-requirements-and-verification) for deployment settings and leaked-password protection requirements that local tests cannot prove.

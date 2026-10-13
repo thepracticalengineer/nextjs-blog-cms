@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/auth/session'
+import { passwordChangeSchema } from '@/lib/auth/password-policy'
 import { profileUpdateSchema } from './validation'
-import type { ProfileFormData, SocialLinksFormData } from './types'
+import type { ProfileFormData, SocialLinksFormData, PasswordChangeResult } from './types'
 
 function revalidatePublicProfile(id: string) {
   revalidatePath('/dashboard/profile')
@@ -108,33 +109,78 @@ export async function deleteAvatar() {
   return { success: true }
 }
 
-export async function updatePassword(currentPassword: string, newPassword: string) {
+async function sendPasswordVerification(supabase: Awaited<ReturnType<typeof createClient>>): Promise<PasswordChangeResult> {
+  try {
+    const { error } = await supabase.auth.reauthenticate()
+    if (error) return {
+      reauthenticationRequired: true,
+      error: error.status === 429
+        ? 'Too many verification emails. Please wait before requesting another code.'
+        : 'Unable to send a verification code. Please try again.',
+    }
+    return { reauthenticationRequired: true, codeSent: true }
+  } catch {
+    return { reauthenticationRequired: true, error: 'Unable to send a verification code. Please try again.' }
+  }
+}
+
+export async function requestPasswordReauthentication(): Promise<PasswordChangeResult> {
+  const profile = await getProfile()
+  if (!profile) return { error: 'Unauthorized' }
+  const supabase = await createClient()
+  return sendPasswordVerification(supabase)
+}
+
+export async function updatePassword(currentPassword: unknown, newPassword: unknown, nonce?: unknown): Promise<PasswordChangeResult> {
   const profile = await getProfile()
   if (!profile) return { error: 'Unauthorized' }
 
-  // Use a stateless client (no cookie writes) to verify the current password
-  // so re-authentication does not mutate the caller's session cookies.
+  const parsed = passwordChangeSchema.safeParse({ currentPassword, newPassword, nonce })
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  // Verify legacy passwords without changing the caller's cookies or replacing
+  // an AAL2 session with the AAL1 session created by password sign-in.
   const anonClient = createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
-  const { error: signInError } = await anonClient.auth.signInWithPassword({
-    email: profile.email,
-    password: currentPassword,
-  })
-  if (signInError) {
-    // Use structured error code to distinguish credential failures from
-    // infrastructure/rate-limit errors, avoiding brittle string matching.
-    const isInvalidCredentials =
-      signInError.code === 'invalid_credentials' ||
-      (signInError.code == null && signInError.status === 400)
-    return { error: isInvalidCredentials ? 'Current password is incorrect' : signInError.message }
-  }
-
   const supabase = await createClient()
-  const { error } = await supabase.auth.updateUser({ password: newPassword })
-  if (error) return { error: error.message }
+  try {
+    const { error: signInError } = await anonClient.auth.signInWithPassword({
+      email: profile.email,
+      password: parsed.data.currentPassword,
+    })
+    if (signInError) {
+      const isInvalidCredentials =
+        signInError.code === 'invalid_credentials' ||
+        (signInError.code == null && signInError.status === 400)
+      return { error: isInvalidCredentials ? 'Current password is incorrect' : signInError.message }
+    }
 
-  return { success: true }
+    // Password verification creates a real refresh session even with persistence
+    // disabled. Revoke only that temporary session, never the caller's AAL2
+    // session. Cleanup outages must not report valid credentials as incorrect.
+    try {
+      await anonClient.auth.signOut({ scope: 'local' })
+    } catch {
+      // Leave the original session untouched if Auth cleanup is unavailable.
+    }
+
+    // Auth decides whether the original session qualifies for its 24-hour
+    // exception. A separate password sign-in is not provider reauthentication.
+    const { error } = await supabase.auth.updateUser({
+      password: parsed.data.newPassword,
+      ...(parsed.data.nonce === undefined ? {} : { nonce: parsed.data.nonce }),
+    })
+    if (error?.code === 'reauthentication_needed') return await sendPasswordVerification(supabase)
+    if (error?.code === 'reauthentication_not_valid') return {
+      reauthenticationRequired: true,
+      error: 'That verification code is invalid or expired. Try again or request a new code.',
+    }
+    if (error) return { error: error.message }
+    return { success: true }
+  } catch {
+    return { error: 'Unable to update your password right now. Please try again.' }
+  }
 }

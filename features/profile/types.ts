@@ -16,3 +16,10 @@ export type SocialLinksFormData = {
   youtube_url: string
   tiktok_url: string
 }
+
+export type PasswordChangeResult = {
+  success?: true
+  error?: string
+  reauthenticationRequired?: true
+  codeSent?: true
+}
