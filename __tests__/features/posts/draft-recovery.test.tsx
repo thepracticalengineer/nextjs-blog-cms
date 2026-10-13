@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { useDraftRecovery } from '@/features/posts/drafts/use-draft-recovery'
 import { loadWorkingCopy, saveWorkingCopy, discardWorkingCopy } from '@/features/posts/drafts/actions'
 import { draftValues, type WorkingCopy } from '@/features/posts/drafts/schema'
+import { commitEditorNavigation } from '@/features/posts/drafts/navigation'
 import { readRecovery, recoveryKey } from '@/features/posts/drafts/storage'
 
 vi.mock('@/features/posts/drafts/actions', () => ({ loadWorkingCopy: vi.fn(), saveWorkingCopy: vi.fn(), discardWorkingCopy: vi.fn() }))
@@ -39,6 +40,16 @@ beforeEach(() => {
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
 describe('draft recovery and safe autosave', () => {
+  it('persists recovery but does not ask a second unload question after committed logout', async () => {
+    const hook = mount(); await ready(hook)
+    type(hook, 'Keep this writing through logout')
+    act(() => { expect(closeEvent().defaultPrevented).toBe(true) })
+    act(() => commitEditorNavigation())
+    act(() => { expect(closeEvent().defaultPrevented).toBe(false) })
+    expect(readRecovery(identity.userId)[0].record.values.content).toBe('Keep this writing through logout')
+    hook.unmount()
+  })
+
   it('throttles repeated storage writes and flushes the latest text on unmount', async () => {
     const hook = mount(); await ready(hook)
     vi.useFakeTimers()

@@ -2,6 +2,11 @@ export function allowEditorNavigation(): boolean {
   return window.dispatchEvent(new Event('post-editor:navigate', { cancelable: true }))
 }
 
+/** Called only after a guarded operation commits to leaving this document. */
+export function commitEditorNavigation(): void {
+  window.dispatchEvent(new Event('post-editor:departure-confirmed'))
+}
+
 // Next links are stopped before their click handler can start a transition.
 // Navigation API also covers browser back/forward where supported. The fallback
 // keeps a same-URL history entry so popstate can be cancelled before Next sees it.

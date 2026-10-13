@@ -48,7 +48,7 @@ test('failed collection remains visible but cannot become a comparison baseline'
 test('invalid summaries cannot fabricate percentages or inject Markdown tables', t => {
   const f = fixture(t)
   f.write('unit/coverage-summary.json', summary('100% | injected'))
-  f.write('e2e/coverage/e2e/main/status.json', { coverage: '<script>\n|bad', counts: { passed: -1 } })
+  f.write('e2e/coverage/e2e/main/status.json', { coverage: '<script>\n|bad [click](https://evil.invalid) @everyone', counts: { passed: -1 } })
   const { markdown } = createReport({ root: f.root, identity, artifacts: { unit: 'javascript:bad' } })
-  assert.doesNotMatch(markdown, /<script>|javascript:bad|100% \| injected/)
+  assert.doesNotMatch(markdown, /<script>|javascript:bad|100% \| injected|@everyone|\[click\]/)
 })

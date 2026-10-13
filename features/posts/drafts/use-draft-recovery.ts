@@ -144,9 +144,12 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
     })
     const navigationGuard = installNavigationGuard(() => !unsafe() || window.confirm('Some writing is not saved to the server. Leave this editor? Recovery will remain on this device.'), unsafe)
     syncNavigation = navigationGuard.sync
+    let departureConfirmed = false
+    const confirmedDeparture = () => { persistLocal(); departureConfirmed = true }
+    window.addEventListener('post-editor:departure-confirmed', confirmedDeparture)
     const beforeUnload = (event: BeforeUnloadEvent) => {
       persistLocal()
-      if (unsafe()) { event.preventDefault(); event.returnValue = '' }
+      if (unsafe() && !departureConfirmed) { event.preventDefault(); event.returnValue = '' }
     }
     const pageHide = () => persistLocal()
     window.addEventListener('beforeunload', beforeUnload)
@@ -243,6 +246,7 @@ export function useDraftRecovery(form: UseFormReturn<FormValues>, identity?: Dra
       clearTimeout(timer)
       subscription.unsubscribe()
       navigationGuard.dispose()
+      window.removeEventListener('post-editor:departure-confirmed', confirmedDeparture)
       window.removeEventListener('beforeunload', beforeUnload)
       window.removeEventListener('pagehide', pageHide)
       window.removeEventListener('online', online)

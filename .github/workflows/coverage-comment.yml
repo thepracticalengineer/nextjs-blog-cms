@@ -1,0 +1,102 @@
+name: Coverage PR comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  pull-requests: write
+
+# Serialize publishers so simultaneous completions cannot create duplicates.
+concurrency:
+  group: coverage-comments-${{ github.repository }}
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find current PR for the completed CI run
+        id: source
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const prs = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
+              ...context.repo, commit_sha: run.head_sha, per_page: 100,
+            });
+            const pr = prs.find(pr => pr.state === 'open' && pr.base.ref === 'main' &&
+              pr.base.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.sha === run.head_sha);
+            if (pr) core.setOutput('number', String(pr.number));
+
+      # This privileged job has no repository checkout or dependency install.
+      - name: Load publisher code from an immutable trusted main commit
+        if: steps.source.outputs.number != ''
+        uses: actions/github-script@v8
+        env:
+          PUBLISHER_CODE_ROOT: ${{ runner.temp }}/coverage-publisher-code
+        with:
+          script: |
+            const { mkdirSync, writeFileSync } = require('node:fs');
+            const { join } = require('node:path');
+            const { data: ref } = await github.rest.git.getRef({ ...context.repo, ref: 'heads/main' });
+            const sha = ref.object.sha;
+            if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid trusted code reference');
+            mkdirSync(process.env.PUBLISHER_CODE_ROOT, { recursive: true });
+            for (const name of ['comment.mjs', 'report.mjs']) {
+              const { data: file } = await github.rest.repos.getContent({ ...context.repo,
+                path: `scripts/coverage/${name}`, ref: sha });
+              if (file.type !== 'file' || file.encoding !== 'base64') throw new Error('Missing trusted publisher file');
+              writeFileSync(join(process.env.PUBLISHER_CODE_ROOT, name), Buffer.from(file.content, 'base64'));
+            }
+
+      - name: Download unit coverage data
+        if: steps.source.outputs.number != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-report
+          path: ${{ runner.temp }}/coverage-pr-report/unit
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Download E2E coverage data
+        if: steps.source.outputs.number != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: e2e-reports
+          path: ${{ runner.temp }}/coverage-pr-report/e2e
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Download coverage comparison data
+        if: steps.source.outputs.number != ''
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: coverage-baseline
+          path: ${{ runner.temp }}/coverage-pr-report/source
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Create or update the coverage comment
+        if: steps.source.outputs.number != ''
+        uses: actions/github-script@v8
+        env:
+          COVERAGE_RUN_ID: ${{ github.event.workflow_run.id }}
+          COVERAGE_PR_NUMBER: ${{ steps.source.outputs.number }}
+          COVERAGE_DATA_ROOT: ${{ runner.temp }}/coverage-pr-report
+          PUBLISHER_CODE_ROOT: ${{ runner.temp }}/coverage-publisher-code
+        with:
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { join } = require('node:path');
+            const { publishCoverageComment } = await import(pathToFileURL(join(process.env.PUBLISHER_CODE_ROOT, 'comment.mjs')).href);
+            await publishCoverageComment({ github, ...context.repo, runId: Number(process.env.COVERAGE_RUN_ID),
+              prNumber: Number(process.env.COVERAGE_PR_NUMBER), root: process.env.COVERAGE_DATA_ROOT });

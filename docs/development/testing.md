@@ -88,7 +88,9 @@ with mail/webhooks and LLM provider keys disabled; it makes no LLM requests.
 
 ## Pull request coverage reports
 
-The **Coverage report** Actions job publishes a summary on CI runs, including failures (cancelled runs skip reporting). Open the PR's Checks tab, then that job/run summary. It shows unit
+The **Coverage report** Actions job publishes a summary on CI runs, including failures (cancelled runs skip reporting). Coverage also appears
+in one bot comment on the PR, updated on reruns. Open the PR's Checks tab, then
+that job/run summary for the persistent fallback. It shows unit
 lines, statements, branches and functions, and separate E2E client coverage and
 passed/failed/skipped/flaky counts for `main`, `analytics`, `oauth` and
 `publication`. Flaky means a test passed after retry; suites currently default to
@@ -147,13 +149,24 @@ expired artifacts, read permission failures and incompatible report formats show
 `baseline unavailable`. Changes are percentage points; loaded-file denominators
 can change between commits, so inspect detailed reports when interpreting deltas.
 
-The workflow uses read-only permissions, isolated local Supabase, and disabled
+The CI workflow uses read-only permissions, isolated local Supabase, and disabled
 external mail/webhooks. Build validation uses placeholder credentials. Reporting
-uses `actions: read` only to retrieve baselines; it never runs under
-`pull_request_target` or requests comment/write permissions. Forks use the same
-job summary fallback. Reruns produce an attempt-specific summary and no comments,
-so there are no duplicate comments to clean up. Artifact access requires GitHub
-access to the run; fork workflow execution may require maintainer approval.
+uses `actions: read` only to retrieve baselines. A separate **Coverage PR comment**
+workflow runs after CI completes and has `pull-requests: write` only to create or
+update the comment. It performs no checkout or dependency install. It loads only the reporter files
+from an immutable commit on this repository's `main` branch through GitHub's API,
+downloads artifacts into a separate temporary data directory, and never executes
+PR or artifact code.
+It works for fork PRs without granting their test jobs write permission, uses no
+`pull_request_target`, and keeps the job summary as a fallback if publishing fails.
+
+The publisher validates the current PR head and tested merge commit, refuses
+cancelled/stale runs, and preserves a newer run/attempt's report. Serialized
+publishers and a bot-owned marker prevent duplicate comments. Artifact strings
+are escaped before rendering Markdown; missing artifacts remain unavailable.
+The automatic publisher activates once its workflow and scripts land on `main`.
+Fork workflow execution may still require maintainer approval, and artifact access
+requires GitHub access to the run.
 
 ### Local commands and configuration
 
@@ -176,3 +189,24 @@ of the calling directory; `e2e/coverage/options.ts` controls source
 filtering; `scripts/coverage/report.mjs` renders the CI summary. Coverage collection
 is opt-in locally and enabled in the CI E2E job. No external coverage service or
 additional repository secret is required.
+
+## Logout verification
+
+`pnpm exec vitest run __tests__/api/signout.test.ts __tests__/lib/auth/signout.test.ts __tests__/lib/auth/signout-client.test.ts __tests__/lib/auth/use-signout.test.tsx`
+checks explicit scopes, bounded expired-token refresh/revocation retry, chunk and
+verifier cleanup, returned/thrown/network/timeout
+errors, warning messages, duplicate activation and cancelled editor navigation.
+
+`pnpm exec playwright test --config=e2e/logout.config.ts` runs the real Next.js
+logout controls, route, login warnings and subsequent private-access checks on
+desktop and mobile. It forces loopback synthetic Auth/database responses, disables
+external integrations and uses a separate `.next-logout-ui` cache. It needs no
+Supabase database or seeding. These tests cover provider outages, blocked app
+requests and expired chunked cookies with successful refresh or refresh outages, but do not
+prove live Auth revocation.
+
+`pnpm exec playwright test e2e/api/signout.spec.ts --project=api` verifies real
+local/global session revocation against the dedicated migrated Supabase E2E
+project described above. It creates and removes disposable accounts, checks
+post-logout private API/dashboard denial, and verifies whether a second session
+can refresh. Never run it against production; disable external mail/webhooks.
