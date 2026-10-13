@@ -153,8 +153,10 @@ The CI workflow uses read-only permissions, isolated local Supabase, and disable
 external mail/webhooks. Build validation uses placeholder credentials. Reporting
 uses `actions: read` only to retrieve baselines. A separate **Coverage PR comment**
 workflow runs after CI completes and has `pull-requests: write` only to create or
-update the comment. It checks out trusted default-branch code, downloads coverage
-artifacts into a temporary data directory, and never executes PR or artifact code.
+update the comment. It performs no checkout or dependency install. It loads only the reporter files
+from an immutable commit on this repository's `main` branch through GitHub's API,
+downloads artifacts into a separate temporary data directory, and never executes
+PR or artifact code.
 It works for fork PRs without granting their test jobs write permission, uses no
 `pull_request_target`, and keeps the job summary as a fallback if publishing fails.
 

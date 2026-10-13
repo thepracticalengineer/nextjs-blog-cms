@@ -34,13 +34,26 @@ jobs:
               pr.base.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.sha === run.head_sha);
             if (pr) core.setOutput('number', String(pr.number));
 
-      # Never check out the PR/merge ref or execute anything from an artifact.
-      - uses: actions/checkout@v7
+      # This privileged job has no repository checkout or dependency install.
+      - name: Load publisher code from an immutable trusted main commit
         if: steps.source.outputs.number != ''
+        uses: actions/github-script@v8
+        env:
+          PUBLISHER_CODE_ROOT: ${{ runner.temp }}/coverage-publisher-code
         with:
-          repository: thepracticalengineer/nextjs-blog-cms
-          ref: main
-          persist-credentials: false
+          script: |
+            const { mkdirSync, writeFileSync } = require('node:fs');
+            const { join } = require('node:path');
+            const { data: ref } = await github.rest.git.getRef({ ...context.repo, ref: 'heads/main' });
+            const sha = ref.object.sha;
+            if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid trusted code reference');
+            mkdirSync(process.env.PUBLISHER_CODE_ROOT, { recursive: true });
+            for (const name of ['comment.mjs', 'report.mjs']) {
+              const { data: file } = await github.rest.repos.getContent({ ...context.repo,
+                path: `scripts/coverage/${name}`, ref: sha });
+              if (file.type !== 'file' || file.encoding !== 'base64') throw new Error('Missing trusted publisher file');
+              writeFileSync(join(process.env.PUBLISHER_CODE_ROOT, name), Buffer.from(file.content, 'base64'));
+            }
 
       - name: Download unit coverage data
         if: steps.source.outputs.number != ''
@@ -79,10 +92,11 @@ jobs:
           COVERAGE_RUN_ID: ${{ github.event.workflow_run.id }}
           COVERAGE_PR_NUMBER: ${{ steps.source.outputs.number }}
           COVERAGE_DATA_ROOT: ${{ runner.temp }}/coverage-pr-report
+          PUBLISHER_CODE_ROOT: ${{ runner.temp }}/coverage-publisher-code
         with:
           script: |
             const { pathToFileURL } = require('node:url');
-            const { resolve } = require('node:path');
-            const { publishCoverageComment } = await import(pathToFileURL(resolve('scripts/coverage/comment.mjs')).href);
+            const { join } = require('node:path');
+            const { publishCoverageComment } = await import(pathToFileURL(join(process.env.PUBLISHER_CODE_ROOT, 'comment.mjs')).href);
             await publishCoverageComment({ github, ...context.repo, runId: Number(process.env.COVERAGE_RUN_ID),
               prNumber: Number(process.env.COVERAGE_PR_NUMBER), root: process.env.COVERAGE_DATA_ROOT });
