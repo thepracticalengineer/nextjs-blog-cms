@@ -2,9 +2,86 @@
 The login page links to `/forgot-password`. Requests use Supabase Auth and always
 show the same confirmation for registered and unregistered email addresses.
 Passwords must contain at least eight characters, matching registration and
-account settings. The signup server action enforces this policy even when browser
-validation is bypassed. Login still accepts older six-character passwords.
+account settings. Signup, recovery and account-settings server actions enforce
+this policy even when browser validation is bypassed. Local Auth also rejects
+new passwords shorter than eight characters, including direct provider updates. Login still accepts older six-character passwords.
 Additional Supabase password rules are enforced by Auth and reported during recovery.
+
+## Account-settings password changes and provider policy
+
+Account settings validates both passwords and an optional six-digit email code
+at runtime before password verification or an Auth update. The current password only needs to be a
+nonempty string, so legacy six-character passwords remain usable. Passwords are
+never trimmed. The action verifies the current password through a stateless
+client, then updates the original authorized session to preserve MFA assurance.
+
+Local Auth enables secure password change. Auth permits sessions created within
+the last 24 hours to change a password without an email code; this is a provider
+exception, not a promise that every change needs email verification. For older
+sessions, Auth returns `reauthentication_needed`. The action calls
+`auth.reauthenticate()` on the original session and the form retains the password
+fields while requesting the email code. The retry sends `nonce` with the new
+password. Invalid/expired codes preserve the challenge; resend is explicit and
+provider email rate limits still apply. A password sign-in on a separate client
+cannot satisfy this original-session requirement. MFA authorization remains
+mandatory for enrolled accounts before changing a password or requesting a code.
+
+New recovery sessions qualify for the provider's recent-session exception. The
+application's 15-minute, single-use recovery grant and TOTP verification remain
+required by the reset action. These grants do not constrain direct Auth API
+requests: provider password policy, session age and MFA enforce that boundary.
+A failed provider update consumes the recovery grant and requires a new link.
+
+### Deployment requirements and verification
+
+Deploy the application with the nonce flow **before** enabling secure password
+change in the hosted project. Committed `supabase/config.toml` settings configure
+the local stack; they do not prove or update hosted Auth settings.
+
+Record the project, deployment SHA, verification date and results of these checks
+in the deployment record. Do not put access tokens or SMTP credentials in it.
+
+- In hosted Authentication password settings, require a minimum of **8**
+  characters and enable **secure password change / reauthentication**. Keep the
+  current-password provider requirement disabled for this rollout; the CMS
+  verifies it itself and OAuth accounts set passwords through verified recovery.
+  Enabling an additional provider requirement needs separate compatibility tests.
+- Keep character-composition requirements unset for this change to match the
+  shared application policy. Auth can enforce a stronger future policy, but
+  document it and check signup, account settings and recovery error handling.
+- Enable **leaked-password protection** on hosted Pro or higher plans. This is
+  the chosen hosted requirement when available, enforced by Auth for new/changed
+  passwords; the app does not send passwords to an additional service. On a plan
+  without support, record that limitation explicitly before rollout. Local Auth
+  does not verify hosted HIBP enforcement. See
+  [Supabase password security](https://supabase.com/docs/guides/auth/password-security).
+- Enable **password changed** security notifications and configure production
+  SMTP. Copy `supabase/templates/password_changed.html` into the hosted Password
+  Changed notification template and `supabase/templates/reauthentication.html`
+  into the Reauthentication template. The latter must include `{{ .Token }}`.
+  Keep email OTP length at **6** digits. Check delivery and rate limits with a
+  designated test account; never include the password or code in logs.
+- Use a designated non-production project with external integrations disabled
+  to verify direct Auth rejects six/seven-character new passwords, a recent
+  session accepts eight characters, an older session requires the correct nonce,
+  wrong/replayed nonces fail, enrolled AAL1 cannot update passwords, and AAL2 can.
+  Confirm a legacy six-character account can still sign in. Then test ordinary
+  and MFA recovery, single-use grants, and password-change notifications.
+- Confirm the production dashboard settings separately without seeding or
+  resetting production. Local tests cannot establish hosted policy or delivery.
+
+Run the policy browser tests and existing recovery tests against an isolated local
+stack with Mailpit and Docker (see [testing](../development/testing.md)):
+
+```bash
+pnpm exec playwright test e2e/browser/password-policy.spec.ts e2e/browser/password-recovery.spec.ts --project=browser
+```
+
+The older-session fixture ages only its disposable user's `auth.sessions` row in
+`supabase_db_nextjs-blog-cms` (or the isolated `supabase_db_cms-issue104` stack via
+`E2E_AUTH_DB_CONTAINER`). It refuses remote URLs and other container names. The
+suite captures actual email codes and notifications in local Mailpit and modifies
+a real Server Action request to bypass browser password validation.
 
 Before deploying this feature:
 
