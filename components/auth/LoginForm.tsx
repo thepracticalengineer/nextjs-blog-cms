@@ -132,6 +132,10 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
           )}
         </Button>
       </form>
+      <p className="mt-5 text-sm text-gray-600">
+        Waiting to confirm your email?{' '}
+        <Link href="/confirm-email" className="text-blue-600 font-medium hover:underline">Request a new confirmation link</Link>
+      </p>
 
       <p className="text-sm text-center mt-6">
         <Link href="/forgot-password" className="text-blue-600 font-medium hover:text-blue-700 transition-colors">

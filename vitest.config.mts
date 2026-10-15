@@ -30,6 +30,7 @@ export default defineConfig({
         'lib/auth/assurance.ts',
         'lib/auth/api.ts',
         'lib/auth/password-policy.ts',
+        'lib/auth/confirmation.ts',
         'lib/auth/navigation.ts',
         'lib/auth/oauth.ts',
         'lib/auth/oauth-server.ts',
@@ -44,10 +45,12 @@ export default defineConfig({
         'lib/auth/recovery.ts',
         'app/(auth)/forgot-password/actions.ts',
         'app/(auth)/register/actions.ts',
+        'app/(auth)/confirm-email/actions.ts',
         'app/(auth)/reset-password/actions.ts',
         'app/auth/callback/route.ts',
         'components/auth/ForgotPasswordForm.tsx',
         'components/auth/ResetPasswordForm.tsx',
+        'components/auth/ConfirmationResendForm.tsx',
         // notifications
         'lib/notifications/user-confirmed.ts',
         // features

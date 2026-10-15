@@ -8,6 +8,8 @@ Keep AI output in drafts until a human editor reviews accuracy, attribution, tax
 
 Before enabling Google/GitHub sign-in, configure provider credentials and exact callback allowlists, then complete the dedicated-account [social authentication rollout checklist](../setup/social-auth.md#verification-and-rollout). The mocked SDK/browser tests do not verify live provider consent or account linking.
 
+For signup confirmation, follow the coordinated [application/template/allowlist rollout](../features/signup-confirmation.md#deployment-and-rollback). Verify one-hour expiry, the 60-second Auth send interval, configured-domain links, fresh-browser confirmation, and neutral resend on a designated test project. Local tests do not update or verify hosted settings.
+
 ## Analytics rollout
 
 Keep `GA_ENABLED=false` until the [Google Analytics rollout order](../setup/google-analytics.md#rollout-order) is complete. Deploy the disabled implementation first, configure the existing stream for manual collection, then enable only on the canonical production host. Record the collection pause and verification evidence; this deployment alone does not complete issue #129.

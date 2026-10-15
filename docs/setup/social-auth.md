@@ -69,8 +69,9 @@ Use the actual port and hostname for each deployment; add each preview URL
 individually, without wildcard hosts or paths. Set that preview's
 `NEXT_PUBLIC_SITE_URL` accordingly. Start and finish on the same application
 origin/browser: the PKCE verifier cookie does not cross hosts. Keep the existing
-signup `/auth/callback` and recovery `/auth/callback?next=/reset-password`
-allowlist entries and templates unchanged. Google consent settings must also
+signup `/auth/callback?type=signup` and recovery `/auth/callback?next=/reset-password`
+allowlist entries alongside OAuth. See [signup confirmation](../features/signup-confirmation.md)
+for its token-hash template and rollout. Google consent settings must also
 permit each preview origin. Provider applications can share one hosted callback
 only when the environments intentionally use the same Supabase project.
 
@@ -79,9 +80,9 @@ validated destination and selected provider in a ten-minute HttpOnly SameSite=La
 cookie and pass it to `exchangeCodeForSession`; the callback URL stays exact.
 Supabase owns OAuth state and verifier validation. One pending attempt per browser
 is supported: a later attempt replaces its initiation context, and an older
-callback fails safely. Starting OAuth clears the SDK's legacy signup verifier, so
-an older signup attempt in that browser must be restarted. Removing the OAuth
-marker cannot fall back to signup's verifier slot. Restart after cancellation or expiry. Never log callback
+callback fails safely. Starting OAuth clears the SDK's legacy signup verifier;
+current signup confirmation uses a token hash and does not depend on that slot.
+Removing the OAuth marker cannot fall back to a signup code exchange. Restart after cancellation or expiry. Never log callback
 queries, authorization codes, cookies, or token responses.
 
 ## Identity, sessions, and account security

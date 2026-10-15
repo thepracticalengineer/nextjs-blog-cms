@@ -246,7 +246,7 @@
 
       <!-- CTA -->
       <div class="cta-wrap">
-        <a href="{{ .ConfirmationURL }}" class="cta-btn">▶ Confirm My Email</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}" class="cta-btn">▶ Confirm My Email</a>
       </div>
 
       <div class="divider"></div>
@@ -255,7 +255,7 @@
       <div class="info-row">
         <div class="info-icon"></div>
         <p class="info-text">
-          <strong>Link expires in 24 hours.</strong>
+          <strong>Link expires in one hour and can only be used once.</strong>
           If you didn't create an account, you can safely ignore this email.
         </p>
       </div>
@@ -269,7 +269,7 @@
       </div>
 
       <p class="fallback">
-        <a href="{{ .ConfirmationURL }}">{{ .ConfirmationURL }}</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}">{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}</a>
       </p>
     </div>
 
@@ -279,7 +279,7 @@
         <p class="footer-logo">▪ The Practical Engineer ▪</p>
         <p class="footer-note">
           You received this email because you signed up at
-          <a href="https://blog.frankmendez.site">blog.frankmendez.site</a>.<br />
+          <a href="{{ .SiteURL }}">The Practical Engineer</a>.<br />
           © 2026 The Practical Engineer. All rights reserved.
         </p>
       </div>

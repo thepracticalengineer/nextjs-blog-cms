@@ -86,6 +86,31 @@ MFA redirect, and restored access after verification. It creates and removes its
 own disposable account and storage object. Use the dedicated environment above
 with mail/webhooks and LLM provider keys disabled; it makes no LLM requests.
 
+## Signup confirmation
+
+CI runs `node scripts/prepare-e2e-supabase.mjs` before starting its disposable
+stack. It allocates available local listener ports instead of assuming default
+ports are free, then exports actual URLs from `supabase status`. This only changes
+the runner's config file; it never stops unrelated services or changes Auth/SMTP
+settings. Run it from a separate disposable project's directory to prepare that
+stack; it does not accept arbitrary file paths. Its regression tests run with
+`node --test scripts/prepare-e2e-supabase.test.mjs`.
+
+Run `pnpm exec vitest run __tests__/auth` for fixed signup verification types and
+destinations, recovery isolation, safe callback messages, neutral resend, trusted
+origins and the UI cooldown. Run
+`pnpm exec playwright test e2e/browser/signup-confirmation.spec.ts --project=browser`
+against the dedicated local stack with loopback `E2E_MAILPIT_URL`, disabled external
+mail/webhooks and matching `NEXT_PUBLIC_SITE_URL`/`E2E_BASE_URL`. The suite reads actual
+signup emails, confirms in initiating/fresh browsers, rejects replay/expiry and
+invalid types, verifies resend and the provider cooldown, and checks the mobile
+retry path. Docker is required for the fixture that ages only its disposable
+user's `auth.users.confirmation_sent_at`; only the default
+`supabase_db_nextjs-blog-cms` or `E2E_AUTH_DB_CONTAINER=supabase_db_cms-issue106`
+containers on a loopback Auth URL are accepted. User fixtures are deleted after
+each case. Hosted Auth/SMTP configuration and email-client presentation still
+require the [deployment checks](../features/signup-confirmation.md).
+
 ## Pull request coverage reports
 
 The **Coverage report** Actions job publishes a summary on CI runs, including failures (cancelled runs skip reporting). Coverage also appears

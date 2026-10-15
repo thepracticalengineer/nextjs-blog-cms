@@ -23,7 +23,7 @@ interface HomePageProps {
 export default async function HomePage({ searchParams }: HomePageProps) {
   const params = await searchParams
   if (params.code) {
-    redirect(`/auth/callback?code=${encodeURIComponent(params.code)}`)
+    redirect('/login?error=auth_callback_failed')
   }
 
   const [{ posts }, popularTags] = await Promise.all([

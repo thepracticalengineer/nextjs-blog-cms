@@ -98,7 +98,7 @@ Before deploying this feature:
    - `http://localhost:3000/auth/callback?next=/reset-password`
    - `http://127.0.0.1:3000/auth/callback?next=/reset-password`
    - `https://blog.frankmendez.site/auth/callback?next=/reset-password`
-   Keep the existing signup `/auth/callback` redirects allowed as well.
+   Keep the [signup confirmation](signup-confirmation.md) `/auth/callback?type=signup` redirects allowed as well.
 4. In **Authentication → Email Templates → Reset Password**, copy
    `supabase/templates/recovery.html`. Its link must be
    `{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}&amp;type=recovery`.
