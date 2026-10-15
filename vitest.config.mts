@@ -35,6 +35,8 @@ export default defineConfig({
         'lib/auth/credentials.ts',
         'lib/auth/credential-errors.ts',
         'app/(auth)/login/actions.ts',
+        'components/auth/CredentialForm.tsx',
+        'components/auth/CredentialEmailField.tsx',
         'components/auth/LoginForm.tsx',
         'components/auth/RegisterForm.tsx',
         'lib/auth/confirmation.ts',

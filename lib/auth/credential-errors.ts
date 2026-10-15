@@ -7,7 +7,7 @@ export function credentialErrorMessage(error: unknown, mode: 'login' | 'signup',
   if (status === 429 || code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit') {
     return 'Too many attempts. Wait a few minutes before trying again.'
   }
-  if (code === 'request_timeout' || code === 'unexpected_failure' || (status !== undefined && status >= 500)) {
+  if (status === 0 || code === 'request_timeout' || code === 'unexpected_failure' || (status !== undefined && status >= 500)) {
     return 'Authentication is temporarily unavailable. Please try again later.'
   }
   if (code === 'weak_password' && mode === 'signup') {

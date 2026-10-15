@@ -7,13 +7,13 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { loginSchema } from '@/lib/auth/credentials'
 import Link from 'next/link'
-import { AlertCircle, Loader2, Mail, Lock } from 'lucide-react'
+import { AlertCircle, Loader2, Lock } from 'lucide-react'
 import { login } from '@/app/(auth)/login/actions'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { OAuthButtons } from '@/components/auth/OAuthButtons'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { CredentialForm } from '@/components/auth/CredentialForm'
+import { CredentialEmailField } from '@/components/auth/CredentialEmailField'
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
@@ -64,42 +64,15 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
         <p className="text-sm text-gray-500 mt-1">Sign in to your account to continue</p>
       </div>
 
-      {error && (
-        <Alert variant="destructive" className="mb-5">
-          <AlertCircle />
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <OAuthButtons next={next} disabled={loading || oauthPending} onPendingChange={setOauthPending} onError={setError} />
-
-      <form aria-busy={loading || oauthPending} onSubmit={event => {
-        if (submitting.current || oauthPending) {
-          event.preventDefault()
-          return
-        }
-        void handleSubmit(onSubmit)(event)
-      }} className="space-y-5">
-        <div className="space-y-1.5">
-          <Label htmlFor="email" className="text-sm font-medium text-gray-700">
-            Email address
-          </Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-            <Input
-              disabled={loading || oauthPending}
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              className="pl-9 h-10"
-              {...register('email', { onChange: () => clearErrors('email') })}
-            />
-          </div>
-          {errors.email && (
-            <p className="flex items-center gap-1 text-xs text-red-600 animate-in fade-in duration-150">
-              <AlertCircle className="size-3 shrink-0" />{errors.email.message}
-            </p>
-          )}
-        </div>
+      <CredentialForm error={error} next={next} busy={loading || oauthPending}
+        onPendingChange={setOauthPending} onError={setError}
+        isBlocked={() => submitting.current || oauthPending}
+        onSubmit={event => void handleSubmit(onSubmit)(event)} className="space-y-5">
+        <CredentialEmailField
+          registration={register('email', { onChange: () => clearErrors('email') })}
+          disabled={loading || oauthPending}
+          error={errors.email?.message}
+        />
 
         <div className="space-y-1.5">
           <Label htmlFor="password" className="text-sm font-medium text-gray-700">
@@ -137,7 +110,7 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
             'Sign in'
           )}
         </Button>
-      </form>
+      </CredentialForm>
       <p className="mt-5 text-sm text-gray-600">
         Waiting to confirm your email?{' '}
         <Link href="/confirm-email" className="text-blue-600 font-medium hover:underline">Request a new confirmation link</Link>

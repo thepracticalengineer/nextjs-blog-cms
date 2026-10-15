@@ -1,3 +1,4 @@
+import { AuthRetryableFetchError } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ client: vi.fn(), signIn: vi.fn(), signUp: vi.fn(), revalidate: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: m.client }))
@@ -81,4 +82,9 @@ it.each([
 ])('maps signup provider failure %j to safe guidance', async (error, message) => {
   m.signUp.mockResolvedValue({ error: { ...error, message: 'PRIVATE' } })
   expect(await register(form())).toEqual({ error: message })
+})
+
+it.each([['login', login, m.signIn], ['signup', register, m.signUp]] as const)('%s reports returned SDK network failures as outages', async (_name, action, provider) => {
+  provider.mockResolvedValue({ error: new AuthRetryableFetchError('PRIVATE fetch failure', 0) })
+  expect(await action(form())).toEqual({ error: 'Authentication is temporarily unavailable. Please try again later.' })
 })
