@@ -32,11 +32,11 @@ describe('auth callback recovery', () => {
     expect((await GET(request('type=recovery&token_hash=hash'))).headers.get('location')).toContain('invalid_recovery')
   })
   it('does not treat ordinary auth as recovery', async () => {
-    expect((await GET(request('code=signup'))).headers.get('location')).toBe('https://example.com/dashboard')
+    expect((await GET(request('type=signup&token_hash=hash'))).headers.get('location')).toBe('https://example.com/dashboard')
     expect(mocks.grant).not.toHaveBeenCalled()
   })
   it.each(['.attacker.invalid/reset', '//evil.invalid', 'https://evil.invalid', '/dashboard/admin'])('ignores untrusted destination %s', async next => {
-    expect((await GET(request(`code=signup&next=${encodeURIComponent(next)}`))).headers.get('location')).toBe('https://example.com/dashboard')
+    expect((await GET(request(`type=signup&token_hash=hash&next=${encodeURIComponent(next)}`))).headers.get('location')).toBe('https://example.com/dashboard')
   })
   it('rejects old recovery templates instead of redirecting to dashboard', async () => {
     expect((await GET(request('code=old&next=/reset-password'))).headers.get('location')).toContain('invalid_recovery')

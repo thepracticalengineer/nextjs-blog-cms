@@ -5,7 +5,6 @@ import { clearRecoveryGrant, createRecoveryGrant } from '@/lib/auth/recovery'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
-  const code = searchParams.get('code')
   const tokenHash = searchParams.get('token_hash')
   const isRecovery = searchParams.get('type') === 'recovery'
   // Fixed application destinations only; never concatenate an untrusted next URL.
@@ -37,21 +36,25 @@ export async function GET(request: Request) {
     return redirect('/reset-password?error=invalid_recovery')
   }
 
+  if (searchParams.get('type') === 'signup' && tokenHash) {
+    try {
+      const supabase = await createClient()
+      // A fixed type prevents signup from consuming recovery/invite tokens.
+      // No PKCE verifier is required, so this works in a fresh browser too.
+      const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'signup' })
+      if (!error && data.session) return redirect('/dashboard')
+    } catch {
+      // Never expose tokens or provider descriptions in the destination URL.
+    }
+    return redirect('/login?error=invalid_confirmation')
+  }
+
   // A recovery link with an old/default email template must not fall through to
   // the dashboard. Use the documented token-hash recovery email template.
   if (searchParams.get('next') === '/reset-password') {
     return redirect('/reset-password?error=invalid_recovery')
   }
-  if (code) {
-    try {
-      const supabase = await createClient()
-      // Signup uses its legacy PKCE verifier. Never borrow an OAuth verifier
-      // slot from query parameters if the OAuth flow marker was removed.
-      const { error } = await supabase.auth.exchangeCodeForSession(code)
-      if (!error) return redirect('/dashboard')
-    } catch {
-      // Present a safe retry message for network and unexpected Auth failures.
-    }
-  }
-  return redirect('/login?error=auth_callback_failed')
+  // Legacy PKCE signup emails and unsupported types need a fresh signup link.
+  // Only the explicit OAuth branch may exchange an authorization code.
+  return redirect('/login?error=invalid_confirmation')
 }

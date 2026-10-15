@@ -75,8 +75,9 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
         </div>
         <h2 className="text-xl font-bold text-gray-900 mb-2">Check your email</h2>
         <p className="text-gray-500 text-sm mb-6">
-          We sent a confirmation link to your email. Click it to activate your account.
+          Check your inbox and spam folder for a confirmation link. It expires in one hour and can be opened in any browser.
         </p>
+        <p className="mb-4 text-sm"><Link href="/confirm-email" className="text-blue-600 font-medium hover:underline">Request a new confirmation link</Link></p>
         <Link
           href={`/login?next=${encodeURIComponent(next)}`}
           className="text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"

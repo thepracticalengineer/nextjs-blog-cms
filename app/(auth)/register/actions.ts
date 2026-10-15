@@ -3,10 +3,18 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { passwordSchema } from '@/lib/auth/password-policy'
+import { signupCallbackUrl } from '@/lib/auth/confirmation'
 
 export async function register(formData: FormData) {
   const password = passwordSchema.safeParse(formData.get('password'))
   if (!password.success) return { error: password.error.issues[0].message }
+
+  let emailRedirectTo: string
+  try {
+    emailRedirectTo = signupCallbackUrl()
+  } catch {
+    return { error: 'Signup is temporarily unavailable. Please try again later.' }
+  }
 
   const supabase = await createClient()
 
@@ -20,13 +28,11 @@ export async function register(formData: FormData) {
     },
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
-
   const { data: authData, error } = await supabase.auth.signUp({
     ...data,
     options: {
       ...data.options,
-      emailRedirectTo: new URL('/auth/callback', baseUrl).toString(),
+      emailRedirectTo,
     },
   })
 

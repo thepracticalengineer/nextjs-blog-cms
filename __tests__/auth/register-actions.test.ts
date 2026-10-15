@@ -30,7 +30,14 @@ describe('signup server password validation', () => {
   })
   it('accepts the boundary and preserves confirmation-required signup', async () => {
     expect(await register(form('12345678'))).toEqual({ needsConfirmation: true })
-    expect(mocks.signUp).toHaveBeenCalledWith(expect.objectContaining({ password: '12345678' }))
+    expect(mocks.signUp).toHaveBeenCalledWith(expect.objectContaining({ password: '12345678', options: {
+      data: { full_name: 'New User' }, emailRedirectTo: 'https://example.com/auth/callback?type=signup',
+    } }))
+  })
+  it.each(['', 'javascript:alert(1)', 'https://user:password@example.com', 'http://example.com'])('fails closed before Auth on unsafe site configuration %s', async site => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', site)
+    expect((await register(form('12345678'))).error).toContain('temporarily unavailable')
+    expect(mocks.createClient).not.toHaveBeenCalled()
   })
   it('preserves immediate-session signup', async () => {
     mocks.signUp.mockResolvedValue({ data: { session: { user: { id: 'user' } } }, error: null })
