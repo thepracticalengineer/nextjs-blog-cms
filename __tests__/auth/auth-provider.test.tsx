@@ -162,6 +162,22 @@ describe('profile identity and request lifetime', () => {
 })
 
 describe('auth events and explicit profile refresh', () => {
+  it('does not notify context consumers when a parent rerenders with unchanged auth state', async () => {
+    const renders = vi.fn()
+    function ObservedProfile() {
+      const { profile } = useProfile()
+      renders(profile?.full_name ?? 'none')
+      return <output>{profile?.full_name ?? 'none'}</output>
+    }
+    const child = <ObservedProfile />
+    const view = render(<AuthProvider>{child}</AuthProvider>)
+    await initialize(); await respond(0, 'A')
+    expect(screen.getByText('A')).toBeInTheDocument()
+    renders.mockClear()
+    view.rerender(<AuthProvider>{child}</AuthProvider>)
+    expect(renders).not.toHaveBeenCalled()
+    expect(queries).toHaveLength(1)
+  })
   it('returns synchronously and never starts a profile query inside the auth callback', async () => {
     mount(); await initialize(null)
     const original = mocks.from.getMockImplementation()!
@@ -209,6 +225,28 @@ describe('auth events and explicit profile refresh', () => {
 })
 
 describe('finite failures and manual retry', () => {
+  it.each(['INITIAL_SESSION', 'SIGNED_IN'] as const)('recovers from initialization timeout on a late %s without manual retry', async event => {
+    vi.useFakeTimers()
+    mount()
+    await act(async () => { await vi.advanceTimersByTimeAsync(10_000) })
+    expect(value('loading')).toBe('false')
+    expect(value('error')).not.toBe('')
+    // A timed-out lookup must stay obsolete, while a fresh event may recover.
+    await initialize(session('A'))
+    expect(value('user')).toBe('none')
+    expect(queries).toHaveLength(0)
+    emit(event, session('B'))
+    expect(value('error')).toBe('')
+    expect(value('user')).toBe('B')
+    expect(value('loading')).toBe('true')
+    expect(queries.map(query => query.id)).toEqual(['B'])
+    await respond(0, 'B')
+    expect(value('profile')).toBe('B')
+    expect(value('loading')).toBe('false')
+    expect(mocks.getSession).toHaveBeenCalledOnce()
+    expect(subscriptions).toHaveLength(1)
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it.each(['returned', 'rejected', 'missing'])('ends loading after a %s profile failure and allows retry', async kind => {
     mount(); await initialize()
     await act(async () => {

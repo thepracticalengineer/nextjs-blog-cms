@@ -278,7 +278,8 @@ Run `pnpm exec vitest run __tests__/auth/auth-provider.test.tsx` for delayed
 profile responses after logout/account switch, batched A → B → A transitions,
 unmount and Strict Mode cleanup, initialization/event ordering, synchronous
 callbacks, same-user event query counts, explicit refresh, returned/rejected
-failures, missing rows, deadlines and manual retry. The tests render the real
+failures, missing rows, deadlines, late-event recovery, manual retry and stable
+context notifications on parent rerenders. The tests render the real
 provider and hooks with controlled Auth/profile responses, including responses
 that ignore cancellation. They use no database, external mail or webhooks.
 

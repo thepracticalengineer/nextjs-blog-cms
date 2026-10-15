@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
 import type { Profile } from '@/lib/supabase/types'
@@ -141,9 +141,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const profile = currentResult?.data ?? null
   const profileError = auth.error ?? currentResult?.error ?? null
   const loading = !auth.initialized || (!!userId && !currentResult)
+  const value = useMemo(() => ({
+    session: auth.session,
+    user: auth.session?.user ?? null,
+    profile,
+    loading,
+    profileError,
+    refreshProfile,
+  }), [auth.session, profile, loading, profileError, refreshProfile])
 
   return (
-    <AuthContext.Provider value={{ session: auth.session, user: auth.session?.user ?? null, profile, loading, profileError, refreshProfile }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   )
