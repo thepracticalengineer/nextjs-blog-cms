@@ -2,12 +2,13 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { passwordSchema } from '@/lib/auth/password-policy'
+import { credentialFields, signupSchema } from '@/lib/auth/credentials'
+import { credentialErrorMessage } from '@/lib/auth/credential-errors'
 import { signupCallbackUrl } from '@/lib/auth/confirmation'
 
 export async function register(formData: FormData) {
-  const password = passwordSchema.safeParse(formData.get('password'))
-  if (!password.success) return { error: password.error.issues[0].message }
+  const parsed = signupSchema.safeParse(credentialFields(formData))
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
   let emailRedirectTo: string
   try {
@@ -16,33 +17,18 @@ export async function register(formData: FormData) {
     return { error: 'Signup is temporarily unavailable. Please try again later.' }
   }
 
-  const supabase = await createClient()
-
-  const data = {
-    email: formData.get('email') as string,
-    password: password.data,
-    options: {
-      data: {
-        full_name: formData.get('full_name') as string,
-      },
-    },
-  }
-
-  const { data: authData, error } = await supabase.auth.signUp({
-    ...data,
-    options: {
-      ...data.options,
-      emailRedirectTo,
-    },
-  })
-
-  if (error) {
-    return { error: error.message }
-  }
-
-  // If no session, email confirmation is required
-  if (!authData.session) {
-    return { needsConfirmation: true }
+  try {
+    const supabase = await createClient()
+    const { email, password, full_name } = parsed.data
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name }, emailRedirectTo },
+    })
+    if (error) return { error: credentialErrorMessage(error, 'signup') }
+    if (!data.session) return { needsConfirmation: true }
+  } catch (error) {
+    return { error: credentialErrorMessage(error, 'signup', true) }
   }
 
   revalidatePath('/', 'layout')
