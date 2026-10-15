@@ -88,6 +88,13 @@ with mail/webhooks and LLM provider keys disabled; it makes no LLM requests.
 
 ## Signup confirmation
 
+CI runs `node scripts/prepare-e2e-supabase.mjs` before starting its disposable
+stack. It allocates available local listener ports instead of assuming default
+ports are free, then exports actual URLs from `supabase status`. This only changes
+the runner's config file; it never stops unrelated services or changes Auth/SMTP
+settings. The script accepts an optional config path for a separate disposable
+stack. Its regression tests run with `node --test scripts/prepare-e2e-supabase.test.mjs`.
+
 Run `pnpm exec vitest run __tests__/auth` for fixed signup verification types and
 destinations, recovery isolation, safe callback messages, neutral resend, trusted
 origins and the UI cooldown. Run

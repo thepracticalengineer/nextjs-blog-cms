@@ -57,12 +57,16 @@ export default function ConfirmationResendForm() {
     })
   }
 
+  let submitLabel = 'Send confirmation link'
+  if (remaining > 0) submitLabel = `Wait ${remaining} seconds to resend`
+  if (pending) submitLabel = 'Requesting link…'
+
   return (
     <div className="p-8">
       <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Confirm your email</h2>
       <p className="text-sm text-gray-600 mt-2 mb-6">Request a new link if yours expired or never arrived. Confirmation links expire in one hour and work in any browser.</p>
       {error && <Alert variant="destructive" className="mb-5"><AlertDescription>{error}</AlertDescription></Alert>}
-      {sent && <p role="status" className="text-sm text-gray-700 mb-5">{CONFIRMATION_SENT}</p>}
+      {sent && <output className="block text-sm text-gray-700 mb-5">{CONFIRMATION_SENT}</output>}
       <form onSubmit={onSubmit} method="post" noValidate aria-busy={pending} className="space-y-5">
         <div className="space-y-1.5">
           <Label htmlFor="confirmation-email">Email address</Label>
@@ -71,7 +75,7 @@ export default function ConfirmationResendForm() {
             className="h-10" />
         </div>
         <Button type="submit" disabled={pending || remaining > 0} className="w-full h-10">
-          {pending ? 'Requesting link…' : remaining > 0 ? `Wait ${remaining} seconds to resend` : 'Send confirmation link'}
+          {submitLabel}
         </Button>
       </form>
       <p className="text-sm text-center mt-6"><Link href="/login" className="text-blue-600 font-medium hover:underline">Back to sign in</Link></p>

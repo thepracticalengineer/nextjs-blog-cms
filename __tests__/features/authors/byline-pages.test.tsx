@@ -1,9 +1,11 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import { redirect } from 'next/navigation'
 import { render, screen } from '@testing-library/react'
 import HomePage from '@/app/(public)/page'
 import PostPage from '@/app/(public)/blog/[slug]/page'
 import { getPostBySlug, getPublishedPosts } from '@/features/posts/queries'
 
+vi.mock('next/navigation', () => ({ redirect: vi.fn((path: string) => { throw new Error(`redirect:${path}`) }) }))
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPublishedPosts: vi.fn(), getPopularTags: vi.fn().mockResolvedValue([]) }))
 vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentProps<'a'>) => <a {...props}>{children}</a> }))
 vi.mock('@/components/editor/EditorContent', () => ({ EditorContent: () => null }))
@@ -47,4 +49,9 @@ it('handles deleted authors in public article details without broken links', asy
   render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
   expect(screen.getByText('Unknown')).toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Jane Doe' })).not.toBeInTheDocument()
+})
+
+it('sends stray auth codes to a safe login error without forwarding the code', async () => {
+  await expect(HomePage({ searchParams: Promise.resolve({ code: 'private-code' }) })).rejects.toThrow('redirect:/login?error=auth_callback_failed')
+  expect(redirect).toHaveBeenCalledWith('/login?error=auth_callback_failed')
 })

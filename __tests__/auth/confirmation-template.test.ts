@@ -4,11 +4,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { signupCallbackUrl } from '@/lib/auth/confirmation'
 
 describe('deployed signup email contract', () => {
-  it('renders both confirmation links to the fixed callback and home links to the configured site', () => {
+  it.each([signupCallbackUrl, () => 'https://cms.example.com', () => 'https://preview.example.com/arbitrary?next=untrusted'])('renders fixed confirmation links even when RedirectTo falls back or selects another origin (%s)', redirect => {
     vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://cms.example.com')
     try {
       const template = readFileSync('supabase/templates/confirm.html', 'utf8')
-      const rendered = template.replaceAll('{{ .RedirectTo }}', signupCallbackUrl())
+      const rendered = template.replaceAll('{{ .RedirectTo }}', redirect())
         .replaceAll('{{ .TokenHash }}', 'synthetic-hash').replaceAll('{{ .SiteURL }}', 'https://cms.example.com')
       const links = [...rendered.matchAll(/href="([^"]+)"/g)].map(match => new URL(match[1].replaceAll('&amp;', '&')))
       const confirmations = links.filter(link => link.searchParams.has('token_hash'))

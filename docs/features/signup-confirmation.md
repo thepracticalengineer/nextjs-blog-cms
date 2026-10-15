@@ -26,8 +26,11 @@ the person requesting a link.
 
 1. Set `NEXT_PUBLIC_SITE_URL` to the trusted application origin. HTTPS is required
    except for loopback local development. Do not use request headers to construct
-   email links. Set Supabase's Site URL to that same origin so brand/home links
-   use the correct domain.
+   email links. Set Supabase's Site URL to that same origin without a trailing
+   slash or path. Signup confirmation and brand/home links use that canonical
+   origin. A preview that must receive its own signup sessions needs a separate
+   test Auth project whose Site URL matches the preview; adding a preview to a
+   shared project's allowlist does not change the confirmation destination.
 2. Allow the exact signup redirects below in Supabase URL Configuration. Replace
    the production example with the configured origin and add each designated
    preview origin explicitly; do not use wildcard redirects.
@@ -43,8 +46,11 @@ the person requesting a link.
    `/auth/callback` redirects after the new flow is deployed.
 3. Deploy the application, then install `supabase/templates/confirm.html` in
    **Authentication → Email Templates → Confirm signup**. Both the CTA and copyable
-   fallback must use `{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}`.
-   Registration and resend set `.RedirectTo` to the exact signup callback above;
+   fallback must use `{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}`.
+   The template fixes the path, type and query separator independently of
+   `.RedirectTo`. Dashboard-sent emails or GoTrue falling back to Site URL after
+   a missing/disallowed redirect still produce a usable canonical signup link.
+   Registration and resend continue requesting the exact signup callback above;
    do not substitute `.ConfirmationURL`. In-flight old emails fail safely and
    offer resend. For rollback, restore the old application, template and redirect
    allowlists together; neither callback format is compatible with the other.

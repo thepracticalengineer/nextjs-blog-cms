@@ -246,7 +246,7 @@
 
       <!-- CTA -->
       <div class="cta-wrap">
-        <a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}" class="cta-btn">▶ Confirm My Email</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}" class="cta-btn">▶ Confirm My Email</a>
       </div>
 
       <div class="divider"></div>
@@ -269,7 +269,7 @@
       </div>
 
       <p class="fallback">
-        <a href="{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}">{{ .RedirectTo }}&amp;token_hash={{ .TokenHash }}</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}">{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}</a>
       </p>
     </div>
 

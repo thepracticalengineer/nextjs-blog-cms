@@ -140,6 +140,8 @@ jobs:
 
       - name: Start disposable Supabase
         run: |
+          node --test scripts/prepare-e2e-supabase.test.mjs
+          node scripts/prepare-e2e-supabase.mjs
           pnpm dlx supabase@2.119.0 start --exclude studio,imgproxy,vector,logflare,edge-runtime > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
           pnpm dlx supabase@2.119.0 status -o json > /tmp/supabase-status.json
           python3 - <<'PY'

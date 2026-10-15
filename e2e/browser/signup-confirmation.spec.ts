@@ -18,9 +18,8 @@ async function signup(page: Page, email: string) {
   await page.getByLabel('Confirm password', { exact: false }).fill(password)
   await page.getByRole('button', { name: 'Create account', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Check your email' })).toBeVisible()
-  const users = await service().auth.admin.listUsers({ perPage: 1000 })
-  const user = users.data.users.find(candidate => candidate.email === email)
-  if (users.error || !user) throw new Error('Unable to find disposable signup user')
+  const { data: user, error } = await service().from('profiles').select('id').eq('email', email).single()
+  if (error || !user) throw new Error('Unable to find disposable signup user')
   return user.id
 }
 
@@ -85,6 +84,20 @@ for (const freshBrowser of [false, true]) {
     }
   })
 }
+
+test('signup without a redirect option still emails a usable canonical confirmation link', async ({ page, request }) => {
+  const email = `fallback-signup-${randomUUID()}@playwright.local`
+  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+    auth: { autoRefreshToken: false, persistSession: false, flowType: 'pkce' },
+  })
+  const { data, error } = await client.auth.signUp({ email, password })
+  if (error || !data.user) throw new Error('Unable to create disposable fallback signup')
+  try {
+    await page.goto(await confirmationLink(request, email))
+    await expect(page).toHaveURL(/\/dashboard$/)
+    expect((await service().auth.admin.getUserById(data.user.id)).data.user?.email_confirmed_at).toBeTruthy()
+  } finally { expect((await service().auth.admin.deleteUser(data.user.id)).error).toBeNull() }
+})
 
 test('expired signup email offers neutral resend, enforces cooldown and accepts the new link', async ({ page, request }) => {
   const host = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).hostname
