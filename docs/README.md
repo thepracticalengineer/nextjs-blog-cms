@@ -26,6 +26,7 @@
 
 ## Features
 
+- [Client auth state, profile requests and retry](features/client-auth-state.md)
 - [Roles and permissions](features/roles-and-permissions.md)
 - [AI writing assistant](features/ai-assistant.md)
 - [Newsletter subscriptions, retries and cron](features/newsletter.md)

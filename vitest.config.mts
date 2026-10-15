@@ -63,6 +63,8 @@ export default defineConfig({
         // notifications
         'lib/notifications/user-confirmed.ts',
         // features
+        'features/auth/context/*.tsx',
+        'features/auth/hooks/*.ts',
         'features/posts/components/**/*.{ts,tsx}',
         'features/posts/actions.ts',
         'features/posts/queries.ts',

@@ -271,3 +271,17 @@ length limits, legacy login passwords, neutral provider errors, rejected
 requests, duplicate submissions and retry with retained input. These tests mock
 Auth and make no database or external mail calls; they do not verify hosted
 Auth configuration or real provider account-enumeration behavior.
+
+## Client auth provider verification
+
+Run `pnpm exec vitest run __tests__/auth/auth-provider.test.tsx` for delayed
+profile responses after logout/account switch, batched A → B → A transitions,
+unmount and Strict Mode cleanup, initialization/event ordering, synchronous
+callbacks, same-user event query counts, explicit refresh, returned/rejected
+failures, missing rows, deadlines and manual retry. The tests render the real
+provider and hooks with controlled Auth/profile responses, including responses
+that ignore cancellation. They use no database, external mail or webhooks.
+
+The provider and exported hooks are included in unit coverage. These tests do not
+establish live SDK event ordering, hosted Auth behavior or production performance.
+See [client auth state](../features/client-auth-state.md) for the consumer contract.
