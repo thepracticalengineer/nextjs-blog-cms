@@ -5,11 +5,11 @@ import { AlertCircle, Mail } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
-export function CredentialEmailField({ registration, disabled, error }: {
+export function CredentialEmailField({ registration, disabled, error }: Readonly<{
   registration: UseFormRegisterReturn<'email'>
   disabled: boolean
   error?: string
-}) {
+}>) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor="email" className="text-sm font-medium text-gray-700">Email address</Label>
