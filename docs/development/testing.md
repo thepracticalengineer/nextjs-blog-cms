@@ -92,8 +92,9 @@ CI runs `node scripts/prepare-e2e-supabase.mjs` before starting its disposable
 stack. It allocates available local listener ports instead of assuming default
 ports are free, then exports actual URLs from `supabase status`. This only changes
 the runner's config file; it never stops unrelated services or changes Auth/SMTP
-settings. The script accepts an optional config path for a separate disposable
-stack. Its regression tests run with `node --test scripts/prepare-e2e-supabase.test.mjs`.
+settings. Run it from a separate disposable project's directory to prepare that
+stack; it does not accept arbitrary file paths. Its regression tests run with
+`node --test scripts/prepare-e2e-supabase.test.mjs`.
 
 Run `pnpm exec vitest run __tests__/auth` for fixed signup verification types and
 destinations, recovery isolation, safe callback messages, neutral resend, trusted

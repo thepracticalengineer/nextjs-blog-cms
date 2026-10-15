@@ -31,19 +31,19 @@ export function configurePorts(config, ports) {
 
 /** Hold all listeners until the config is written so allocations stay distinct. */
 export async function reservePorts(count) {
-  const servers = []
-  const release = () => Promise.all(servers.map(server => new Promise((resolveClose, reject) => {
+  const servers = Array.from({ length: count }, () => createServer())
+  const release = () => Promise.all(servers.filter(server => server.listening).map(server => new Promise((resolveClose, reject) => {
     server.close(error => error ? reject(error) : resolveClose())
   })))
   try {
-    for (let index = 0; index < count; index++) {
-      const server = createServer()
-      await new Promise((resolveListen, reject) => {
+    const results = await Promise.allSettled(servers.map(server =>
+      new Promise((resolveListen, reject) => {
         server.once('error', reject)
         server.listen(0, '0.0.0.0', resolveListen)
-      })
-      servers.push(server)
-    }
+      }),
+    ))
+    const failed = results.find(result => result.status === 'rejected')
+    if (failed) throw failed.reason
     return { ports: servers.map(server => server.address().port), release }
   } catch (error) {
     await release()
@@ -52,7 +52,8 @@ export async function reservePorts(count) {
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const configPath = process.argv[2] ?? 'supabase/config.toml'
+  if (process.argv.length > 2) throw new Error('This script does not accept file paths; run from the disposable project directory')
+  const configPath = 'supabase/config.toml'
   const config = await readFile(configPath, 'utf8')
   const reserved = await reservePorts(portLines(config).length)
   try {

@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
+import { spawnSync } from 'node:child_process'
 import { configurePorts, reservePorts } from './prepare-e2e-supabase.mjs'
 
 test('rewrites local service ports without changing SMTP credentials, disabled comments or Auth settings', () => {
@@ -18,6 +19,13 @@ test('validates port count and uniqueness before writing configuration', () => {
   assert.throws(() => configurePorts(config, [55101]))
   assert.throws(() => configurePorts(config, [55101, 55101]))
   assert.throws(() => configurePorts(config, [0, 55101]))
+})
+
+test('CLI rejects arbitrary config paths without opening them', () => {
+  const result = spawnSync(process.execPath, ['scripts/prepare-e2e-supabase.mjs', '/nonexistent/outside-project.toml'], { encoding: 'utf8' })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /does not accept file paths/)
+  assert.doesNotMatch(result.stderr, /ENOENT/)
 })
 
 test('reserves distinct available ports while an unrelated service is running', async () => {
