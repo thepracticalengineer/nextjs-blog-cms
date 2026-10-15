@@ -99,7 +99,7 @@ export default function MfaChallenge({ next }: { next: string }) {
           <AlertCircle aria-hidden="true" />
           <AlertDescription id="mfa-error">{signOutError ?? error}</AlertDescription>
         </Alert>}
-        {initializing && <p role="status" className="flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Loading authenticators…</p>}
+        {initializing && <output className="flex items-center gap-2 text-sm"><Loader2 className="size-4 animate-spin" aria-hidden="true" />Loading authenticators…</output>}
         {factors.length > 1 && <div className="flex flex-col gap-1.5">
           <Label htmlFor="mfa-factor">Authenticator</Label>
           <select id="mfa-factor" value={factorId} disabled={busy} onChange={event => { setFactorId(event.target.value); setCode(''); setError(null) }} className="w-full rounded-md border p-2">

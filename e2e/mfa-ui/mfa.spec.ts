@@ -24,14 +24,16 @@ test('recovers factor loading and challenge outages, renews expiry, and complete
   const code = page.getByLabel('Verification Code', { exact: true })
   let challenges = 0
   const ids: string[] = []
+  const challengeURLs: string[] = []
+  const verifyURLs: string[] = []
   await page.route('**/auth/v1/factors/*/challenge', async route => {
-    expect(route.request().url()).toContain(second)
+    challengeURLs.push(route.request().url())
     if (++challenges === 1) await route.fulfill({ headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'x-supabase-api-version' }, status: 500, json: { code: 'unexpected_failure', message: 'Synthetic outage' } })
     else { const response = await route.fetch(); const body = await response.json(); ids.push(body.id); await route.fulfill({ response }) }
   })
   let attempts = 0
   await page.route('**/auth/v1/factors/*/verify', async route => {
-    expect(route.request().url()).toContain(second)
+    verifyURLs.push(route.request().url())
     if (++attempts === 1) await route.fulfill({ headers: { 'x-supabase-api-version': '2024-01-01', 'access-control-expose-headers': 'x-supabase-api-version' }, status: 422, json: { code: 'mfa_challenge_expired', message: 'Synthetic expiry' } })
     else await route.continue()
   })
@@ -46,6 +48,8 @@ test('recovers factor loading and challenge outages, renews expiry, and complete
   await expect(page).toHaveURL(/\/dashboard\/profile$/)
   await expect(page.getByRole('heading', { name: 'My Profile', exact: true })).toBeVisible()
   expect(challenges).toBe(3)
+  expect(challengeURLs).toEqual(Array(3).fill(`http://127.0.0.1:54997/auth/v1/factors/${second}/challenge`))
+  expect(verifyURLs).toEqual(Array(2).fill(`http://127.0.0.1:54997/auth/v1/factors/${second}/verify`))
   expect(ids).toHaveLength(2)
   expect(ids[0]).not.toBe(ids[1])
   // The new session must pass server-side assurance after a full navigation.

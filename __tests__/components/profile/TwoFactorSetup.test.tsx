@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { TwoFactorSetup } from '@/features/profile/components/TwoFactorSetup'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -193,8 +193,9 @@ it('preserves enabled status when another verified authenticator remains after r
   render(<TwoFactorSetup />)
   const select = await screen.findByLabelText('Authenticator to remove')
   fireEvent.change(select, { target: { value: 'second' } })
-  fireEvent.click(screen.getByRole('button', { name: /disable 2fa/i }))
-  fireEvent.click(await screen.findByRole('button', { name: /^disable 2fa$/i }))
+  fireEvent.click(screen.getByRole('button', { name: /^remove authenticator$/i }))
+  expect(await screen.findByRole('heading', { name: 'Remove authenticator?' })).toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: /^remove authenticator$/i }))
   await waitFor(() => expect(client.auth.mfa.unenroll).toHaveBeenCalledWith({ factorId: 'second' }))
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   expect(screen.getByText('Enabled')).toBeInTheDocument()
@@ -229,4 +230,20 @@ it('lets the user cancel and restart when a pending enrollment was removed elsew
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
   fireEvent.click(screen.getByRole('button', { name: /enable 2fa/i }))
   await waitFor(() => expect(client.auth.mfa.enroll).toHaveBeenCalledTimes(2))
+})
+
+it('settles all stale removals before releasing enrollment after a cleanup failure', async () => {
+  const client = makeSupabaseMfa({ factors: ['stale-1', 'stale-2'].map(id => ({ id, factor_type: 'totp', status: 'unverified' })) })
+  let complete!: (result: { error: null }) => void
+  client.auth.mfa.unenroll.mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  fireEvent.click(await screen.findByRole('button', { name: /enable 2fa/i }))
+  await waitFor(() => expect(client.auth.mfa.unenroll).toHaveBeenCalledTimes(2))
+  expect(client.auth.mfa.enroll).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: /enable 2fa/i })).toBeDisabled()
+  await act(async () => complete({ error: null }))
+  await waitFor(() => expect(screen.getByRole('button', { name: /enable 2fa/i })).toBeEnabled())
+  expect(client.auth.mfa.enroll).not.toHaveBeenCalled()
+  expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/temporarily unavailable/))
 })

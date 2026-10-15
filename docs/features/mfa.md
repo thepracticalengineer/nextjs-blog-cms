@@ -52,6 +52,10 @@ pending enrollment verification. Failed cancellation preserves the dialog for re
 an already removed pending factor is treated as canceled. Removal of a selected
 verified factor preserves Enabled status while another verified TOTP factor remains.
 
+Adding a backup authenticator through the profile UI is tracked in
+[issue #152](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/152).
+The current selector supports accounts that already have multiple enrolled factors.
+
 ## Verification limits
 
 The [testing guide](../development/testing.md#mfa-recovery-verification) lists unit,

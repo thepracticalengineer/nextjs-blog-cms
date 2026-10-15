@@ -78,11 +78,14 @@ export function TwoFactorSetup() {
       // Clean up stale unverified factors that would block enrollment
       const { data: existing, error: listError } = await supabase.auth.mfa.listFactors()
       if (listError) throw listError
-      for (const f of existing?.all ?? []) {
-        if (f.factor_type === 'totp' && f.status !== 'verified') {
-          const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id })
-          if (error) throw error
-        }
+      const stale = (existing?.all ?? []).filter(f => f.factor_type === 'totp' && f.status !== 'verified')
+      // Settle every cleanup before releasing the operation lock, even if one fails.
+      const removals = await Promise.allSettled(stale.map(async f => {
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id })
+        if (error) throw error
+      }))
+      for (const result of removals) {
+        if (result.status === 'rejected') throw result.reason
       }
 
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
@@ -235,7 +238,7 @@ export function TwoFactorSetup() {
           </div>}
           {factor ? (
             <Button variant="destructive" size="sm" onClick={() => setDisableOpen(true)}>
-              Disable 2FA
+              {factors.length > 1 ? 'Remove authenticator' : 'Disable 2FA'}
             </Button>
           ) : (
             <Button size="sm" onClick={handleStartEnroll} disabled={enrollLoading}>
@@ -293,7 +296,7 @@ export function TwoFactorSetup() {
       <Dialog open={disableOpen} onOpenChange={open => { if (!running.current) setDisableOpen(open) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disable two-factor authentication?</DialogTitle>
+            <DialogTitle>{factors.length > 1 ? 'Remove authenticator?' : 'Disable two-factor authentication?'}</DialogTitle>
             <DialogDescription>
               {factors.length > 1 ? 'Only the selected authenticator will be removed. Your other authenticators will keep two-factor authentication enabled.' : 'Your account will only be protected by your password. You can re-enable 2FA at any time.'}
             </DialogDescription>
@@ -302,7 +305,7 @@ export function TwoFactorSetup() {
             <Button variant="outline" disabled={disableLoading} onClick={() => setDisableOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDisable} disabled={disableLoading}>
               {disableLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Disable 2FA
+              {factors.length > 1 ? 'Remove authenticator' : 'Disable 2FA'}
             </Button>
           </DialogFooter>
         </DialogContent>
