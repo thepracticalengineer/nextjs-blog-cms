@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { passwordSchema } from '@/lib/auth/password-policy'
+import { registerSchema } from '@/lib/auth/credentials'
 import Link from 'next/link'
 import { AlertCircle, Loader2, Mail, Lock, User, CheckCircle2 } from 'lucide-react'
 import { register as registerAction } from '@/app/(auth)/register/actions'
@@ -14,16 +14,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { OAuthButtons } from '@/components/auth/OAuthButtons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-
-const registerSchema = z.object({
-  full_name: z.string().min(2, 'Name must be at least 2 characters'),
-  email: z.string().email('Invalid email address'),
-  password: passwordSchema,
-  confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-})
 
 type RegisterFormValues = z.infer<typeof registerSchema>
 
@@ -44,27 +34,30 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
     submitting.current = true
     setError(null)
     setLoading(true)
-    const formData = new FormData()
-    formData.set('email', values.email)
-    formData.set('password', values.password)
-    formData.set('full_name', values.full_name)
+    let navigating = false
     try {
+      const formData = new FormData()
+      formData.set('email', values.email)
+      formData.set('password', values.password)
+      formData.set('full_name', values.full_name)
       const result = await registerAction(formData)
       if (result?.error) {
         setError(result.error)
-        setLoading(false)
       } else if (result?.needsConfirmation) {
         setNeedsConfirmation(true)
-        setLoading(false)
       } else if (result?.success) {
         router.push(next)
+        navigating = true
         return
       }
     } catch {
       setError('Unable to connect. Check your connection and try again.')
+    } finally {
+      if (!navigating) {
+        submitting.current = false
+        setLoading(false)
+      }
     }
-    submitting.current = false
-    setLoading(false)
   }
 
   if (needsConfirmation) {
@@ -104,7 +97,13 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
       )}
       <OAuthButtons next={next} disabled={loading || oauthPending} onPendingChange={setOauthPending} onError={setError} />
 
-      <form aria-busy={loading || oauthPending} onSubmit={event => void handleSubmit(onSubmit)(event)} className="space-y-4">
+      <form aria-busy={loading || oauthPending} onSubmit={event => {
+        if (submitting.current || oauthPending) {
+          event.preventDefault()
+          return
+        }
+        void handleSubmit(onSubmit)(event)
+      }} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="full_name" className="text-sm font-medium text-gray-700">Full name</Label>
           <div className="relative">

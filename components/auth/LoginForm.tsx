@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { loginSchema } from '@/lib/auth/credentials'
 import Link from 'next/link'
 import { AlertCircle, Loader2, Mail, Lock } from 'lucide-react'
 import { login } from '@/app/(auth)/login/actions'
@@ -13,11 +14,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { OAuthButtons } from '@/components/auth/OAuthButtons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-
-const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-})
 
 type LoginFormValues = z.infer<typeof loginSchema>
 
@@ -37,23 +33,27 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
     submitting.current = true
     setError(null)
     setLoading(true)
-    const formData = new FormData()
-    formData.set('email', values.email)
-    formData.set('password', values.password)
+    let navigating = false
     try {
+      const formData = new FormData()
+      formData.set('email', values.email)
+      formData.set('password', values.password)
       const result = await login(formData)
       if (result?.error) {
         setError(result.error)
-        setLoading(false)
       } else if (result?.success) {
         router.push(next)
+        navigating = true
         return
       }
     } catch {
       setError('Unable to connect. Check your connection and try again.')
+    } finally {
+      if (!navigating) {
+        submitting.current = false
+        setLoading(false)
+      }
     }
-    submitting.current = false
-    setLoading(false)
   }
 
   return (
@@ -72,7 +72,13 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
       )}
       <OAuthButtons next={next} disabled={loading || oauthPending} onPendingChange={setOauthPending} onError={setError} />
 
-      <form aria-busy={loading || oauthPending} onSubmit={event => void handleSubmit(onSubmit)(event)} className="space-y-5">
+      <form aria-busy={loading || oauthPending} onSubmit={event => {
+        if (submitting.current || oauthPending) {
+          event.preventDefault()
+          return
+        }
+        void handleSubmit(onSubmit)(event)
+      }} className="space-y-5">
         <div className="space-y-1.5">
           <Label htmlFor="email" className="text-sm font-medium text-gray-700">
             Email address

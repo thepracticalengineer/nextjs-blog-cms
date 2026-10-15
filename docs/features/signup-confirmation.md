@@ -78,3 +78,19 @@ Run the auth unit suite and signup browser regression described in
 The browser regression captures real emails in loopback Mailpit, confirms real
 Auth sessions, tests replay and resend, and ages only its disposable user's
 confirmation timestamp to exercise expiry. No production data is needed.
+
+## Credential validation and failures
+
+Login and registration validate credentials on the server even when browser
+validation is bypassed. Email is trimmed, lowercased and limited to 254
+characters. Signup names are trimmed and must contain 2–100 characters; new
+passwords must contain 8–1024 characters. Passwords are never trimmed. Login
+accepts any nonempty password to preserve compatibility with older accounts.
+Missing, file-valued and repeated credential fields are rejected before Auth.
+
+Provider messages are replaced with neutral guidance; login does not distinguish
+unknown accounts, incorrect passwords or unconfirmed email. Throttles ask the
+person to wait, outages offer a retry, and weak signup passwords ask for a
+stronger password. No provider error text is rendered. Failed requests release
+submission locks and retain form values for retry. Successful navigation keeps
+the lock to prevent duplicate submissions while leaving the page.

@@ -2,19 +2,19 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
+import { credentialFields, loginSchema } from '@/lib/auth/credentials'
+import { credentialErrorMessage } from '@/lib/auth/credential-errors'
 
 export async function login(formData: FormData) {
-  const supabase = await createClient()
+  const parsed = loginSchema.safeParse(credentialFields(formData))
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
 
-  const data = {
-    email: formData.get('email') as string,
-    password: formData.get('password') as string,
-  }
-
-  const { error } = await supabase.auth.signInWithPassword(data)
-
-  if (error) {
-    return { error: error.message }
+  try {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.signInWithPassword(parsed.data)
+    if (error) return { error: credentialErrorMessage(error, 'login') }
+  } catch (error) {
+    return { error: credentialErrorMessage(error, 'login', true) }
   }
 
   revalidatePath('/', 'layout')

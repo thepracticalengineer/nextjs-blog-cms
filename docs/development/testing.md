@@ -262,3 +262,12 @@ For real Auth, retain `e2e/browser/smoke.spec.ts` (MFA enrollment/login) and
 against the dedicated disposable project described above. Synthetic tests do not
 establish live TOTP verification, hosted Auth rate-limit behavior or production
 configuration. See [MFA operations](../features/mfa.md).
+
+## Login and registration credentials
+
+Run `pnpm exec vitest run __tests__/auth/credentials-actions.test.ts __tests__/auth/credentials-forms.test.tsx __tests__/auth/register-actions.test.ts __tests__/auth/oauth-controls.test.tsx`
+for malformed/repeated FormData, bypassed browser validation, normalization,
+length limits, legacy login passwords, neutral provider errors, rejected
+requests, duplicate submissions and retry with retained input. These tests mock
+Auth and make no database or external mail calls; they do not verify hosted
+Auth configuration or real provider account-enumeration behavior.

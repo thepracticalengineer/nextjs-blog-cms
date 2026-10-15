@@ -44,8 +44,8 @@ describe('signup server password validation', () => {
     expect(await register(form('NewPassword123!'))).toEqual({ success: true })
     expect(mocks.revalidate).toHaveBeenCalledWith('/', 'layout')
   })
-  it('preserves Auth errors for a valid password', async () => {
+  it('replaces raw Auth errors with neutral guidance', async () => {
     mocks.signUp.mockResolvedValue({ data: {}, error: { message: 'Unable to sign up' } })
-    expect(await register(form('NewPassword123!'))).toEqual({ error: 'Unable to sign up' })
+    expect(await register(form('NewPassword123!'))).toEqual({ error: 'Unable to create an account. Try again, or sign in or request a confirmation link if you already registered.' })
   })
 })
