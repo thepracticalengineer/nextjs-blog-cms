@@ -28,6 +28,8 @@ export default defineConfig({
         'lib/api/auth.ts',
         'lib/auth/session.ts',
         'lib/auth/assurance.ts',
+        'lib/auth/mfa-errors.ts',
+        'components/auth/MfaChallenge.tsx',
         'lib/auth/api.ts',
         'lib/auth/password-policy.ts',
         'lib/auth/confirmation.ts',

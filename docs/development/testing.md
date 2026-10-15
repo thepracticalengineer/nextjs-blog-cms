@@ -241,3 +241,24 @@ can refresh. Never run it against production; disable external mail/webhooks.
 Run `pnpm exec vitest run __tests__/features/profile/actions.test.ts __tests__/components/profile/ChangePasswordForm.test.tsx __tests__/auth` for runtime password/nonce validation, legacy current-password support, original-session updates, email delivery failures, retry/resend, and recovery/MFA boundaries.
 
 Run `pnpm exec playwright test e2e/browser/password-policy.spec.ts e2e/browser/password-recovery.spec.ts --project=browser` against the dedicated local stack with `E2E_MAILPIT_URL` set. The policy suite requires Docker for its fixture that ages only a disposable session beyond 24 hours. The default container is `supabase_db_nextjs-blog-cms`; set `E2E_AUTH_DB_CONTAINER=supabase_db_cms-issue104` only for that separate isolated local stack. Remote URLs and other container names are rejected. The suite verifies real Auth password enforcement and nonce/replay behavior, browser validation bypass, security notifications, and normal/MFA recovery under secure password change. See [hosted password policy rollout](../features/password-recovery.md#deployment-requirements-and-verification) for deployment settings and leaked-password protection requirements that local tests cannot prove.
+
+## MFA recovery verification
+
+`pnpm exec vitest run __tests__/auth/mfa-controls.test.tsx __tests__/auth/mfa-authorization.test.ts __tests__/lib/proxy.test.ts __tests__/components/profile/TwoFactorSetup.test.tsx`
+checks factor-loading errors/retry, challenge errors, expired challenges, error classification,
+concurrent submissions, factor selection, enrollment cancellation and multi-factor removal.
+
+`pnpm exec playwright test --config=e2e/mfa.config.ts` runs the real Next.js MFA page
+on desktop/mobile with a loopback synthetic Auth service. It tests retry without
+navigation, fresh challenges after expiry, rapid Enter, factor selection, actionable
+help, sign-out and an SDK-issued synthetic AAL2 session accepted by the server proxy
+after navigation and reload. It uses `.next-mfa-ui`, no database or seeding, and
+disables mail, webhooks and analytics. CI runs it after OAuth controls; its failures
+and traces appear in the E2E job and `test-results/mfa` artifacts. It does not collect
+code coverage or contribute to the four existing E2E coverage-summary suites.
+
+For real Auth, retain `e2e/browser/smoke.spec.ts` (MFA enrollment/login) and
+`e2e/api/mfa-assurance.spec.ts` (AAL1 denial, verified enrollment and AAL2 access)
+against the dedicated disposable project described above. Synthetic tests do not
+establish live TOTP verification, hosted Auth rate-limit behavior or production
+configuration. See [MFA operations](../features/mfa.md).

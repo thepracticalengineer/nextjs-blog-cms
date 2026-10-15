@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { TwoFactorSetup } from '@/features/profile/components/TwoFactorSetup'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
@@ -84,7 +84,7 @@ describe('TwoFactorSetup', () => {
     render(<TwoFactorSetup />)
     const enableBtn = await screen.findByRole('button', { name: /enable 2fa/i })
     fireEvent.click(enableBtn)
-    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Enroll failed'))
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/temporarily unavailable/)))
   })
 
   it('calls unenroll when enroll dialog is dismissed before verifying', async () => {
@@ -121,11 +121,11 @@ describe('TwoFactorSetup', () => {
     const codeInput = await screen.findByLabelText(/verification code/i)
     fireEvent.change(codeInput, { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: /verify/i }))
-    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Challenge failed'))
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/temporarily unavailable/)))
   })
 
   it('shows error toast when verify code is wrong', async () => {
-    const supabaseMock = makeSupabaseMfa({ verifyResult: { error: { message: 'Invalid TOTP code' } } })
+    const supabaseMock = makeSupabaseMfa({ verifyResult: { error: { code: 'mfa_verification_failed', message: 'Invalid TOTP code' } } })
     mockCreateClient.mockReturnValue(supabaseMock as any)
     render(<TwoFactorSetup />)
     const enableBtn = await screen.findByRole('button', { name: /enable 2fa/i })
@@ -135,6 +135,7 @@ describe('TwoFactorSetup', () => {
     fireEvent.click(screen.getByRole('button', { name: /verify/i }))
     await waitFor(() => expect(supabaseMock.auth.mfa.verify).toHaveBeenCalledOnce())
     expect(screen.getByLabelText(/verification code/i)).toBeInTheDocument()
+    expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/Invalid code/))
   })
 
   it('calls unenroll and clears factor on disable confirm', async () => {
@@ -158,7 +159,7 @@ describe('TwoFactorSetup', () => {
     fireEvent.click(await screen.findByRole('button', { name: /disable 2fa/i }))
     const confirmBtn = await screen.findByRole('button', { name: /^disable 2fa$/i })
     fireEvent.click(confirmBtn)
-    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith('Cannot unenroll'))
+    await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/temporarily unavailable/)))
     expect(screen.getByRole('button', { name: /disable 2fa/i })).toBeInTheDocument()
   })
 
@@ -172,4 +173,77 @@ describe('TwoFactorSetup', () => {
     await waitFor(() => expect(supabaseMock.auth.mfa.unenroll).toHaveBeenCalledWith({ factorId: 'stale-factor' }))
     await waitFor(() => expect(supabaseMock.auth.mfa.enroll).toHaveBeenCalledOnce())
   })
+})
+
+it.each(['returned', 'thrown'])('does not report disabled after a %s factor lookup error and supports retry', async kind => {
+  const client = makeSupabaseMfa({ factors: [{ id: 'first', factor_type: 'totp', status: 'verified' }] })
+  if (kind === 'returned') client.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: { message: 'offline' } } as any)
+  else client.auth.getUser.mockRejectedValueOnce(new Error('offline'))
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  await screen.findByRole('alert')
+  expect(screen.queryByText('Disabled')).toBeNull()
+  expect(screen.queryByRole('button', { name: /enable 2fa/i })).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: /retry/i }))
+  expect(await screen.findByText('Enabled')).toBeInTheDocument()
+})
+it('preserves enabled status when another verified authenticator remains after removal', async () => {
+  const client = makeSupabaseMfa({ factors: [{ id: 'first', factor_type: 'totp', status: 'verified' }, { id: 'second', factor_type: 'totp', status: 'verified' }] })
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  const select = await screen.findByLabelText('Authenticator to remove')
+  fireEvent.change(select, { target: { value: 'second' } })
+  fireEvent.click(screen.getByRole('button', { name: /^remove authenticator$/i }))
+  expect(await screen.findByRole('heading', { name: 'Remove authenticator?' })).toBeInTheDocument()
+  fireEvent.click(await screen.findByRole('button', { name: /^remove authenticator$/i }))
+  await waitFor(() => expect(client.auth.mfa.unenroll).toHaveBeenCalledWith({ factorId: 'second' }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  expect(screen.getByText('Enabled')).toBeInTheDocument()
+})
+it('classifies enrollment rate limits and prevents duplicate requests while a challenge is pending', async () => {
+  const client = makeSupabaseMfa({ verifyResult: { error: { code: 'over_request_rate_limit', status: 429 } } })
+  let resolveChallenge!: (result: unknown) => void
+  client.auth.mfa.challenge.mockImplementationOnce(() => new Promise(resolve => { resolveChallenge = resolve }))
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  fireEvent.click(await screen.findByRole('button', { name: /enable 2fa/i }))
+  fireEvent.change(await screen.findByLabelText(/verification code/i), { target: { value: '123456' } })
+  const button = screen.getByRole('button', { name: /verify/i })
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(client.auth.mfa.challenge).toHaveBeenCalledOnce()
+  expect(screen.getByRole('button', { name: /cancel/i })).toBeDisabled()
+  resolveChallenge({ data: { id: 'fresh' }, error: null })
+  await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/Too many attempts/)))
+  expect(button).toBeEnabled()
+})
+
+it('lets the user cancel and restart when a pending enrollment was removed elsewhere', async () => {
+  const client = makeSupabaseMfa({ verifyResult: { error: { code: 'mfa_factor_not_found' } }, unenrollResult: { error: { code: 'mfa_factor_not_found' } } })
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  fireEvent.click(await screen.findByRole('button', { name: /enable 2fa/i }))
+  fireEvent.change(await screen.findByLabelText(/verification code/i), { target: { value: '123456' } })
+  fireEvent.click(screen.getByRole('button', { name: /verify/i }))
+  await waitFor(() => expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/no longer available/)))
+  fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  fireEvent.click(screen.getByRole('button', { name: /enable 2fa/i }))
+  await waitFor(() => expect(client.auth.mfa.enroll).toHaveBeenCalledTimes(2))
+})
+
+it('settles all stale removals before releasing enrollment after a cleanup failure', async () => {
+  const client = makeSupabaseMfa({ factors: ['stale-1', 'stale-2'].map(id => ({ id, factor_type: 'totp', status: 'unverified' })) })
+  let complete!: (result: { error: null }) => void
+  client.auth.mfa.unenroll.mockRejectedValueOnce(new Error('offline')).mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+  mockCreateClient.mockReturnValue(client as any)
+  render(<TwoFactorSetup />)
+  fireEvent.click(await screen.findByRole('button', { name: /enable 2fa/i }))
+  await waitFor(() => expect(client.auth.mfa.unenroll).toHaveBeenCalledTimes(2))
+  expect(client.auth.mfa.enroll).not.toHaveBeenCalled()
+  expect(screen.getByRole('button', { name: /enable 2fa/i })).toBeDisabled()
+  await act(async () => complete({ error: null }))
+  await waitFor(() => expect(screen.getByRole('button', { name: /enable 2fa/i })).toBeEnabled())
+  expect(client.auth.mfa.enroll).not.toHaveBeenCalled()
+  expect(mockToast.error).toHaveBeenCalledWith(expect.stringMatching(/temporarily unavailable/))
 })

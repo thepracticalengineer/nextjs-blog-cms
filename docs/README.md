@@ -29,6 +29,7 @@
 - [Roles and permissions](features/roles-and-permissions.md)
 - [AI writing assistant](features/ai-assistant.md)
 - [Newsletter subscriptions, retries and cron](features/newsletter.md)
+- [MFA verification, retries and lost authenticators](features/mfa.md)
 - [Password recovery and MFA](features/password-recovery.md)
 - [Signup confirmation and resend](features/signup-confirmation.md)
 - [Public author profiles and privacy](features/public-author-profiles.md)

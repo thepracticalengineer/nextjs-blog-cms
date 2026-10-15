@@ -39,3 +39,5 @@ and cookie deletions. Invalid scopes return `400` without changing credentials.
 Responses use `Cache-Control: no-store`; provider errors and credentials are never
 returned. The endpoint uses the supplied cookie token only for remote revocation,
 without trusting its contents for application authorization.
+
+See [MFA verification and recovery](mfa.md) for authenticator selection, recoverable failures, sign-out and administrator-assisted recovery.

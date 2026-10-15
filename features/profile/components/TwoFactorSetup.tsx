@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, ShieldCheck, ShieldOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,11 +22,17 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { mfaErrorMessage } from '@/lib/auth/mfa-errors'
 import { createClient } from '@/lib/supabase/client'
 
-type Factor = { id: string; factor_type: string; status: string }
+type Factor = { id: string; factor_type: string; status: string; friendly_name?: string }
 
 export function TwoFactorSetup() {
+  const running = useRef(false)
+  const [factors, setFactors] = useState<Factor[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
   const [factor, setFactor] = useState<Factor | null>(null)
   const [loading, setLoading] = useState(true)
   const [enrollOpen, setEnrollOpen] = useState(false)
@@ -43,38 +49,48 @@ export function TwoFactorSetup() {
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
+    let active = true
     async function loadFactors() {
       try {
         const { data, error } = await supabase.auth.getUser()
-        if (!error && data.user) {
-          const factors = (data.user as { factors?: Factor[] }).factors ?? []
-          const verified = factors.find(
-            (f) => f.factor_type === 'totp' && f.status === 'verified',
-          )
-          setFactor(verified ?? null)
+        if (error) throw error
+        if (!data.user) throw new Error('Missing user')
+        const verified = (data.user.factors ?? []).filter(f => f.factor_type === 'totp' && f.status === 'verified')
+        if (active) {
+          setFactors(verified)
+          setFactor(verified[0] ?? null)
         }
+      } catch (error) {
+        if (active) setLoadError(mfaErrorMessage(error, 'Unable to load authenticator status. Please retry.'))
       } finally {
-        setLoading(false)
+        if (active) setLoading(false)
       }
     }
-    loadFactors()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void loadFactors()
+    return () => { active = false }
+  }, [supabase, reload])
 
   async function handleStartEnroll() {
+    if (running.current) return
+    running.current = true
     setEnrollLoading(true)
     try {
       // Clean up stale unverified factors that would block enrollment
-      const { data: existing } = await supabase.auth.mfa.listFactors()
-      for (const f of existing?.all ?? []) {
-        if (f.factor_type === 'totp' && f.status !== 'verified') {
-          await supabase.auth.mfa.unenroll({ factorId: f.id })
-        }
+      const { data: existing, error: listError } = await supabase.auth.mfa.listFactors()
+      if (listError) throw listError
+      const stale = (existing?.all ?? []).filter(f => f.factor_type === 'totp' && f.status !== 'verified')
+      // Settle every cleanup before releasing the operation lock, even if one fails.
+      const removals = await Promise.allSettled(stale.map(async f => {
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: f.id })
+        if (error) throw error
+      }))
+      for (const result of removals) {
+        if (result.status === 'rejected') throw result.reason
       }
 
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp' })
       if (error) {
-        toast.error(error.message)
+        toast.error(mfaErrorMessage(error))
         return
       }
       setQrCode(data.totp.qr_code)
@@ -82,21 +98,23 @@ export function TwoFactorSetup() {
       setEnrollFactorId(data.id)
       setEnrollOpen(true)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Something went wrong — please try again')
+      toast.error(mfaErrorMessage(err))
     } finally {
+      running.current = false
       setEnrollLoading(false)
     }
   }
 
   async function handleVerifyEnroll() {
-    if (!enrollFactorId || !verifyCode) return
+    if (running.current || !enrollFactorId || !/^\d{6}$/.test(verifyCode)) return
+    running.current = true
     setEnrollLoading(true)
     try {
       const { data: challengeData, error: challengeErr } = await supabase.auth.mfa.challenge({
         factorId: enrollFactorId,
       })
       if (challengeErr) {
-        toast.error(challengeErr.message)
+        toast.error(mfaErrorMessage(challengeErr))
         return
       }
 
@@ -107,11 +125,13 @@ export function TwoFactorSetup() {
       })
 
       if (verifyErr) {
-        toast.error('Invalid code — please try again')
+        toast.error(mfaErrorMessage(verifyErr))
         return
       }
 
-      setFactor({ id: enrollFactorId, factor_type: 'totp', status: 'verified' })
+      const enrolled = { id: enrollFactorId, factor_type: 'totp', status: 'verified' }
+      setFactor(enrolled)
+      setFactors(current => [...current, enrolled])
       setEnrollFactorId(null)
       setQrCode(null)
       setSecret(null)
@@ -119,36 +139,54 @@ export function TwoFactorSetup() {
       setVerifyCode('')
       toast.success('Two-factor authentication enabled')
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Something went wrong — please try again')
+      toast.error(mfaErrorMessage(err))
     } finally {
+      running.current = false
       setEnrollLoading(false)
     }
   }
 
   async function handleCancelEnroll() {
-    if (enrollFactorId) {
-      await supabase.auth.mfa.unenroll({ factorId: enrollFactorId })
+    if (running.current) return
+    running.current = true
+    setEnrollLoading(true)
+    try {
+      if (enrollFactorId) {
+        const { error } = await supabase.auth.mfa.unenroll({ factorId: enrollFactorId })
+        if (error && error.code !== 'mfa_factor_not_found') throw error
+      }
+      setEnrollFactorId(null)
+      setQrCode(null)
+      setSecret(null)
+      setVerifyCode('')
+      setEnrollOpen(false)
+    } catch (error) {
+      toast.error(mfaErrorMessage(error))
+    } finally {
+      running.current = false
+      setEnrollLoading(false)
     }
-    setEnrollFactorId(null)
-    setQrCode(null)
-    setSecret(null)
-    setVerifyCode('')
-    setEnrollOpen(false)
   }
 
   async function handleDisable() {
-    if (!factor) return
+    if (running.current || !factor) return
+    running.current = true
     setDisableLoading(true)
     try {
       const { error } = await supabase.auth.mfa.unenroll({ factorId: factor.id })
       if (error) {
-        toast.error(error.message)
+        toast.error(mfaErrorMessage(error))
         return
       }
-      setFactor(null)
+      const remaining = factors.filter(item => item.id !== factor.id)
+      setFactors(remaining)
+      setFactor(remaining[0] ?? null)
       setDisableOpen(false)
-      toast.success('Two-factor authentication disabled')
+      toast.success(remaining.length ? 'Authenticator removed; two-factor authentication is still enabled' : 'Two-factor authentication disabled')
+    } catch (error) {
+      toast.error(mfaErrorMessage(error))
     } finally {
+      running.current = false
       setDisableLoading(false)
     }
   }
@@ -161,6 +199,13 @@ export function TwoFactorSetup() {
         </CardContent>
       </Card>
     )
+  }
+
+  if (loadError) {
+    return <Card><CardHeader><CardTitle>Two-Factor Authentication</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">
+      <Alert variant="destructive"><AlertDescription>{loadError}</AlertDescription></Alert>
+      <Button variant="outline" onClick={() => { setLoadError(null); setLoading(true); setReload(value => value + 1) }}>Retry loading authenticators</Button>
+    </CardContent></Card>
   }
 
   return (
@@ -185,9 +230,15 @@ export function TwoFactorSetup() {
             </Badge>
           </div>
 
+          {factors.length > 1 && <div className="flex flex-col gap-1.5">
+            <Label htmlFor="remove-authenticator">Authenticator to remove</Label>
+            <select id="remove-authenticator" value={factor?.id ?? ''} disabled={disableLoading} onChange={event => setFactor(factors.find(item => item.id === event.target.value) ?? null)} className="w-full rounded-md border p-2">
+              {factors.map((item, index) => <option key={item.id} value={item.id}>{item.friendly_name || `Authenticator ${index + 1}`}</option>)}
+            </select>
+          </div>}
           {factor ? (
             <Button variant="destructive" size="sm" onClick={() => setDisableOpen(true)}>
-              Disable 2FA
+              {factors.length > 1 ? 'Remove authenticator' : 'Disable 2FA'}
             </Button>
           ) : (
             <Button size="sm" onClick={handleStartEnroll} disabled={enrollLoading}>
@@ -199,7 +250,7 @@ export function TwoFactorSetup() {
       </Card>
 
       {/* Enroll dialog */}
-      <Dialog open={enrollOpen} onOpenChange={(open) => { if (!open) handleCancelEnroll() }}>
+      <Dialog open={enrollOpen} onOpenChange={(open) => { if (!open && !running.current) void handleCancelEnroll() }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Set up authenticator app</DialogTitle>
@@ -226,12 +277,13 @@ export function TwoFactorSetup() {
               inputMode="numeric"
               maxLength={6}
               placeholder="000000"
+              disabled={enrollLoading}
               value={verifyCode}
               onChange={(e) => setVerifyCode(e.target.value.replaceAll(/\D/g, ''))}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={handleCancelEnroll}>Cancel</Button>
+            <Button variant="outline" disabled={enrollLoading} onClick={handleCancelEnroll}>Cancel</Button>
             <Button onClick={handleVerifyEnroll} disabled={enrollLoading || verifyCode.length !== 6}>
               {enrollLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Verify &amp; Enable
@@ -241,19 +293,19 @@ export function TwoFactorSetup() {
       </Dialog>
 
       {/* Disable confirm dialog */}
-      <Dialog open={disableOpen} onOpenChange={setDisableOpen}>
+      <Dialog open={disableOpen} onOpenChange={open => { if (!running.current) setDisableOpen(open) }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Disable two-factor authentication?</DialogTitle>
+            <DialogTitle>{factors.length > 1 ? 'Remove authenticator?' : 'Disable two-factor authentication?'}</DialogTitle>
             <DialogDescription>
-              Your account will only be protected by your password. You can re-enable 2FA at any time.
+              {factors.length > 1 ? 'Only the selected authenticator will be removed. Your other authenticators will keep two-factor authentication enabled.' : 'Your account will only be protected by your password. You can re-enable 2FA at any time.'}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDisableOpen(false)}>Cancel</Button>
+            <Button variant="outline" disabled={disableLoading} onClick={() => setDisableOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleDisable} disabled={disableLoading}>
               {disableLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Disable 2FA
+              {factors.length > 1 ? 'Remove authenticator' : 'Disable 2FA'}
             </Button>
           </DialogFooter>
         </DialogContent>
