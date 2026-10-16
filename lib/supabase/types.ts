@@ -355,8 +355,9 @@ export type Database = {
       }
     }
     Functions: {
+      record_auth_login_failure: { Args: { p_account_key: string }; Returns: undefined }
       reserve_auth_attempt: {
-        Args: { p_action: string; p_ip_key: string; p_account_key: string }
+        Args: { p_action: string; p_ip_key: string; p_account_key: string; p_bot_protection?: boolean; p_challenge_passed?: boolean; p_challenge_failed?: boolean; p_phase?: string; p_ip_attempts?: number }
         Returns: Json
       }
 

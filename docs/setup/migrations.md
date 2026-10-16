@@ -15,6 +15,7 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261012031302_post_list_summaries.sql` | Stored reading time, stable listing indexes and authenticated dashboard pagination RPC |
 | `20261012103751_enforce_mfa_assurance.sql` | Restrictive private database/storage MFA policies; deploy before shared session/API guards |
 | `20261016080047_auth_abuse_controls.sql` | Shared service-only auth counters; configure HMAC key and trusted ingress before deploying auth actions |
+| `20261016090958_auth_abuse_review_fixes.sql` | Failure-only login accounting and recoverable public account challenges; deploy before updated guards |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 

@@ -1,5 +1,5 @@
-vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null) }))
-import { authAbuseBlock } from '@/lib/auth/abuse'
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null), recordAuthLoginFailure: vi.fn(async () => {}) }))
+import { authAbuseBlock, recordAuthLoginFailure } from '@/lib/auth/abuse'
 import { AuthRetryableFetchError } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ client: vi.fn(), signIn: vi.fn(), signUp: vi.fn(), revalidate: vi.fn() }))
@@ -98,4 +98,13 @@ it.each([['login', login, m.signIn], ['signup', register, m.signUp]] as const)('
   expect(await action(f)).toEqual(blocked)
   expect(authAbuseBlock).toHaveBeenCalledWith(name, 'user@example.com', 'test-token')
   expect(provider).not.toHaveBeenCalled()
+})
+
+it('records only failed credential responses, never successful logins', async () => {
+  for (let i = 0; i < 12; i++) expect(await login(form())).toEqual({ success: true })
+  expect(recordAuthLoginFailure).not.toHaveBeenCalled()
+  const failure = { code: 'invalid_credentials', status: 400, message: 'PRIVATE' }
+  m.signIn.mockResolvedValue({ error: failure })
+  await login(form())
+  expect(recordAuthLoginFailure).toHaveBeenCalledWith('user@example.com', failure)
 })

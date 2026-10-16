@@ -1,7 +1,7 @@
 'use server'
 
 import type { AuthActionResult } from '@/lib/auth/abuse-feedback'
-import { authAbuseBlock } from '@/lib/auth/abuse'
+import { authAbuseBlock, recordAuthLoginFailure } from '@/lib/auth/abuse'
 import { providerCooldown } from '@/lib/auth/abuse-feedback'
 
 import { revalidatePath } from 'next/cache'
@@ -18,8 +18,12 @@ export async function login(formData: FormData): Promise<AuthActionResult> {
     if (blocked) return blocked
     const supabase = await createClient()
     const { error } = await supabase.auth.signInWithPassword(parsed.data)
-    if (error) return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'login') }
+    if (error) {
+      await recordAuthLoginFailure(parsed.data.email, error)
+      return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'login') }
+    }
   } catch (error) {
+    await recordAuthLoginFailure(parsed.data.email, error)
     return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'login', true) }
   }
 

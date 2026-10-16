@@ -12,7 +12,7 @@ type Turnstile = {
 
 declare global { interface Window { turnstile?: Turnstile } }
 
-export function AuthAbuseControls({ action, abuse }: { action: string; abuse: ReturnType<typeof useAuthAbuse> }) {
+export function AuthAbuseControls({ action, abuse }: Readonly<{ action: string; abuse: ReturnType<typeof useAuthAbuse> }>) {
   const container = useRef<HTMLDivElement>(null)
   const [ready, setReady] = useState(false)
   const [failed, setFailed] = useState(false)

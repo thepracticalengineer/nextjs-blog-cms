@@ -16,8 +16,9 @@ createServer(async (request, response) => {
     let body = ''; for await (const chunk of request) body += chunk
     reservations.push(JSON.parse(body))
     if (mode === 'outage') return send(503, { message: 'PRIVATE store error' })
-    return send(200, { allowed: mode !== 'cooldown', retry_after: mode === 'cooldown' ? 2 : 0, challenge_required: false })
+    return send(200, { allowed: mode !== 'cooldown', retry_after: mode === 'cooldown' ? 2 : 0, challenge_required: false, ip_attempts: 1 })
   }
+  if (url.pathname === '/rest/v1/rpc/record_auth_login_failure') return send(200, null)
   if (url.pathname === '/auth/v1/token') {
     calls++
     if (mode === 'provider429') return send(429, { code: 'over_request_rate_limit', msg: 'PRIVATE provider error' })

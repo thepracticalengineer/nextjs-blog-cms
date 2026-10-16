@@ -170,6 +170,7 @@ jobs:
       - name: Verify shared authentication budgets
         run: |
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse_review.sql
           node database/tests/auth-abuse-concurrency.mjs
 
       - name: Verify MFA database and storage boundaries
