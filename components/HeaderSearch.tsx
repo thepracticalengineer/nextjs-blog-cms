@@ -1,19 +1,24 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 
 export function HeaderSearch() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const wasOpen = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  const expand = () => {
-    setOpen(true)
-    setTimeout(() => inputRef.current?.focus(), 50)
-  }
+  useEffect(() => {
+    if (open) inputRef.current?.focus()
+    else if (wasOpen.current) triggerRef.current?.focus()
+    wasOpen.current = open
+  }, [open])
+
+  const expand = () => setOpen(true)
 
   const collapse = () => {
     setOpen(false)
@@ -33,9 +38,9 @@ export function HeaderSearch() {
   }
 
   return (
-    <div className="flex items-center">
+    <div className="flex min-w-0 flex-1 items-center justify-end sm:flex-none">
       {open ? (
-        <form onSubmit={handleSubmit} className="flex items-center gap-1">
+        <form onSubmit={handleSubmit} role="search" className="flex min-w-0 items-center gap-1">
           <input
             ref={inputRef}
             value={query}
@@ -43,7 +48,7 @@ export function HeaderSearch() {
             onKeyDown={handleKeyDown}
             placeholder="Search articles…"
             aria-label="Search articles"
-            className="h-8 w-44 border-b border-foreground/30 bg-transparent px-1 text-sm outline-hidden placeholder:text-muted-foreground focus:border-foreground transition-colors"
+            className="h-8 min-w-0 w-full sm:w-44 border-b border-foreground/30 bg-transparent px-1 text-sm outline-hidden placeholder:text-muted-foreground focus:border-foreground transition-colors"
             autoComplete="off"
           />
           <button
@@ -57,6 +62,8 @@ export function HeaderSearch() {
         </form>
       ) : (
         <button
+          ref={triggerRef}
+          type="button"
           onClick={expand}
           className="p-1 text-muted-foreground hover:text-foreground transition-colors"
           aria-label="Search"

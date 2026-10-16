@@ -217,6 +217,9 @@ jobs:
       - name: Verify MFA recovery controls with isolated Auth responses
         run: pnpm exec playwright test --config=e2e/mfa.config.ts
 
+      - name: Verify homepage reader navigation and responsive controls
+        run: pnpm exec playwright test --config=e2e/homepage.config.ts
+
       - name: Upload E2E reports and failure artifacts
         id: e2e-reports
         if: always()

@@ -301,3 +301,17 @@ CI runs `database/tests/auth_abuse.sql` and
 The concurrency check reserves shared budgets from 40 independent connections and
 cleans up its own random fixtures. Unit coverage includes guard ordering, canonical
 IPs, spoofing, HMAC privacy, provider 429s, CAPTCHA escalation and cooldown retries.
+
+## Homepage reader experience
+
+Run `pnpm exec playwright test --config=e2e/homepage.config.ts` for the homepage
+introduction, reader navigation, skip link, search focus restoration, newsletter
+anchor and subscription UI at 320, 390, 768 and 1280 pixels. The suite uses a
+loopback synthetic content server and an intercepted newsletter response, disables
+external integrations, and uses `.next-homepage-ui`. It performs no real database
+writes or email delivery. Screenshots and traces appear in `test-results/homepage`.
+
+The introduction copy is a positioning hypothesis for issue #92. Representative
+reader feedback remains required; the engineering learning paths belong to #95.
+The primary “Explore articles” link points to the existing `/blog` archive until
+an editorially curated starting destination exists.
