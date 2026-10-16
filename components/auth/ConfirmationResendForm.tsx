@@ -1,6 +1,9 @@
 'use client'
 
-import { startTransition, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useAuthAbuse } from './use-auth-abuse'
+import { AuthAbuseControls } from './AuthAbuseControls'
+
+import { startTransition, useRef, useState, type FormEvent } from 'react'
 import Link from 'next/link'
 import { resendConfirmation } from '@/app/(auth)/confirm-email/actions'
 import { CONFIRMATION_SENT } from '@/lib/auth/confirmation'
@@ -11,26 +14,16 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export default function ConfirmationResendForm() {
+  const abuse = useAuthAbuse()
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState(false)
   const [pending, setPending] = useState(false)
-  const [remaining, setRemaining] = useState(0)
-  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const { remaining } = abuse
   const submitting = useRef(false)
-
-  useEffect(() => {
-    if (!cooldownUntil) return
-    const timer = window.setInterval(() => {
-      const seconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000))
-      setRemaining(seconds)
-      if (!seconds) window.clearInterval(timer)
-    }, 1000)
-    return () => window.clearInterval(timer)
-  }, [cooldownUntil])
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (submitting.current || Date.now() < cooldownUntil) return
+    if (submitting.current || abuse.isBlocked()) return
     const parsed = recoveryEmailSchema.safeParse(new FormData(event.currentTarget).get('email'))
     if (!parsed.success) { setError('Enter a valid email address'); return }
     submitting.current = true
@@ -39,16 +32,17 @@ export default function ConfirmationResendForm() {
     setSent(false)
     const data = new FormData()
     data.set('email', parsed.data)
+    abuse.prepare(data)
     startTransition(async () => {
       try {
         const result = await resendConfirmation(data)
+        abuse.receive(result)
         if (result.error) setError(result.error)
         else if (result.success) {
           setSent(true)
-          setRemaining(result.retryAfter)
-          setCooldownUntil(Date.now() + result.retryAfter * 1000)
         }
       } catch {
+        abuse.receive({})
         setError('Unable to connect. Check your connection and try again.')
       } finally {
         submitting.current = false
@@ -74,7 +68,8 @@ export default function ConfirmationResendForm() {
             onChange={() => setError(null)} disabled={pending}
             className="h-10" />
         </div>
-        <Button type="submit" disabled={pending || remaining > 0} className="w-full h-10">
+        <AuthAbuseControls action="confirmation" abuse={abuse} />
+        <Button type="submit" disabled={pending || remaining > 0 || abuse.blocked} className="w-full h-10">
           {submitLabel}
         </Button>
       </form>

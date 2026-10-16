@@ -18,6 +18,7 @@ export type SocialLinksFormData = {
 }
 
 export type PasswordChangeResult = {
+  retryAfter?: number
   success?: true
   error?: string
   reauthenticationRequired?: true

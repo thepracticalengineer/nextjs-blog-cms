@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null) }))
+import { authAbuseBlock } from '@/lib/auth/abuse'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), consume: vi.fn(), clear: vi.fn(), clearAuth: vi.fn(), update: vi.fn(), signOut: vi.fn(), reserve: vi.fn(), hasGrant: vi.fn(), context: vi.fn(), assurance: vi.fn(), factors: vi.fn(), verify: vi.fn() }))
@@ -51,7 +53,7 @@ describe('requestPasswordReset', () => {
   })
   it('handles global rate limiting', async () => {
     mocks.request.mockResolvedValue({ error: { code: 'over_request_rate_limit', status: 429 } })
-    expect(await requestPasswordReset(form({ email: 'user@example.com' }))).toEqual({ error: 'Too many requests. Please wait a few minutes before trying again.' })
+    expect(await requestPasswordReset(form({ email: 'user@example.com' }))).toEqual({ error: 'Too many attempts. Wait a few minutes before trying again.', retryAfter: 60 })
   })
   it('handles delivery errors without echoing provider/account details', async () => {
     mocks.request.mockResolvedValue({ error: { message: 'smtp private detail' } })
@@ -201,4 +203,12 @@ describe('resetPassword', () => {
     expect((await resetPassword(validPasswords())).invalidRecovery).toBe(true)
     expect(mocks.update).not.toHaveBeenCalled()
   })
+})
+
+it('blocks recovery before Auth and hides thrown address-specific throttles', async () => {
+  vi.mocked(authAbuseBlock).mockResolvedValueOnce({ error: 'Please wait', retryAfter: 25 })
+  expect(await requestPasswordReset(form({ email: 'user@example.com' }))).toEqual({ error: 'Please wait', retryAfter: 25 })
+  expect(mocks.request).not.toHaveBeenCalled()
+  mocks.request.mockRejectedValue({ code: 'over_email_send_rate_limit', status: 429, message: 'PRIVATE' })
+  expect(await requestPasswordReset(form({ email: 'user@example.com' }))).toEqual({ success: true })
 })

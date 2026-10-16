@@ -48,3 +48,5 @@
 /.next-logout-ui
 
 /.next-mfa-ui
+
+/.next-auth-abuse-ui

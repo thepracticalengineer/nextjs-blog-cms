@@ -1,5 +1,8 @@
 'use client'
 
+import { useAuthAbuse } from './use-auth-abuse'
+import { AuthAbuseControls } from './AuthAbuseControls'
+
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -18,6 +21,7 @@ import { CredentialEmailField } from '@/components/auth/CredentialEmailField'
 type RegisterFormValues = z.infer<typeof registerSchema>
 
 export default function RegisterForm({ next = '/dashboard', initialError = null }: { next?: string; initialError?: string | null }) {
+  const abuse = useAuthAbuse()
   const router = useRouter()
   const [error, setError] = useState<string | null>(initialError)
   const [loading, setLoading] = useState(false)
@@ -30,7 +34,7 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
   })
 
   async function onSubmit(values: RegisterFormValues) {
-    if (submitting.current || oauthPending) return
+    if (submitting.current || oauthPending || abuse.isBlocked()) return
     submitting.current = true
     setError(null)
     setLoading(true)
@@ -40,7 +44,9 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
       formData.set('email', values.email)
       formData.set('password', values.password)
       formData.set('full_name', values.full_name)
+      abuse.prepare(formData)
       const result = await registerAction(formData)
+      abuse.receive(result)
       if (result?.error) {
         setError(result.error)
       } else if (result?.needsConfirmation) {
@@ -51,6 +57,7 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
         return
       }
     } catch {
+      abuse.receive({})
       setError('Unable to connect. Check your connection and try again.')
     } finally {
       if (!navigating) {
@@ -91,7 +98,7 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
 
       <CredentialForm error={error} next={next} busy={loading || oauthPending}
         onPendingChange={setOauthPending} onError={setError}
-        isBlocked={() => submitting.current || oauthPending}
+        isBlocked={() => submitting.current || oauthPending || abuse.isBlocked()}
         onSubmit={event => void handleSubmit(onSubmit)(event)} className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="full_name" className="text-sm font-medium text-gray-700">Full name</Label>
@@ -158,9 +165,10 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
           )}
         </div>
 
+        <AuthAbuseControls action="signup" abuse={abuse} />
         <Button
           type="submit"
-          disabled={loading || oauthPending}
+          disabled={loading || oauthPending || abuse.blocked}
           className="w-full h-10 mt-2 bg-linear-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white border-0 shadow-xs shadow-blue-500/20 transition-all duration-200 hover:shadow-md hover:shadow-blue-500/20 hover:-translate-y-px active:translate-y-0"
         >
           {loading ? (

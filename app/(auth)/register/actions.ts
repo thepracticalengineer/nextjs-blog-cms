@@ -1,12 +1,16 @@
 'use server'
 
+import type { AuthActionResult } from '@/lib/auth/abuse-feedback'
+import { authAbuseBlock } from '@/lib/auth/abuse'
+import { providerCooldown } from '@/lib/auth/abuse-feedback'
+
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { credentialFields, signupSchema } from '@/lib/auth/credentials'
 import { credentialErrorMessage } from '@/lib/auth/credential-errors'
 import { signupCallbackUrl } from '@/lib/auth/confirmation'
 
-export async function register(formData: FormData) {
+export async function register(formData: FormData): Promise<AuthActionResult> {
   const parsed = signupSchema.safeParse(credentialFields(formData))
   if (!parsed.success) return { error: parsed.error.issues[0].message }
 
@@ -18,6 +22,8 @@ export async function register(formData: FormData) {
   }
 
   try {
+    const blocked = await authAbuseBlock('signup', parsed.data.email, formData.get('captchaToken'))
+    if (blocked) return blocked
     const supabase = await createClient()
     const { email, password, full_name } = parsed.data
     const { data, error } = await supabase.auth.signUp({
@@ -25,10 +31,10 @@ export async function register(formData: FormData) {
       password,
       options: { data: { full_name }, emailRedirectTo },
     })
-    if (error) return { error: credentialErrorMessage(error, 'signup') }
+    if (error) return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'signup') }
     if (!data.session) return { needsConfirmation: true }
   } catch (error) {
-    return { error: credentialErrorMessage(error, 'signup', true) }
+    return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'signup', true) }
   }
 
   revalidatePath('/', 'layout')

@@ -39,6 +39,13 @@ export type Database = {
   }
   public: {
     Tables: {
+      auth_attempt_buckets: {
+        Row: { bucket_key: string; attempts: number; expires_at: string }
+        Insert: { bucket_key: string; attempts: number; expires_at: string }
+        Update: { bucket_key?: string; attempts?: number; expires_at?: string }
+        Relationships: []
+      }
+
       post_working_copies: {
         Row: {
           user_id: string
@@ -348,6 +355,11 @@ export type Database = {
       }
     }
     Functions: {
+      reserve_auth_attempt: {
+        Args: { p_action: string; p_ip_key: string; p_account_key: string }
+        Returns: Json
+      }
+
       post_reading_minutes: { Args: { body: string }; Returns: number }
       get_dashboard_posts: {
         Args: { p_page?: number; p_page_size?: number; p_search?: string; p_category_id?: string | null; p_sort?: string; p_direction?: string }

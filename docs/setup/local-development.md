@@ -55,6 +55,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+AUTH_ABUSE_HMAC_KEY= # independent random secret, at least 32 characters
+AUTH_TRUSTED_IP_HEADER= # production ingress must overwrite a single client IP
+NEXT_PUBLIC_TURNSTILE_SITE_KEY= # optional pair; configure for production bot checks
+TURNSTILE_SECRET_KEY= # server-only; must be paired with site key
 NEXT_PUBLIC_GA_MEASUREMENT_ID= # optional public ID; alone does not enable analytics
 GA_ENABLED=false # keep false locally and until the GA4 rollout checklist is complete
 LLM_KEY_ENCRYPTION_SECRET=   # exactly 32 UTF-8 bytes; 32 ASCII characters work
@@ -100,3 +104,5 @@ See [Google and GitHub authentication](social-auth.md) for provider applications
 ## Analytics
 
 Analytics requires explicit production gating and visitor opt-in. Keep `GA_ENABLED=false` in development and previews. Follow [Google Analytics setup and rollout](google-analytics.md) before enabling production; the existing enhanced-measurement settings must be changed first.
+
+See [authentication abuse controls](../features/auth-abuse-controls.md) for shared counters, trusted ingress, Turnstile setup and rollout checks.

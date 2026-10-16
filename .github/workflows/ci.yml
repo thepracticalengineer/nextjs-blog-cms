@@ -152,6 +152,10 @@ jobs:
               'NEXT_PUBLIC_SUPABASE_ANON_KEY': status['ANON_KEY'],
               'SUPABASE_SERVICE_ROLE_KEY': status['SERVICE_ROLE_KEY'],
               'NEXT_PUBLIC_SITE_URL': 'http://localhost:3000',
+              'AUTH_ABUSE_HMAC_KEY': 'isolated-ci-auth-budget-key-at-least-32-characters',
+              'AUTH_TRUSTED_IP_HEADER': 'x-forwarded-for',
+              'NEXT_PUBLIC_TURNSTILE_SITE_KEY': '',
+              'TURNSTILE_SECRET_KEY': '',
               'E2E_MAILPIT_URL': status['MAILPIT_URL'],
               'RESEND_API_KEY': '',
               'SLACK_WEBHOOK_URL': '',
@@ -162,6 +166,11 @@ jobs:
               for key, value in values.items():
                   output.write(f'{key}={value}\n')
           PY
+
+      - name: Verify shared authentication budgets
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse.sql
+          node database/tests/auth-abuse-concurrency.mjs
 
       - name: Verify MFA database and storage boundaries
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
@@ -200,6 +209,9 @@ jobs:
 
       - name: Verify OAuth controls with isolated provider navigation
         run: pnpm exec playwright test --config=e2e/oauth-ui.config.ts
+
+      - name: Verify authentication cooldowns with isolated Auth responses
+        run: pnpm exec playwright test --config=e2e/auth-abuse.config.ts
 
       - name: Verify MFA recovery controls with isolated Auth responses
         run: pnpm exec playwright test --config=e2e/mfa.config.ts

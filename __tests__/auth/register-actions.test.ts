@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null) }))
+import { authAbuseBlock } from '@/lib/auth/abuse'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ signUp: vi.fn(), createClient: vi.fn(), revalidate: vi.fn() }))
