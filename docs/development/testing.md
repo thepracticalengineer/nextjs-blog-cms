@@ -320,3 +320,7 @@ Homepage fixtures include eight topic tags to check that mobile navigation leads
 straight into the feed, while Topics stays available from 768px. The supplemental
 right rail appears from 1280px to preserve article width on tablets. Archive-link
 checks use the same scoped, exact accessible-name locator as the main smoke suite.
+
+## Public search metadata
+
+Run `pnpm exec vitest run __tests__/app/public-metadata.test.ts __tests__/features/posts/archive-range.test.ts __tests__/app/sitemap.test.ts __tests__/app/robots.test.ts __tests__/features/authors/page.test.tsx` for canonical pagination, article previews and complete published-only sitemap discovery. Run `pnpm exec playwright test --config=e2e/seo.config.ts` for rendered browser/crawler HTML, local social fallback images and sitemap consistency. The standalone suite uses a read-only loopback synthetic Data API and `.next-seo-ui`, disables external services, and performs no database writes. See [search indexing operations](../operations/search-indexing.md) for production and Search Console checks.

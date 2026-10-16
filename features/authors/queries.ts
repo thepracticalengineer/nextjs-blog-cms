@@ -21,7 +21,7 @@ export async function getPublicAuthor(id: string): Promise<PublicAuthor | null> 
   return data as PublicAuthor | null
 }
 
-export async function getAuthorPublishedPosts(id: string, page = 1, limit = 12) {
+export async function getAuthorPublishedPosts(id: string, page = 1, limit = 12): Promise<{ posts: PublicPostSummary[]; total: number }> {
   if (!UUID.test(id)) return { posts: [], total: 0 }
   const safePage = parseAuthorPage(String(page))
   const safeLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 100 ? limit : 12
@@ -34,6 +34,10 @@ export async function getAuthorPublishedPosts(id: string, page = 1, limit = 12) 
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false })
     .range(from, from + safeLimit - 1)
+  if (error?.code === 'PGRST103' && safePage > 1) {
+    const firstPage = await getAuthorPublishedPosts(id, 1, safeLimit)
+    return { posts: [], total: firstPage.total }
+  }
   if (error) throw error
   return { posts: (data ?? []).map(normalizeSummary) as PublicPostSummary[], total: count ?? 0 }
 }

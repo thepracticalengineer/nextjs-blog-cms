@@ -43,6 +43,7 @@
 
 ## Operations
 
+- [Search indexing, canonical metadata and issue #94 verification](operations/search-indexing.md)
 - [Deployment verification](operations/deployment-verification.md)
 - [Production cleanup and October 7, 2026 audit](operations/content-cleanup.md)
 - [Post list performance and issue #77 verification](operations/post-list-performance.md)

@@ -1,7 +1,9 @@
+import { cache } from 'react'
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { createClient } from '@/lib/supabase/server'
 import { PostList } from '@/features/posts/components/PostList'
 import { getPublishedPosts } from '@/features/posts/queries'
@@ -11,12 +13,15 @@ import { PostPagination } from '@/features/posts/components/PostPagination'
 // These pages read request cookies; URLs created after the build must render dynamically.
 export const dynamic = 'force-dynamic'
 
+const pageSize = 12
+const getArchivePosts = cache((id: string, page: number) => getPublishedPosts(page, pageSize, { categoryId: id }))
+
 interface CategoryPageProps {
   params: Promise<{ slug: string }>
   searchParams: Promise<ListSearchParams>
 }
 
-export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params
   const supabase = await createClient()
   const { data: category } = await supabase
@@ -26,10 +31,10 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     .single()
 
   if (!category) return {}
-  return {
-    title: `${category.name} - Blog`,
-    description: category.description ?? `Posts in ${category.name}`,
-  }
+  const { page } = await searchParams
+  const { total } = await getArchivePosts(category.id, parsePage(page))
+  return publicPageMetadata(`/blog/category/${encodeURIComponent(category.slug)}`, `${category.name} - Blog`,
+    category.description?.trim() || `Browse published articles about ${category.name} on The Practical Engineer.`, { page, totalPages: Math.ceil(total / pageSize) })
 }
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
@@ -45,8 +50,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   if (!category) notFound()
 
   const page = parsePage((await searchParams).page)
-  const pageSize = 12
-  const { posts, total } = await getPublishedPosts(page, pageSize, { categoryId: category.id })
+  const { posts, total } = await getArchivePosts(category.id, page)
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">

@@ -1,7 +1,9 @@
+import { cache } from 'react'
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { createClient } from '@/lib/supabase/server'
 import { PostList } from '@/features/posts/components/PostList'
 import { getPublishedPosts } from '@/features/posts/queries'
@@ -11,12 +13,15 @@ import { PostPagination } from '@/features/posts/components/PostPagination'
 // These pages read request cookies; URLs created after the build must render dynamically.
 export const dynamic = 'force-dynamic'
 
+const pageSize = 12
+const getArchivePosts = cache((id: string, page: number) => getPublishedPosts(page, pageSize, { tagId: id }))
+
 interface TagPageProps {
   params: Promise<{ slug: string }>
   searchParams: Promise<ListSearchParams>
 }
 
-export async function generateMetadata({ params }: TagPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
   const { slug } = await params
   const supabase = await createClient()
   const { data: tag } = await supabase
@@ -30,10 +35,10 @@ export async function generateMetadata({ params }: TagPageProps): Promise<Metada
     const { data: canonical } = await supabase.from('tags').select('slug').is('merged_into', null).eq('id', tag.merged_into).single()
     if (canonical) permanentRedirect(`/blog/tag/${canonical.slug}`)
   }
-  return {
-    title: `#${tag.name} - Blog`,
-    description: `Posts tagged with ${tag.name}`,
-  }
+  const { page } = await searchParams
+  const { total } = await getArchivePosts(tag.id, parsePage(page))
+  return publicPageMetadata(`/blog/tag/${encodeURIComponent(tag.slug)}`, `#${tag.name} - Blog`,
+    `Browse published articles tagged ${tag.name} on The Practical Engineer.`, { page, totalPages: Math.ceil(total / pageSize) })
 }
 
 export default async function TagPage({ params, searchParams }: TagPageProps) {
@@ -54,8 +59,7 @@ export default async function TagPage({ params, searchParams }: TagPageProps) {
   }
 
   const page = parsePage((await searchParams).page)
-  const pageSize = 12
-  const { posts, total } = await getPublishedPosts(page, pageSize, { tagId: tag.id })
+  const { posts, total } = await getArchivePosts(tag.id, page)
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">

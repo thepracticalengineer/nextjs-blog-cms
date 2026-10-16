@@ -3,17 +3,15 @@ import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
-import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { getPublishedPosts } from '@/features/posts/queries'
 import { getPopularTags } from '@/features/posts/queries'
 import { AuthorByline } from '@/features/authors/components/AuthorByline'
 import { cn } from '@/lib/utils'
 import type { PublicPostSummary } from '@/features/posts/types'
 
-export const metadata: Metadata = {
-  title: 'Home',
-  description: 'Practical deep-dives, guides, and architecture insights for engineers who ship.',
-}
+export const metadata = publicPageMetadata('/', 'Home',
+  'Practical deep-dives, guides, and architecture insights for engineers who ship.')
 
 export const revalidate = 60
 

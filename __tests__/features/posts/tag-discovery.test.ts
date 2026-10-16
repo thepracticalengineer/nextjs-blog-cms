@@ -1,24 +1,23 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const tags = [
-  { slug: 'canonical', created_at: '2026-10-07T00:00:00Z', merged_into: null },
-  { slug: 'alias', created_at: '2026-10-07T00:00:00Z', merged_into: 'canonical-id' },
-]
 const client = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => client }))
 vi.mock('@/features/posts/components/PostList', () => ({ PostList: () => null }))
 
 function installTaxonomy() {
-  client.from.mockImplementation((table: string) => {
-    let rows = table === 'tags' ? tags : []
+  client.from.mockImplementation(() => {
     const query = {
       select: () => query,
       eq: () => query,
-      is: (column: string, value: unknown) => {
-        if (column === 'merged_into' && value === null) rows = rows.filter(row => row.merged_into === null)
-        return query
-      },
-      then: (resolve: (result: { data: typeof rows }) => unknown) => Promise.resolve(resolve({ data: rows })),
+      order: () => query,
+      range: () => query,
+      returns: async () => ({ data: [{
+        slug: 'article', updated_at: '2026-10-07T00:00:00Z', category: null, author: null,
+        tags: [
+          { tag: { slug: 'canonical', merged_into: null } },
+          { tag: { slug: 'alias', merged_into: 'canonical-id' } },
+        ],
+      }] }),
     }
     return query
   })
