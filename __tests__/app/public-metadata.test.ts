@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { generateMetadata as articleMetadata } from '@/app/(public)/blog/[slug]/page'
 import { generateMetadata as categoryMetadata } from '@/app/(public)/blog/category/[slug]/page'
 import { generateMetadata as tagMetadata } from '@/app/(public)/blog/tag/[slug]/page'
-import { getPostBySlug } from '@/features/posts/queries'
+import { getPostBySlug, getPublishedPosts } from '@/features/posts/queries'
 
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPostRedirect: vi.fn(), getPublishedPosts: vi.fn() }))
 const db = vi.hoisted(() => ({ row: null as unknown }))
@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('NOT_FOUND
 beforeEach(() => {
   vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://www.example.com/')
   vi.mocked(getPostBySlug).mockResolvedValue({ slug: 'real-slug', title: 'Article title', seo_title: null, seo_description: null, excerpt: 'Useful description', cover_image: null, author: null, published_at: null } as never)
+  vi.mocked(getPublishedPosts).mockResolvedValue({ posts: [], total: 25 })
   db.row = { name: 'Engineering', slug: 'engineering', description: 'Engineering guides', merged_into: null }
 })
 afterEach(() => vi.unstubAllEnvs())
@@ -50,4 +51,26 @@ it('provides homepage social metadata without inheriting its canonical on other 
   const { metadata } = await import('@/app/(public)/page')
   expect(metadata.alternates).toEqual({ canonical: 'https://www.example.com' })
   expect(metadata.openGraph).toMatchObject({ type: 'website', url: 'https://www.example.com' })
+})
+
+// The archive total, rather than parameter syntax, controls indexing eligibility.
+it.each([categoryMetadata, tagMetadata])('excludes out-of-range taxonomy pages from indexing', async generate => {
+  vi.mocked(getPublishedPosts).mockResolvedValue({ posts: [], total: 13 })
+  const meta = await generate({ params: Promise.resolve({ slug: 'engineering' }), searchParams: Promise.resolve({ page: '3' }) })
+  expect(meta.robots).toMatchObject({ index: false, follow: true })
+  expect(meta.alternates).toEqual({ canonical: expect.stringMatching(/^https:\/\/www.example.com\/blog\/(category|tag)\/engineering$/) })
+})
+it('excludes past-the-end blog pages, including page 2 of an empty archive', async () => {
+  vi.mocked(getPublishedPosts).mockResolvedValue({ posts: [], total: 0 })
+  const { generateMetadata } = await import('@/app/(public)/blog/page')
+  const meta = await generateMetadata({ searchParams: Promise.resolve({ page: '2' }) })
+  expect(meta.robots).toMatchObject({ index: false })
+  expect(meta.alternates).toEqual({ canonical: 'https://www.example.com/blog' })
+  const first = await generateMetadata({ searchParams: Promise.resolve({ page: '1' }) })
+  expect(first.robots).toBeUndefined()
+})
+it('uses the brand alone for homepage social previews', async () => {
+  const { metadata } = await import('@/app/(public)/page')
+  expect(metadata.openGraph).toMatchObject({ title: 'The Practical Engineer' })
+  expect(metadata.twitter).toMatchObject({ title: 'The Practical Engineer' })
 })

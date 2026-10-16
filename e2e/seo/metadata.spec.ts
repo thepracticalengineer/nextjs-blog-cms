@@ -7,6 +7,7 @@ for (const path of paths) {
     const canonical = `${baseURL}${path === '/' ? '' : path}`
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', canonical)
     await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', canonical)
+    await expect(page.locator('meta[name="robots"][content*="noindex"]')).toHaveCount(0)
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /\S+/)
     await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary')
     const image = await page.locator('meta[property="og:image"]').getAttribute('content')
@@ -27,3 +28,15 @@ test('crawler HTML contains one canonical and sitemap URLs agree with it', async
     expect(xml).toContain(`<loc>${baseURL}${path === '/' ? '' : path}</loc>`)
   }
 })
+
+for (const path of ['/blog', '/blog/category/engineering', '/blog/tag/systems', '/authors/5af2b64d-c7c0-465f-901f-75cf70737172']) {
+  test(`out-of-range archive is excluded from indexing: ${path}`, async ({ page, request, baseURL }) => {
+    await page.goto(`${path}?page=50`)
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, follow')
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${baseURL}${path}`)
+    await expect(page.getByRole('link', { name: 'Back to first page', exact: true })).toBeVisible()
+    const response = await request.get(`${path}?page=50`, { headers: { 'User-Agent': 'Googlebot' } })
+    expect(response.ok()).toBe(true)
+    expect(await response.text()).toContain('content="noindex, follow"')
+  })
+}

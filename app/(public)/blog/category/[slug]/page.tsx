@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -11,6 +12,9 @@ import { PostPagination } from '@/features/posts/components/PostPagination'
 
 // These pages read request cookies; URLs created after the build must render dynamically.
 export const dynamic = 'force-dynamic'
+
+const pageSize = 12
+const getArchivePosts = cache((id: string, page: number) => getPublishedPosts(page, pageSize, { categoryId: id }))
 
 interface CategoryPageProps {
   params: Promise<{ slug: string }>
@@ -27,8 +31,10 @@ export async function generateMetadata({ params, searchParams }: CategoryPagePro
     .single()
 
   if (!category) return {}
+  const { page } = await searchParams
+  const { total } = await getArchivePosts(category.id, parsePage(page))
   return publicPageMetadata(`/blog/category/${encodeURIComponent(category.slug)}`, `${category.name} - Blog`,
-    category.description?.trim() || `Browse published articles about ${category.name} on The Practical Engineer.`, { page: (await searchParams).page })
+    category.description?.trim() || `Browse published articles about ${category.name} on The Practical Engineer.`, { page, totalPages: Math.ceil(total / pageSize) })
 }
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
@@ -44,8 +50,7 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   if (!category) notFound()
 
   const page = parsePage((await searchParams).page)
-  const pageSize = 12
-  const { posts, total } = await getPublishedPosts(page, pageSize, { categoryId: category.id })
+  const { posts, total } = await getArchivePosts(category.id, page)
 
   return (
     <div className="container max-w-5xl mx-auto py-12 px-4 space-y-10">

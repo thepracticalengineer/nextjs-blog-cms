@@ -30,7 +30,7 @@ export function normalizePost(raw: PostWithRelations): PostWithRelations {
   }
 }
 
-export async function getPublishedPosts(page = 1, limit = 10, filter?: { categoryId?: string; tagId?: string; authorId?: string }) {
+export async function getPublishedPosts(page = 1, limit = 10, filter?: { categoryId?: string; tagId?: string; authorId?: string }): Promise<{ posts: PublicPostSummary[]; total: number }> {
   const supabase = await createClient()
   const safePage = parsePage(String(page))
   const safeLimit = Number.isSafeInteger(limit) && limit > 0 && limit <= 100 ? limit : 10
@@ -44,6 +44,12 @@ export async function getPublishedPosts(page = 1, limit = 10, filter?: { categor
   const { data, error, count } = await query
     .order('published_at', { ascending: false, nullsFirst: false })
     .order('id', { ascending: false }).range(from, from + safeLimit - 1)
+  if (error?.code === 'PGRST103' && safePage > 1) {
+    // PostgREST omits the parsed count on 416. A valid first-page query recovers
+    // the same filtered total without treating a range miss as a database outage.
+    const firstPage = await getPublishedPosts(1, safeLimit, filter)
+    return { posts: [], total: firstPage.total }
+  }
   if (error) throw error
   return { posts: (data ?? []).map(normalizeSummary), total: count ?? 0 }
 }

@@ -8,7 +8,7 @@ Set `NEXT_PUBLIC_SITE_URL` to the trusted public origin (`https://www.thepractic
 
 Homepage, blog archive, published articles, category/tag archives and public author pages declare absolute canonicals, descriptions, Open Graph URL/title/description/image and Twitter cards. The existing 512px logo is a local fallback with a summary card; supplied article covers use a large-image card. Article SEO fields take precedence over title/excerpt; missing descriptions receive a descriptive fallback. Editorial metadata still needs human review. Broken external covers belong to #90; declaring an image does not establish that social platforms can retrieve it.
 
-Paginated archives use their own `?page=N` canonical for valid pages above 1. Invalid, repeated and first-page parameters canonicalize to the base archive. Tracking parameters do not enter canonicals. Author pagination follows the same rule. Renamed article slugs and merged tags retain their existing permanent redirects. No global homepage canonical is placed on the root layout, so auth or private pages cannot inherit it.
+Paginated archives use their own `?page=N` canonical for valid pages above 1. Invalid, repeated and first-page parameters canonicalize to the base archive. Tracking parameters do not enter canonicals. Author pagination follows the same rule. Each archive reads the actual published-post total: pages past the last available result page emit `noindex, follow` with a base-archive canonical while retaining the recovery link. Page 1 of an empty archive keeps the deliberate archive indexing policy. Request-scoped React caching shares the post results between metadata and body rendering. If PostgREST returns `416/PGRST103` for a range past the end, archive queries recover the filtered count from a valid first-page request and return the empty requested page; other database failures still propagate. Renamed article slugs and merged tags retain their existing permanent redirects. No global homepage canonical is placed on the root layout, so auth or private pages cannot inherit it.
 
 ## Sitemap and archive decisions
 
@@ -35,11 +35,11 @@ These observations are a dated baseline, not post-deployment results or Search C
 Run:
 
 ```bash
-pnpm exec vitest run __tests__/app/public-metadata.test.ts __tests__/app/sitemap.test.ts __tests__/app/robots.test.ts __tests__/features/authors/page.test.tsx
+pnpm exec vitest run __tests__/app/public-metadata.test.ts __tests__/features/posts/archive-range.test.ts __tests__/app/sitemap.test.ts __tests__/app/robots.test.ts __tests__/features/authors/page.test.tsx
 pnpm exec playwright test --config=e2e/seo.config.ts
 ```
 
-CI runs the SEO browser suite and retains its failures/traces in the E2E artifacts. The suite runs the real Next.js app with a read-only loopback synthetic Data API. It checks rendered canonical/social metadata, pagination, tracking parameters, local fallback-image availability, crawler HTML and sitemap consistency. It seeds no database and disables external providers/mail/webhooks. The sitemap unit tests use the installed Supabase SDK with stubbed HTTP responses to verify more than 1,000 rows, publication filtering, deduplication, alias exclusion and later-page database failures. These checks do not prove live RLS behavior or third-party social crawler behavior.
+CI runs the SEO browser suite and retains its failures/traces in the E2E artifacts. The suite runs the real Next.js app with a read-only loopback synthetic Data API. It checks rendered canonical/social metadata, pagination, tracking parameters, local fallback-image availability, valid second pages backed by 13 fixtures, out-of-range noindex/recovery behavior, crawler HTML and sitemap consistency. It seeds no database and disables external providers/mail/webhooks. The sitemap unit tests use the installed Supabase SDK with stubbed HTTP responses to verify more than 1,000 rows, publication filtering, deduplication, alias exclusion and later-page database failures. These checks do not prove live RLS behavior or third-party social crawler behavior.
 
 After deployment, verify the public origin env setting, fetch homepage/article/archive HTML as both a browser and Googlebot, inspect canonical/OG URLs, and repeat HTTP/HTTPS/www/non-www/trailing-slash checks. Confirm empty archives are absent and published articles remain present in the live sitemap. Check actual social-platform previews separately; coordinate failing covers with #90.
 

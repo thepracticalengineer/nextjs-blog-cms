@@ -27,6 +27,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
+  const addPost = (post: SitemapPost) => {
+    add(`/blog/${encodeURIComponent(post.slug)}`, post.updated_at, 0.8)
+    if (post.category) add(`/blog/category/${encodeURIComponent(post.category.slug)}`, post.updated_at)
+    for (const { tag } of post.tags ?? []) {
+      if (tag && !tag.merged_into) add(`/blog/tag/${encodeURIComponent(tag.slug)}`, post.updated_at)
+    }
+    if (post.author) add(`/authors/${post.author.id}`)
+  }
+
   // Page below PostgREST's row cap with a unique stable order. Only published
   // posts can contribute URLs; relationships use the existing public projection.
   const batchSize = 500
@@ -39,14 +48,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     `).eq('status', 'published').order('id').range(offset, offset + batchSize - 1).returns<SitemapPost[]>()
     // A database outage must not become a successful but incomplete sitemap.
     if (error) throw error
-    for (const post of data ?? []) {
-      add(`/blog/${encodeURIComponent(post.slug)}`, post.updated_at, 0.8)
-      if (post.category) add(`/blog/category/${encodeURIComponent(post.category.slug)}`, post.updated_at)
-      for (const { tag } of post.tags ?? []) {
-        if (tag && !tag.merged_into) add(`/blog/tag/${encodeURIComponent(tag.slug)}`, post.updated_at)
-      }
-      if (post.author) add(`/authors/${post.author.id}`)
-    }
+    for (const post of data ?? []) addPost(post)
     if (!data || data.length < batchSize) break
   }
   return [...entries.values()]

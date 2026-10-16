@@ -12,6 +12,7 @@ export function siteUrl(): string {
 
 type PageOptions = {
   page?: string | string[]
+  totalPages?: number
   image?: string | null
   article?: { publishedTime?: string; modifiedTime?: string; authors?: string[] }
 }
@@ -20,13 +21,16 @@ export function publicPageMetadata(path: string, title: string, description: str
   const page = parsePage(options.page)
   const origin = siteUrl()
   // Next.js renders a root canonical as the bare origin. Match it in the sitemap.
-  const canonical = `${origin}${path === '/' ? '' : path}${page > 1 ? `?page=${page}` : ''}`
+  const outOfRange = page > 1 && options.totalPages !== undefined && page > options.totalPages
+  const pagination = page > 1 && !outOfRange ? '?page=' + page : ''
+  const canonical = `${origin}${path === '/' ? '' : path}${pagination}`
   const image = options.image || `${origin}/logo.png`
-  const socialTitle = `${title} | The Practical Engineer`
+  const socialTitle = path === '/' ? 'The Practical Engineer' : `${title} | The Practical Engineer`
   return {
     title,
     description,
     alternates: { canonical },
+    ...(outOfRange ? { robots: { index: false, follow: true } } : {}),
     openGraph: {
       title: socialTitle,
       description,

@@ -106,7 +106,15 @@ describe('public author byline', () => {
 })
 
 it('canonicalizes each author archive page independently', async () => {
+  vi.mocked(getAuthorPublishedPosts).mockResolvedValue({ posts: [], total: 25 })
   const meta = await generateMetadata(props('2'))
   expect(meta.alternates).toEqual({ canonical: `http://localhost:3000/authors/${id}?page=2` })
   expect(meta.openGraph).toMatchObject({ url: `http://localhost:3000/authors/${id}?page=2` })
+})
+
+it('marks author pages past the available results noindex with a base canonical', async () => {
+  vi.mocked(getAuthorPublishedPosts).mockResolvedValue({ posts: [], total: 13 })
+  const meta = await generateMetadata(props('3'))
+  expect(meta.robots).toMatchObject({ index: false, follow: true })
+  expect(meta.alternates).toEqual({ canonical: `http://localhost:3000/authors/${id}` })
 })

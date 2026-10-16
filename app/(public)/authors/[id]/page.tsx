@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import type { Metadata } from 'next'
 import { publicPageMetadata } from '@/lib/metadata'
 import Link from 'next/link'
@@ -9,6 +10,9 @@ import { PostList } from '@/features/posts/components/PostList'
 
 export const revalidate = 60
 
+const pageSize = 12
+const getArchivePosts = cache((id: string, page: number) => getAuthorPublishedPosts(id, page, pageSize))
+
 interface AuthorPageProps {
   params: Promise<{ id: string }>
   searchParams: Promise<{ page?: string | string[] }>
@@ -19,9 +23,11 @@ export async function generateMetadata({ params, searchParams }: AuthorPageProps
   const author = await getPublicAuthor(id)
   if (!author) notFound()
   const name = authorName(author.full_name)
+  const { page } = await searchParams
+  const { total } = await getArchivePosts(author.id, parseAuthorPage(page))
   return publicPageMetadata(`/authors/${author.id}`, `${name} — Author`,
     author.bio?.trim().slice(0, 160) || `Read published articles by ${name} on The Practical Engineer.`,
-    { page: (await searchParams).page })
+    { page, totalPages: Math.ceil(total / pageSize) })
 }
 
 const externalLinks = [
@@ -38,9 +44,8 @@ export default async function AuthorPage({ params, searchParams }: AuthorPagePro
   if (!author) notFound()
   const { page: pageParam } = await searchParams
   const page = parseAuthorPage(pageParam)
-  const limit = 12
-  const { posts, total } = await getAuthorPublishedPosts(author.id, page, limit)
-  const totalPages = Math.ceil(total / limit)
+  const { posts, total } = await getArchivePosts(author.id, page)
+  const totalPages = Math.ceil(total / pageSize)
   const name = authorName(author.full_name)
   const avatar = publicWebUrl(author.avatar_url)
 
