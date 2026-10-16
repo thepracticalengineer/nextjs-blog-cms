@@ -220,6 +220,9 @@ jobs:
       - name: Verify homepage reader navigation and responsive controls
         run: pnpm exec playwright test --config=e2e/homepage.config.ts
 
+      - name: Verify public canonical metadata and sitemap discovery
+        run: pnpm exec playwright test --config=e2e/seo.config.ts
+
       - name: Upload E2E reports and failure artifacts
         id: e2e-reports
         if: always()

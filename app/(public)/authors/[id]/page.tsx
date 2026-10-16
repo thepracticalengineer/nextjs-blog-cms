@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -13,17 +14,14 @@ interface AuthorPageProps {
   searchParams: Promise<{ page?: string | string[] }>
 }
 
-export async function generateMetadata({ params }: AuthorPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: AuthorPageProps): Promise<Metadata> {
   const { id } = await params
   const author = await getPublicAuthor(id)
   if (!author) notFound()
   const name = authorName(author.full_name)
-  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000').replace(/\/+$/, '')
-  return {
-    title: `${name} — Author`,
-    description: author.bio?.trim().slice(0, 160) || `Read published articles by ${name} on The Practical Engineer.`,
-    alternates: { canonical: `${siteUrl}/authors/${author.id}` },
-  }
+  return publicPageMetadata(`/authors/${author.id}`, `${name} — Author`,
+    author.bio?.trim().slice(0, 160) || `Read published articles by ${name} on The Practical Engineer.`,
+    { page: (await searchParams).page })
 }
 
 const externalLinks = [

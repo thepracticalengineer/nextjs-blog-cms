@@ -98,7 +98,9 @@ test('search, keyboard selection, mobile wrapping, saved relationships and merge
   expect(response.status()).toBe(308)
   expect(response.headers().location).toBe(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)
   const sitemap = await request.get('/sitemap.xml')
-  expect(await sitemap.text()).toContain(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)
+  // The surviving tag is attached only to a draft, so its public archive is empty.
+  expect(await sitemap.text()).not.toContain(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)
+  expect((await request.get(`/blog/tag/e2e-taxonomy-${fixtureId}-0`)).status()).toBe(200)
   expect(await sitemap.text()).not.toContain(`/blog/tag/e2e-taxonomy-${fixtureId}-duplicate`)
   await management.close()
 })

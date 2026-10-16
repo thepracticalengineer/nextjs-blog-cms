@@ -52,3 +52,6 @@
 /.next-auth-abuse-ui
 
 /.next-homepage-ui
+
+/.next-seo-ui
+/.next-seo-build

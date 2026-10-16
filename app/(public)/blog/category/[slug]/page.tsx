@@ -2,6 +2,7 @@ import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { createClient } from '@/lib/supabase/server'
 import { PostList } from '@/features/posts/components/PostList'
 import { getPublishedPosts } from '@/features/posts/queries'
@@ -16,7 +17,7 @@ interface CategoryPageProps {
   searchParams: Promise<ListSearchParams>
 }
 
-export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: CategoryPageProps): Promise<Metadata> {
   const { slug } = await params
   const supabase = await createClient()
   const { data: category } = await supabase
@@ -26,10 +27,8 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
     .single()
 
   if (!category) return {}
-  return {
-    title: `${category.name} - Blog`,
-    description: category.description ?? `Posts in ${category.name}`,
-  }
+  return publicPageMetadata(`/blog/category/${encodeURIComponent(category.slug)}`, `${category.name} - Blog`,
+    category.description?.trim() || `Browse published articles about ${category.name} on The Practical Engineer.`, { page: (await searchParams).page })
 }
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {

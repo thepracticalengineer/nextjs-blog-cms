@@ -2,6 +2,7 @@ import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { createClient } from '@/lib/supabase/server'
 import { PostList } from '@/features/posts/components/PostList'
 import { getPublishedPosts } from '@/features/posts/queries'
@@ -16,7 +17,7 @@ interface TagPageProps {
   searchParams: Promise<ListSearchParams>
 }
 
-export async function generateMetadata({ params }: TagPageProps): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: TagPageProps): Promise<Metadata> {
   const { slug } = await params
   const supabase = await createClient()
   const { data: tag } = await supabase
@@ -30,10 +31,8 @@ export async function generateMetadata({ params }: TagPageProps): Promise<Metada
     const { data: canonical } = await supabase.from('tags').select('slug').is('merged_into', null).eq('id', tag.merged_into).single()
     if (canonical) permanentRedirect(`/blog/tag/${canonical.slug}`)
   }
-  return {
-    title: `#${tag.name} - Blog`,
-    description: `Posts tagged with ${tag.name}`,
-  }
+  return publicPageMetadata(`/blog/tag/${encodeURIComponent(tag.slug)}`, `#${tag.name} - Blog`,
+    `Browse published articles tagged ${tag.name} on The Practical Engineer.`, { page: (await searchParams).page })
 }
 
 export default async function TagPage({ params, searchParams }: TagPageProps) {

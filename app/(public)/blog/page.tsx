@@ -1,5 +1,5 @@
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
-import type { Metadata } from 'next'
+import { publicPageMetadata } from '@/lib/metadata'
 import { parsePage } from '@/features/posts/list-state'
 import { PostPagination } from '@/features/posts/components/PostPagination'
 import { getPublishedPosts } from '@/features/posts/queries'
@@ -7,13 +7,12 @@ import { PostList } from '@/features/posts/components/PostList'
 
 export const revalidate = 60
 
-export const metadata: Metadata = {
-  title: 'Articles',
-  description: 'Practical knowledge for engineers who ship.',
-}
-
 interface BlogPageProps {
   searchParams: Promise<{ page?: string }>
+}
+
+export async function generateMetadata({ searchParams }: BlogPageProps) {
+  return publicPageMetadata('/blog', 'Articles', 'Practical knowledge for engineers who ship.', { page: (await searchParams).page })
 }
 
 export default async function BlogPage({ searchParams }: BlogPageProps) {

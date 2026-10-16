@@ -3,6 +3,7 @@ import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
 import { format } from 'date-fns'
 import type { Metadata } from 'next'
+import { publicPageMetadata, siteUrl } from '@/lib/metadata'
 import { getPostBySlug, getPostRedirect } from '@/features/posts/queries'
 import { PostBody } from '@/components/editor/PostBody'
 import { Badge } from '@/components/ui/badge'
@@ -25,18 +26,15 @@ export async function generateMetadata({ params }: PostPageProps): Promise<Metad
   const post = await getPostBySlug(slug)
   if (!post) return {}
 
-  return {
-    title: post.seo_title || post.title,
-    description: post.seo_description || post.excerpt || '',
-    openGraph: {
-      title: post.seo_title || post.title,
-      description: post.seo_description || post.excerpt || '',
-      images: post.cover_image ? [post.cover_image] : [],
-      type: 'article',
-      publishedTime: post.published_at ?? undefined,
-      authors: post.author?.full_name ? [post.author.full_name] : undefined,
-    },
-  }
+  return publicPageMetadata(`/blog/${encodeURIComponent(post.slug)}`, post.seo_title?.trim() || post.title,
+    post.seo_description?.trim() || post.excerpt?.trim() || `Read ${post.title} on The Practical Engineer.`, {
+      image: post.cover_image,
+      article: {
+        publishedTime: post.published_at ?? undefined,
+        modifiedTime: post.updated_at ?? undefined,
+        authors: post.author?.full_name ? [post.author.full_name] : undefined,
+      },
+    })
 }
 
 export default async function PostPage({ params }: PostPageProps) {
@@ -48,7 +46,7 @@ export default async function PostPage({ params }: PostPageProps) {
     notFound()
   }
 
-  const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '')
+  const baseUrl = siteUrl()
 
   const jsonLd = {
     '@context': 'https://schema.org',

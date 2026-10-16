@@ -75,7 +75,7 @@ describe('public author page', () => {
 
   it('provides stable canonical metadata and a fallback for unnamed authors', async () => {
     vi.mocked(getPublicAuthor).mockResolvedValue({ ...author, full_name: null, bio: null })
-    expect(await generateMetadata(props())).toEqual({ title: 'Author — Author', description: 'Read published articles by Author on The Practical Engineer.', alternates: { canonical: `http://localhost:3000/authors/${id}` } })
+    expect(await generateMetadata(props())).toMatchObject({ title: 'Author — Author', description: 'Read published articles by Author on The Practical Engineer.', alternates: { canonical: `http://localhost:3000/authors/${id}` } })
     render(await AuthorPage(props()))
     expect(screen.getByRole('heading', { name: 'Author' })).toBeInTheDocument()
   })
@@ -103,4 +103,10 @@ describe('public author byline', () => {
   it.each(['javascript:alert(1)', 'data:text/html,unsafe', '/relative', 'https://user:pass@example.com'])('rejects unsafe link %s', value => {
     expect(publicWebUrl(value)).toBeNull()
   })
+})
+
+it('canonicalizes each author archive page independently', async () => {
+  const meta = await generateMetadata(props('2'))
+  expect(meta.alternates).toEqual({ canonical: `http://localhost:3000/authors/${id}?page=2` })
+  expect(meta.openGraph).toMatchObject({ url: `http://localhost:3000/authors/${id}?page=2` })
 })

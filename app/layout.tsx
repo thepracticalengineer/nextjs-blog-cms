@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { siteUrl } from "@/lib/metadata";
 import { Inter, Playfair_Display, DM_Sans } from "next/font/google";
 import { Suspense } from "react";
 import { Analytics } from "@/components/analytics/Analytics";
@@ -21,6 +22,7 @@ const dmSans = DM_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl()),
   title: {
     default: "The Practical Engineer",
     template: "%s | The Practical Engineer",
