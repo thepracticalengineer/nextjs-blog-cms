@@ -1,5 +1,8 @@
 'use client'
 
+import { useAuthAbuse } from './use-auth-abuse'
+import { AuthAbuseControls } from './AuthAbuseControls'
+
 import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { Loader2, Mail } from 'lucide-react'
@@ -17,6 +20,7 @@ const schema = z.object({ email: recoveryEmailSchema })
 export const RECOVERY_CONFIRMATION = 'If an account exists for this email, you’ll receive a password reset link.'
 
 export function ForgotPasswordForm() {
+  const abuse = useAuthAbuse()
   const submitting = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,17 +28,20 @@ export function ForgotPasswordForm() {
   const { register, handleSubmit, formState: { errors } } = useForm<z.infer<typeof schema>>({ resolver: zodResolver(schema) })
 
   async function onSubmit(values: z.infer<typeof schema>) {
-    if (submitting.current) return
+    if (submitting.current || abuse.isBlocked()) return
     submitting.current = true
     setLoading(true)
     setError(null)
     try {
       const formData = new FormData()
       formData.set('email', values.email)
+      abuse.prepare(formData)
       const result = await requestPasswordReset(formData)
+      abuse.receive(result)
       if (result.error) setError(result.error)
       else setSuccess(true)
     } catch {
+      abuse.receive({})
       setError('Unable to request a reset email right now. Please try again later.')
     } finally {
       submitting.current = false
@@ -63,7 +70,8 @@ export function ForgotPasswordForm() {
             </div>
             {errors.email && <p id="recovery-email-error" role="alert" className="text-xs text-red-600">{errors.email.message}</p>}
           </div>
-          <Button type="submit" disabled={loading} className="w-full h-10 bg-linear-to-r from-blue-600 to-indigo-600 text-white">
+          <AuthAbuseControls action="recovery" abuse={abuse} />
+          <Button type="submit" disabled={loading || abuse.blocked} className="w-full h-10 bg-linear-to-r from-blue-600 to-indigo-600 text-white">
             {loading && <Loader2 aria-hidden="true" className="mr-2 h-4 w-4 animate-spin" />}
             {loading ? 'Sending reset link…' : 'Send reset link'}
           </Button>

@@ -1,5 +1,8 @@
 'use server'
 
+import { authAbuseBlock } from '@/lib/auth/abuse'
+import { providerCooldown } from '@/lib/auth/abuse-feedback'
+
 import { revalidatePath } from 'next/cache'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
@@ -109,26 +112,28 @@ export async function deleteAvatar() {
   return { success: true }
 }
 
-async function sendPasswordVerification(supabase: Awaited<ReturnType<typeof createClient>>): Promise<PasswordChangeResult> {
+async function sendPasswordVerification(supabase: Awaited<ReturnType<typeof createClient>>, accountId: string, reserved = false): Promise<PasswordChangeResult> {
   try {
+    const blocked = reserved ? null : await authAbuseBlock('reauthentication', accountId)
+    if (blocked) return { ...blocked, reauthenticationRequired: true }
     const { error } = await supabase.auth.reauthenticate()
     if (error) return {
       reauthenticationRequired: true,
-      error: error.status === 429
-        ? 'Too many verification emails. Please wait before requesting another code.'
-        : 'Unable to send a verification code. Please try again.',
+      ...(providerCooldown(error) ?? { error: 'Unable to send a verification code. Please try again.' }),
     }
     return { reauthenticationRequired: true, codeSent: true }
-  } catch {
-    return { reauthenticationRequired: true, error: 'Unable to send a verification code. Please try again.' }
+  } catch (error) {
+    return { reauthenticationRequired: true, ...(providerCooldown(error) ?? { error: 'Unable to send a verification code. Please try again.' }) }
   }
 }
 
 export async function requestPasswordReauthentication(): Promise<PasswordChangeResult> {
   const profile = await getProfile()
   if (!profile) return { error: 'Unauthorized' }
+  const blocked = await authAbuseBlock('reauthentication', profile.id)
+  if (blocked) return { ...blocked, reauthenticationRequired: true }
   const supabase = await createClient()
-  return sendPasswordVerification(supabase)
+  return sendPasswordVerification(supabase, profile.id, true)
 }
 
 export async function updatePassword(currentPassword: unknown, newPassword: unknown, nonce?: unknown): Promise<PasswordChangeResult> {
@@ -137,6 +142,9 @@ export async function updatePassword(currentPassword: unknown, newPassword: unkn
 
   const parsed = passwordChangeSchema.safeParse({ currentPassword, newPassword, nonce })
   if (!parsed.success) return { error: parsed.error.issues[0].message }
+
+  const blocked = await authAbuseBlock('password', profile.id)
+  if (blocked) return blocked
 
   // Verify legacy passwords without changing the caller's cookies or replacing
   // an AAL2 session with the AAL1 session created by password sign-in.
@@ -155,7 +163,7 @@ export async function updatePassword(currentPassword: unknown, newPassword: unkn
       const isInvalidCredentials =
         signInError.code === 'invalid_credentials' ||
         (signInError.code == null && signInError.status === 400)
-      return { error: isInvalidCredentials ? 'Current password is incorrect' : signInError.message }
+      return providerCooldown(signInError) ?? { error: isInvalidCredentials ? 'Current password is incorrect' : 'Unable to verify your current password. Please try again.' }
     }
 
     // Password verification creates a real refresh session even with persistence
@@ -173,14 +181,14 @@ export async function updatePassword(currentPassword: unknown, newPassword: unkn
       password: parsed.data.newPassword,
       ...(parsed.data.nonce === undefined ? {} : { nonce: parsed.data.nonce }),
     })
-    if (error?.code === 'reauthentication_needed') return await sendPasswordVerification(supabase)
+    if (error?.code === 'reauthentication_needed') return await sendPasswordVerification(supabase, profile.id)
     if (error?.code === 'reauthentication_not_valid') return {
       reauthenticationRequired: true,
       error: 'That verification code is invalid or expired. Try again or request a new code.',
     }
-    if (error) return { error: error.message }
+    if (error) return providerCooldown(error) ?? { error: 'Unable to update your password right now. Please try again.' }
     return { success: true }
-  } catch {
-    return { error: 'Unable to update your password right now. Please try again.' }
+  } catch (error) {
+    return providerCooldown(error) ?? { error: 'Unable to update your password right now. Please try again.' }
   }
 }

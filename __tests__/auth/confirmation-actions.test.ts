@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null) }))
+import { authAbuseBlock } from '@/lib/auth/abuse'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ resend: vi.fn(), createClient: vi.fn() }))
@@ -39,4 +41,12 @@ describe('neutral confirmation resend', () => {
     expect((await resendConfirmation(form('person@example.com'))).error).toBeTruthy()
     expect(mocks.resend).not.toHaveBeenCalled()
   })
+})
+
+it('blocks confirmation resend before Auth and keeps thrown Auth outcomes neutral', async () => {
+  vi.mocked(authAbuseBlock).mockResolvedValueOnce({ error: 'Please wait', retryAfter: 25 })
+  expect(await resendConfirmation(form('user@example.com'))).toEqual({ error: 'Please wait', retryAfter: 25 })
+  expect(mocks.resend).not.toHaveBeenCalled()
+  mocks.resend.mockRejectedValue({ code: 'over_email_send_rate_limit', status: 429, message: 'PRIVATE' })
+  expect(await resendConfirmation(form('user@example.com'))).toEqual({ success: true, retryAfter: 60 })
 })

@@ -286,3 +286,18 @@ that ignore cancellation. They use no database, external mail or webhooks.
 The provider and exported hooks are included in unit coverage. These tests do not
 establish live SDK event ordering, hosted Auth behavior or production performance.
 See [client auth state](../features/client-auth-state.md) for the consumer contract.
+
+## Authentication abuse controls
+
+Set an independent test-only `AUTH_ABUSE_HMAC_KEY` of at least 32 characters in
+`.env.e2e`. For local production builds also set `AUTH_TRUSTED_IP_HEADER=x-forwarded-for`
+only on the isolated loopback Next.js server; hosted deployments need the trusted
+ingress setup described in [auth abuse controls](../features/auth-abuse-controls.md).
+Leave both Turnstile keys empty for normal isolated suites; use the provider's test
+keys only on designated bot-check deployments. No production credentials or mail.
+
+CI runs `database/tests/auth_abuse.sql` and
+`node database/tests/auth-abuse-concurrency.mjs` on its migrated disposable stack.
+The concurrency check reserves shared budgets from 40 independent connections and
+cleans up its own random fixtures. Unit coverage includes guard ordering, canonical
+IPs, spoofing, HMAC privacy, provider 429s, CAPTCHA escalation and cooldown retries.

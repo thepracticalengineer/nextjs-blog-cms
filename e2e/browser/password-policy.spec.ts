@@ -17,7 +17,7 @@ function localAuthFixture(userId: string, sql: string) {
   assertDedicatedTestProject(url, process.env.E2E_SUPABASE_PROJECT_REF)
   if (!['localhost', '127.0.0.1'].includes(new URL(url).hostname)) throw new Error('Session aging requires the disposable local stack')
   const container = process.env.E2E_AUTH_DB_CONTAINER ?? 'supabase_db_nextjs-blog-cms'
-  if (!['supabase_db_nextjs-blog-cms', 'supabase_db_cms-issue104'].includes(container)) throw new Error('Unexpected test database container')
+  if (!['supabase_db_nextjs-blog-cms', 'supabase_db_cms-issue104', 'supabase_db_cms-issue106'].includes(container)) throw new Error('Unexpected test database container')
   if (!/^[0-9a-f-]{36}$/.test(userId)) throw new Error('Invalid fixture UUID')
   return execFileSync('docker', ['exec', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-c',
     sql], { encoding: 'utf8' })

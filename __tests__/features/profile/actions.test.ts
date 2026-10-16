@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null) }))
+import { authAbuseBlock } from '@/lib/auth/abuse'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
@@ -275,11 +277,11 @@ describe('updatePassword', () => {
     expect(result).toEqual({ error: 'Current password is incorrect' })
   })
 
-  it('surfaces non-credential errors as-is', async () => {
+  it('maps provider throttles to neutral cooldowns', async () => {
     mockGetProfile.mockResolvedValue(fakeProfile as any)
     mockAnonSignIn.mockResolvedValue({ error: { code: 'over_email_send_rate_limit', status: 429, message: 'Email rate limit exceeded' } })
     const result = await updatePassword('any', 'newpass123')
-    expect(result).toEqual({ error: 'Email rate limit exceeded' })
+    expect(result).toEqual({ error: 'Too many attempts. Wait a few minutes before trying again.', retryAfter: 60 })
   })
 
   it('returns error when updateUser fails', async () => {
@@ -289,7 +291,7 @@ describe('updatePassword', () => {
       makeSupabase({ authUpdateError: { message: 'Update failed' } }) as any
     )
     const result = await updatePassword('correct', 'newpass123')
-    expect(result).toEqual({ error: 'Update failed' })
+    expect(result).toEqual({ error: 'Unable to update your password right now. Please try again.' })
   })
 
   it('returns success on valid password change', async () => {
@@ -366,7 +368,7 @@ describe('password policy and provider reauthentication', () => {
     mockCreateClient.mockResolvedValue(client as any)
     const result = await updatePassword('legacy', '12345678')
     expect(result.reauthenticationRequired).toBe(true)
-    expect(result.error).toContain('wait')
+    expect(result.error).toMatch(/wait/i)
     expect(result.codeSent).not.toBe(true)
   })
 
@@ -443,4 +445,13 @@ describe('temporary password-verification session cleanup', () => {
     expect(mockAnonSignOut).toHaveBeenCalledExactlyOnceWith({ scope: 'local' })
     expect(client.auth.reauthenticate).toHaveBeenCalledOnce()
   })
+})
+
+it('blocks password verification and reauthentication before provider calls', async () => {
+  mockGetProfile.mockResolvedValue(fakeProfile as any)
+  vi.mocked(authAbuseBlock).mockResolvedValue({ error: 'Please wait', retryAfter: 25 })
+  expect(await updatePassword('legacy', '12345678')).toEqual({ error: 'Please wait', retryAfter: 25 })
+  expect(await requestPasswordReauthentication()).toMatchObject({ error: 'Please wait', retryAfter: 25 })
+  expect(mockAnonSignIn).not.toHaveBeenCalled()
+  expect(mockCreateClient).not.toHaveBeenCalled()
 })

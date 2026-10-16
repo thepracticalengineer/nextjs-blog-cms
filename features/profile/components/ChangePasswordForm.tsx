@@ -1,5 +1,8 @@
 'use client'
 
+import { useAuthAbuse } from '@/components/auth/use-auth-abuse'
+import { AuthAbuseControls } from '@/components/auth/AuthAbuseControls'
+
 import Link from 'next/link'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -29,6 +32,7 @@ const schema = z
 type FormValues = z.infer<typeof schema>
 
 export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecovery?: boolean }) {
+  const abuse = useAuthAbuse()
   const [saving, setSaving] = useState(false)
   const [reauthenticationRequired, setReauthenticationRequired] = useState(false)
   const [message, setMessage] = useState('')
@@ -39,6 +43,7 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
   })
 
   async function onSubmit(values: FormValues) {
+    if (saving || abuse.isBlocked()) return
     if (reauthenticationRequired && !values.nonce) {
       setFieldError('nonce', { message: 'Enter the six-digit code from your email.' })
       return
@@ -48,6 +53,7 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
     if (!reauthenticationRequired) setMessage('')
     try {
       const result = await updatePassword(values.currentPassword, values.newPassword, values.nonce || undefined)
+      abuse.receive(result)
       if (result.reauthenticationRequired) setReauthenticationRequired(true)
       if (result.codeSent) setMessage('We sent a six-digit verification code to your account email. Enter it below to finish changing your password.')
       if (result.error) {
@@ -67,11 +73,13 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
   }
 
   async function resendCode() {
+    if (saving || abuse.isBlocked()) return
     setSaving(true)
     setError('')
     setMessage('')
     try {
       const result = await requestPasswordReauthentication()
+      abuse.receive(result)
       if (result.error) setError(result.error)
       if (result.codeSent) setMessage('We sent a new six-digit verification code to your account email.')
     } catch {
@@ -124,10 +132,11 @@ export function ChangePasswordForm({ useEmailRecovery = false }: { useEmailRecov
               <Label htmlFor="passwordNonce">Email verification code</Label>
               <Input id="passwordNonce" inputMode="numeric" autoComplete="one-time-code" aria-invalid={!!errors.nonce} aria-describedby={errors.nonce ? 'passwordNonceError' : undefined} {...register('nonce')} />
               {errors.nonce && <p id="passwordNonceError" className="text-xs text-destructive">{errors.nonce.message}</p>}
-              <Button type="button" variant="outline" onClick={resendCode} disabled={saving}>Resend code</Button>
+              <Button type="button" variant="outline" onClick={resendCode} disabled={saving || abuse.blocked}>Resend code</Button>
             </div>
           )}
-          <Button type="submit" disabled={saving}>
+          <AuthAbuseControls action="password" abuse={abuse} />
+          <Button type="submit" disabled={saving || abuse.blocked}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Update Password
           </Button>

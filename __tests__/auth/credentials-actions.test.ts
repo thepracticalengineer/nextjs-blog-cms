@@ -1,3 +1,5 @@
+vi.mock('@/lib/auth/abuse', () => ({ authAbuseBlock: vi.fn(async () => null), recordAuthLoginFailure: vi.fn(async () => {}) }))
+import { authAbuseBlock, recordAuthLoginFailure } from '@/lib/auth/abuse'
 import { AuthRetryableFetchError } from '@supabase/supabase-js'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const m = vi.hoisted(() => ({ client: vi.fn(), signIn: vi.fn(), signUp: vi.fn(), revalidate: vi.fn() }))
@@ -36,7 +38,7 @@ describe.each([['login', login, m.signIn], ['signup', register, m.signUp]] as co
     const error = { code: 'over_request_rate_limit', status: 429, message: 'PRIVATE' }
     if (kind === 'returned') provider.mockResolvedValue({ error })
     else provider.mockRejectedValue(error)
-    expect(await action(form())).toEqual({ error: 'Too many attempts. Wait a few minutes before trying again.' })
+    expect(await action(form())).toEqual({ error: 'Too many attempts. Wait a few minutes before trying again.', retryAfter: 60 })
   })
   it('recovers from client initialization failure', async () => { m.client.mockRejectedValue(new Error('PRIVATE')); expect(await action(form())).toEqual({ error: 'Unable to connect. Check your connection and try again.' }) })
   it('recovers from rejected provider requests', async () => { provider.mockRejectedValue(new Error('PRIVATE')); expect(await action(form())).toEqual({ error: 'Unable to connect. Check your connection and try again.' }) })
@@ -81,10 +83,28 @@ it.each([
   [{ code: 'email_provider_disabled' }, 'Email authentication is temporarily unavailable. Please try again later.'],
 ])('maps signup provider failure %j to safe guidance', async (error, message) => {
   m.signUp.mockResolvedValue({ error: { ...error, message: 'PRIVATE' } })
-  expect(await register(form())).toEqual({ error: message })
+  expect(await register(form())).toEqual({ error: message, ...('code' in error && error.code === 'over_email_send_rate_limit' ? { retryAfter: 60 } : {}) })
 })
 
 it.each([['login', login, m.signIn], ['signup', register, m.signUp]] as const)('%s reports returned SDK network failures as outages', async (_name, action, provider) => {
   provider.mockResolvedValue({ error: new AuthRetryableFetchError('PRIVATE fetch failure', 0) })
   expect(await action(form())).toEqual({ error: 'Authentication is temporarily unavailable. Please try again later.' })
+})
+
+it.each([['login', login, m.signIn], ['signup', register, m.signUp]] as const)('%s enforces the shared budget before Auth and passes the bot token', async (name, action, provider) => {
+  const blocked = { error: 'Please wait', retryAfter: 25 }
+  vi.mocked(authAbuseBlock).mockResolvedValueOnce(blocked)
+  const f = form(); f.set('captchaToken', 'test-token')
+  expect(await action(f)).toEqual(blocked)
+  expect(authAbuseBlock).toHaveBeenCalledWith(name, 'user@example.com', 'test-token')
+  expect(provider).not.toHaveBeenCalled()
+})
+
+it('records only failed credential responses, never successful logins', async () => {
+  for (let i = 0; i < 12; i++) expect(await login(form())).toEqual({ success: true })
+  expect(recordAuthLoginFailure).not.toHaveBeenCalled()
+  const failure = { code: 'invalid_credentials', status: 400, message: 'PRIVATE' }
+  m.signIn.mockResolvedValue({ error: failure })
+  await login(form())
+  expect(recordAuthLoginFailure).toHaveBeenCalledWith('user@example.com', failure)
 })
