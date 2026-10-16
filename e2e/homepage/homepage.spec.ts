@@ -5,6 +5,10 @@ test('reader introduction, navigation, keyboard search and newsletter work at ev
   await expect(page.getByRole('link', { name: 'Create Account', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Build systems that survive production.')
   await expect(page.getByRole('main')).toHaveCount(1)
+  await expect(page.getByRole('heading', { level: 1 }).locator('xpath=ancestor::aside')).toHaveCount(0)
+  const topics = page.getByRole('complementary', { name: 'Topics' })
+  if (page.viewportSize()!.width < 768) await expect(topics).toBeHidden()
+  else await expect(topics).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Reader navigation' }).getByRole('link', { name: 'Articles' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Dashboard/ })).toHaveCount(0)
   await expect(page.getByRole('link', { name: 'Explore articles' })).toHaveAttribute('href', '/blog')
@@ -30,4 +34,12 @@ test('reader introduction, navigation, keyboard search and newsletter work at ev
   await page.getByLabel('Email address', { exact: true }).fill('reader@example.test')
   await page.getByRole('button', { name: 'Subscribe', exact: true }).click()
   await expect(page.getByText("You're subscribed!")).toBeVisible()
+})
+
+
+test('the smoke-test Articles locator reaches the archive', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('navigation', { name: 'Reader navigation' }).getByRole('link', { name: 'Articles', exact: true }).click()
+  await expect(page).toHaveURL(/\/blog$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'All Articles' })).toBeVisible()
 })

@@ -8,19 +8,20 @@ export function HeaderSearch() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const triggerRef = useRef<HTMLButtonElement>(null)
-  const wasOpen = useRef(false)
+  const restoreFocus = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
     if (open) inputRef.current?.focus()
-    else if (wasOpen.current) triggerRef.current?.focus()
-    wasOpen.current = open
+    else if (restoreFocus.current) triggerRef.current?.focus()
+    restoreFocus.current = false
   }, [open])
 
   const expand = () => setOpen(true)
 
-  const collapse = () => {
+  const collapse = (restore = true) => {
+    restoreFocus.current = restore
     setOpen(false)
     setQuery('')
   }
@@ -30,7 +31,7 @@ export function HeaderSearch() {
     const q = query.trim()
     if (!q) { collapse(); return }
     router.push(`/blog?q=${encodeURIComponent(q)}`)
-    collapse()
+    collapse(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -53,7 +54,7 @@ export function HeaderSearch() {
           />
           <button
             type="button"
-            onClick={collapse}
+            onClick={() => collapse()}
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
             aria-label="Close search"
           >

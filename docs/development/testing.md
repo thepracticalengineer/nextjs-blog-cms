@@ -315,3 +315,8 @@ The introduction copy is a positioning hypothesis for issue #92. Representative
 reader feedback remains required; the engineering learning paths belong to #95.
 The primary “Explore articles” link points to the existing `/blog` archive until
 an editorially curated starting destination exists.
+
+Homepage fixtures include eight topic tags to check that mobile navigation leads
+straight into the feed, while Topics stays available from 768px. The supplemental
+right rail appears from 1280px to preserve article width on tablets. Archive-link
+checks use the same scoped, exact accessible-name locator as the main smoke suite.

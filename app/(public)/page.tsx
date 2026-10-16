@@ -42,7 +42,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_220px] gap-y-6 md:gap-y-0">
 
         {/* ── Left sidebar ── */}
-        <aside className="min-w-0 md:pr-5">
+        <div className="min-w-0 md:pr-5">
           <section aria-labelledby="audience-promise" className="rounded-lg border border-border bg-card p-5 mb-5 border-t-4 border-t-amber-400">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">The Practical Engineer</p>
             <h1 id="audience-promise" className="text-2xl font-bold leading-tight tracking-tight text-balance">
@@ -61,13 +61,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           <nav aria-label="Reader navigation" className="flex flex-wrap md:flex-col gap-1 mb-6">
             <Link href="/" aria-current="page" className="px-3 py-2 rounded-md bg-muted font-semibold text-sm">Home</Link>
             <Link href="/blog" className="px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
-              <span aria-hidden="true">✏️ </span>Articles
+              Articles
             </Link>
           </nav>
 
-          {/* Topics */}
+          {/* Keep the mobile feed directly after reader navigation. */}
           {sidebarTags.length > 0 && (
-            <div>
+            <aside aria-label="Topics" className="hidden md:block">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Topics</p>
               <ul className="flex flex-col gap-2">
                 {sidebarTags.map((tag) => (
@@ -81,9 +81,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   </li>
                 ))}
               </ul>
-            </div>
+            </aside>
           )}
-        </aside>
+        </div>
 
         {/* ── Main feed ── */}
         <section aria-labelledby="latest-articles" className="min-w-0 md:border-l xl:border-x md:border-border">

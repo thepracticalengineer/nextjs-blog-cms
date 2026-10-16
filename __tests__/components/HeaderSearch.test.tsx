@@ -14,3 +14,11 @@ it('returns keyboard focus to the search trigger after Escape', async () => {
   await user.keyboard('{Escape}')
   expect(screen.getByRole('button', { name: 'Search' })).toHaveFocus()
 })
+
+it('leaves navigation focus management to Next after submitting a search', async () => {
+  const user = userEvent.setup()
+  render(<HeaderSearch />)
+  await user.click(screen.getByRole('button', { name: 'Search' }))
+  await user.type(screen.getByRole('textbox', { name: 'Search articles' }), 'queues{Enter}')
+  expect(screen.getByRole('button', { name: 'Search' })).not.toHaveFocus()
+})

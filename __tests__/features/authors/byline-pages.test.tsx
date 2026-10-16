@@ -65,3 +65,8 @@ it('introduces the audience and offers reader destinations without a public dash
   expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
   expect(document.querySelector('main')).toBeNull()
 })
+
+it('keeps the primary heading outside complementary landmarks', async () => {
+  render(await HomePage({ searchParams: Promise.resolve({}) }))
+  expect(screen.getByRole('heading', { level: 1 }).closest('aside')).toBeNull()
+})

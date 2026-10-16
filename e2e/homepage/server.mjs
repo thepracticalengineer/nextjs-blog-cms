@@ -7,7 +7,9 @@ createServer((request, response) => {
     id: 'homepage-fixture', title: 'Designing a resilient job queue', slug: 'resilient-job-queue',
     excerpt: 'Retries and failure handling.', published_at: '2026-10-01T00:00:00Z',
     reading_time_minutes: 5, author: null, category: null, tags: [],
-  }] : []
+  }] : path === '/rest/v1/rpc/get_popular_tags' ? Array.from({ length: 8 }, (_, i) => ({
+    id: `tag-${i}`, name: `Engineering topic ${i + 1}`, slug: `topic-${i + 1}`, count: 1,
+  })) : []
   response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Range': '0-0/1' })
   response.end(JSON.stringify(data))
 }).listen(54995, '127.0.0.1')
