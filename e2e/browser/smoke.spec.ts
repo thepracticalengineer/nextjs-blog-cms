@@ -49,7 +49,7 @@ test.afterEach(() => {
 
 test('public navigation, registration validation and newsletter subscription', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('link', { name: '✏️ Articles' }).click()
+  await page.getByRole('navigation', { name: 'Reader navigation' }).getByRole('link', { name: 'Articles', exact: true }).click()
   await expect(page).toHaveURL(/\/blog$/)
   await page.goto('/blog/browser-public-article')
   await expect(page.getByRole('heading', { name: 'Browser Public Article', exact: true })).toBeVisible()

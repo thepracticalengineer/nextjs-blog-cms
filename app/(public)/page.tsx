@@ -1,3 +1,4 @@
+import { SubscribeForm } from '@/components/newsletter/SubscribeForm'
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -38,32 +39,35 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     <div className="max-w-6xl mx-auto px-4 py-6">
       <AnalyticsPage pathname="/" title="Home | The Practical Engineer" />
       {/* 3-column grid — collapses to single column on small screens */}
-      <div className="grid grid-cols-1 md:grid-cols-[200px_1fr_220px] gap-0">
+      <div className="grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)_220px] gap-y-6 md:gap-y-0">
 
         {/* ── Left sidebar ── */}
-        <aside className="hidden md:block pr-4">
-          {/* Nav */}
-          <nav className="flex flex-col gap-1 mb-6">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted font-semibold text-sm text-foreground">
-              <span>🏠</span> Home
-            </div>
-            <Link
-              href="/blog"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <span>✏️</span> Articles
+        <div className="min-w-0 md:pr-5">
+          <section aria-labelledby="audience-promise" className="rounded-lg border border-border bg-card p-5 mb-5 border-t-4 border-t-amber-400">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">The Practical Engineer</p>
+            <h1 id="audience-promise" className="text-2xl font-bold leading-tight tracking-tight text-balance">
+              Build systems that survive production.
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Practical engineering guides, working examples, and lessons from production failures—for developers moving beyond shipping features.
+            </p>
+            <Link href="/blog" className="mt-5 flex min-h-10 items-center justify-center rounded-md bg-foreground px-3 py-2 text-sm font-semibold text-background hover:opacity-80 transition-opacity">
+              Explore articles
             </Link>
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            >
-              <span>⚙️</span> Dashboard
+            <a href="#newsletter" className="mt-3 block py-1 text-center text-sm underline underline-offset-4 hover:text-muted-foreground">
+              Get new articles by email
+            </a>
+          </section>
+          <nav aria-label="Reader navigation" className="flex flex-wrap md:flex-col gap-1 mb-6">
+            <Link href="/" aria-current="page" className="px-3 py-2 rounded-md bg-muted font-semibold text-sm">Home</Link>
+            <Link href="/blog" className="px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+              Articles
             </Link>
           </nav>
 
-          {/* Topics */}
+          {/* Keep the mobile feed directly after reader navigation. */}
           {sidebarTags.length > 0 && (
-            <div>
+            <aside aria-label="Topics" className="hidden md:block">
               <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">Topics</p>
               <ul className="flex flex-col gap-2">
                 {sidebarTags.map((tag) => (
@@ -77,12 +81,13 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                   </li>
                 ))}
               </ul>
-            </div>
+            </aside>
           )}
-        </aside>
+        </div>
 
         {/* ── Main feed ── */}
-        <main className="md:border-x md:border-border">
+        <section aria-labelledby="latest-articles" className="min-w-0 md:border-l xl:border-x md:border-border">
+          <h2 id="latest-articles" className="px-5 pb-4 text-sm font-semibold uppercase tracking-widest text-muted-foreground">Latest articles</h2>
           {posts.length === 0 ? (
             <div className="py-16 text-center text-muted-foreground text-sm">
               No articles yet — check back soon.
@@ -92,10 +97,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <ArticleCard key={post.id} post={post} featured={i === 0} />
             ))
           )}
-        </main>
+        </section>
 
         {/* ── Right sidebar ── */}
-        <aside className="hidden md:flex flex-col gap-4 pl-4">
+        <aside className="hidden xl:flex flex-col gap-4 pl-4">
 
           {/* Popular Tags */}
           {popularTags.length > 0 && (
@@ -144,6 +149,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
         </aside>
       </div>
+      <section id="newsletter" aria-label="Newsletter subscription" className="scroll-mt-40">
+        <SubscribeForm />
+      </section>
     </div>
   )
 }

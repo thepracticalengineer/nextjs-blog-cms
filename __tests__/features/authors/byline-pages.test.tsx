@@ -55,3 +55,18 @@ it('sends stray auth codes to a safe login error without forwarding the code', a
   await expect(HomePage({ searchParams: Promise.resolve({ code: 'private-code' }) })).rejects.toThrow('redirect:/login?error=auth_callback_failed')
   expect(redirect).toHaveBeenCalledWith('/login?error=auth_callback_failed')
 })
+
+
+it('introduces the audience and offers reader destinations without a public dashboard link', async () => {
+  render(await HomePage({ searchParams: Promise.resolve({}) }))
+  expect(screen.getByRole('heading', { level: 1, name: 'Build systems that survive production.' })).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Explore articles' })).toHaveAttribute('href', '/blog')
+  expect(screen.getByRole('link', { name: 'Get new articles by email' })).toHaveAttribute('href', '#newsletter')
+  expect(screen.queryByRole('link', { name: /Dashboard/ })).not.toBeInTheDocument()
+  expect(document.querySelector('main')).toBeNull()
+})
+
+it('keeps the primary heading outside complementary landmarks', async () => {
+  render(await HomePage({ searchParams: Promise.resolve({}) }))
+  expect(screen.getByRole('heading', { level: 1 }).closest('aside')).toBeNull()
+})
