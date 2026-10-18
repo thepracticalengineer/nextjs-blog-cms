@@ -46,7 +46,7 @@
     "@google/genai": "2.28.0",
     "@hookform/resolvers": "5.9.1",
     "@supabase/ssr": "0.12.7",
-    "@supabase/supabase-js": "2.117.3",
+    "@supabase/supabase-js": "2.118.0",
     "@tiptap/core": "3.31.4",
     "@tiptap/extension-character-count": "3.31.4",
     "@tiptap/extension-color": "3.31.4",
