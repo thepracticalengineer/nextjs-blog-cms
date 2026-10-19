@@ -18,13 +18,34 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   const [url, setUrl] = useState(initialFile ? '' : initial?.src ?? '')
   const [image, setImage] = useState<ImageValue | undefined>(initialFile ? undefined : initial)
   const [alt, setAlt] = useState(initial?.alt ?? '')
-  const [decorative, setDecorative] = useState(false)
+  const initiallyDecorative = !cover && !!initial && !initial.alt.trim()
+  const [decorative, setDecorative] = useState(initiallyDecorative)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [error, setError] = useState(initialFile ? imageFileError(initialFile) : undefined)
   const [busy, setBusy] = useState(false)
   const [phase, setPhase] = useState<'upload' | 'validate'>('upload')
   const [progress, setProgress] = useState(0)
   const request = useRef<AbortController | null>(null)
+  const inFlight = useRef(false)
   useEffect(() => () => request.current?.abort(), [])
+
+  const dirty = !!file || url !== (initial?.src ?? '') || alt !== (initial?.alt ?? '') || decorative !== initiallyDecorative
+  function close() {
+    if (dirty || inFlight.current) {
+      // A pending save must never apply behind the discard confirmation.
+      // Uploads may continue while deciding, but URL validation can be retried.
+      if (inFlight.current && phase === 'validate') {
+        request.current?.abort()
+        inFlight.current = false
+        setBusy(false)
+      }
+      setConfirmDiscard(true)
+    } else onClose()
+  }
+  function discard() {
+    request.current?.abort()
+    onClose()
+  }
 
   function chooseFile(next: File) {
     setFile(next)
@@ -33,7 +54,8 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
     setError(imageFileError(next))
   }
   async function upload() {
-    if (!file || busy) return
+    if (!file || inFlight.current) return
+    inFlight.current = true
     setError(undefined)
     setBusy(true)
     setPhase('upload')
@@ -46,11 +68,12 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
       setImage(result)
       setUrl(result.src)
     } catch (error) { if (!controller.signal.aborted) setError((error as Error).message) }
-    finally { if (!controller.signal.aborted) setBusy(false) }
+    finally { if (!controller.signal.aborted) { inFlight.current = false; setBusy(false) } }
   }
   async function save() {
-    if (busy) return
+    if (inFlight.current) return
     if (!decorative && !alt.trim()) { setError(cover ? 'Describe what the cover image communicates for readers who cannot see it.' : 'Describe what the image communicates, or mark an inline image as decorative.'); return }
+    inFlight.current = true
     setError(undefined)
     setBusy(true)
     setPhase('validate')
@@ -65,46 +88,62 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
       onSave({ src, alt: decorative ? '' : alt.trim(), ...dimensions })
       onClose()
     } catch (error) { if (!controller.signal.aborted) setError((error as Error).message) }
-    finally { if (!controller.signal.aborted) setBusy(false) }
+    finally { if (!controller.signal.aborted) { inFlight.current = false; setBusy(false) } }
   }
 
   return (
-    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" onPaste={event => {
+    <Dialog open onOpenChange={open => { if (!open) close() }}>
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden sm:max-w-lg" onPaste={event => {
         const pasted = pastedImageFile(event.clipboardData)
         if (pasted && !busy) { event.preventDefault(); chooseFile(pasted) }
       }}>
-        <DialogHeader>
+        <DialogHeader className="min-w-0 pr-6 pb-4">
           <DialogTitle>{cover ? 'Cover image' : 'Article image'}</DialogTitle>
           <DialogDescription>Choose or paste a JPEG, PNG or WebP up to 4 MB, or use a publicly accessible image URL. Uploaded images are public to anyone with their URL.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor={`${id}-file`}>Image file</Label>
-          <Input id={`${id}-file`} type="file" accept={IMAGE_ACCEPT} disabled={busy} onChange={event => {
-            const next = event.target.files?.[0]
-            if (next) chooseFile(next)
-          }} />
-          {file && <p className="text-sm break-words">Selected: {file.name || 'Pasted image'}</p>}
-          <Button type="button" variant="outline" disabled={!file || busy || !!imageFileError(file)} onClick={() => void upload()}>{image && image.src === url ? 'Upload again' : 'Upload image / retry'}</Button>
-          {busy && <div role="status" aria-live="polite">{phase === 'upload' && <progress aria-label="Image upload progress" value={progress} max={100} className="w-full" />}<p>{phase === 'validate' ? 'Checking image URL…' : progress === 100 ? 'Optimizing and storing image…' : progress ? `Uploading image: ${progress}%` : 'Preparing image…'}</p></div>}
-          {image && <p role="status">Image ready{image.width && image.height ? ` (${image.width} × ${image.height})` : ''}. Add its description, then use the image.</p>}
+        <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain py-1 [overflow-wrap:anywhere]">
+          <div className="min-w-0 space-y-2">
+            <Label htmlFor={`${id}-file`}>Image file</Label>
+            <Input id={`${id}-file`} type="file" accept={IMAGE_ACCEPT} disabled={busy} onChange={event => {
+              const next = event.target.files?.[0]
+              if (next) chooseFile(next)
+            }} />
+            {file && <p className="text-sm [overflow-wrap:anywhere]" title={file.name}>Selected: {file.name || 'Pasted image'}</p>}
+            <Button type="button" variant="outline" disabled={!file || busy || !!imageFileError(file)} onClick={() => void upload()}>{image && image.src === url ? 'Upload again' : 'Upload image / retry'}</Button>
+            {busy && <div role="status" aria-live="polite">{phase === 'upload' && <progress aria-label="Image upload progress" value={progress} max={100} className="w-full" />}<p>{phase === 'validate' ? 'Checking image URL…' : progress === 100 ? 'Optimizing and storing image…' : progress ? `Uploading image: ${progress}%` : 'Preparing image…'}</p></div>}
+            {image && <p role="status">{'reused' in image && image.reused ? 'This image has already been uploaded. Reusing the existing image' : 'Image ready'}{image.width && image.height ? ` (${image.width} × ${image.height})` : ''}. Add its description, then use the image.</p>}
+          </div>
+          <div className="mt-4 min-w-0 space-y-2">
+            <Label htmlFor={`${id}-url`}>Image URL</Label>
+            <Input id={`${id}-url`} value={url} disabled={busy} placeholder="https://…" onChange={event => { setUrl(event.target.value); setImage(undefined); setError(undefined) }} />
+            <p className="text-xs text-muted-foreground">URLs must use a configured HTTPS image host or a local image path. Upload a file if the host is unsupported.</p>
+          </div>
+          <div className="mt-4 min-w-0 space-y-2">
+            <Label htmlFor={`${id}-alt`}>Image description (alt text)</Label>
+            <Input id={`${id}-alt`} value={alt} maxLength={1000} disabled={busy || decorative} onChange={event => setAlt(event.target.value)} aria-describedby={`${id}-alt-help`} />
+            <p id={`${id}-alt-help`} className="text-xs text-muted-foreground">Describe the relevant subject or information for readers who cannot see the image.</p>
+            {!cover && <label className="flex gap-2 items-center"><input type="checkbox" checked={decorative} disabled={busy} onChange={event => setDecorative(event.target.checked)} />This image is decorative</label>}
+          </div>
+          {error && <p role="alert" className="text-destructive">{error} Your document input is preserved.</p>}
         </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${id}-url`}>Image URL</Label>
-          <Input id={`${id}-url`} value={url} disabled={busy} placeholder="https://…" onChange={event => { setUrl(event.target.value); setImage(undefined); setError(undefined) }} />
-          <p className="text-xs text-muted-foreground">URLs must use a configured HTTPS image host or a local image path. Upload a file if the host is unsupported.</p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`${id}-alt`}>Image description (alt text)</Label>
-          <Input id={`${id}-alt`} value={alt} maxLength={1000} disabled={busy || decorative} onChange={event => setAlt(event.target.value)} aria-describedby={`${id}-alt-help`} />
-          <p id={`${id}-alt-help`} className="text-xs text-muted-foreground">Describe the relevant subject or information for readers who cannot see the image.</p>
-          {!cover && <label className="flex gap-2 items-center"><input type="checkbox" checked={decorative} disabled={busy} onChange={event => setDecorative(event.target.checked)} />This image is decorative</label>}
-        </div>
-        {error && <p role="alert" className="text-destructive">{error} Your document input is preserved.</p>}
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <DialogFooter className="mt-4 min-w-0">
+          <Button type="button" variant="outline" onClick={close}>Cancel</Button>
           <Button type="button" disabled={busy || !url.trim()} onClick={() => void save()}>Use image</Button>
         </DialogFooter>
+        <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Discard image changes?</DialogTitle>
+              <DialogDescription>{busy
+                ? 'This will cancel the browser request and discard your image input. The server may still finish uploading; you can reuse the image by uploading it again.'
+                : 'Your file selection, image URL and description have not been applied to the post.'}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" autoFocus onClick={() => setConfirmDiscard(false)}>Keep editing</Button>
+              <Button type="button" variant="destructive" onClick={discard}>Discard changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   )

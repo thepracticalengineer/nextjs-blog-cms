@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto'
 import { authorizeApi } from '@/lib/auth/api'
-import { createServiceClient } from '@/lib/supabase/service'
+import { storeImage } from '@/features/posts/media/store'
 import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
 import { optimizeImage } from '@/features/posts/media/optimize'
 import { MAX_IMAGE_BYTES } from '@/features/posts/media/validation'
@@ -58,16 +57,12 @@ export async function POST(request: Request) {
         ? error.message : 'This image could not be decoded. Choose a valid, non-animated image under 40 megapixels.'
       return failure(message, 422)
     }
-    const db = createServiceClient()
-    const path = `${profile.id}/${randomUUID()}.webp`
-    const bucket = db.storage.from('post-media')
-    const { data: publicUrl } = bucket.getPublicUrl(path)
-    // Register before uploading so even interrupted storage writes are reclaimable.
-    const { error: registrationError } = await db.from('post_media').insert({ owner_id: profile.id, path, url: publicUrl.publicUrl })
-    if (registrationError) return failure('Image storage is unavailable. Retry shortly or ask an administrator to check image storage.', 503)
-    const { error: uploadError } = await bucket.upload(path, optimized.data, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })
-    if (uploadError) return failure('Image upload failed. Check your connection and retry. Your writing is preserved.', 503)
-    return Response.json({ src: publicUrl.publicUrl, width: optimized.width, height: optimized.height })
+    try {
+      const stored = await storeImage(profile.id, optimized.data)
+      return Response.json({ ...stored, width: optimized.width, height: optimized.height })
+    } catch (error) {
+      return failure(error instanceof Error ? error.message : 'Image storage is unavailable. Retry shortly.', 503)
+    }
   } catch {
     return failure('Image request failed. Check your connection, choose a valid file and retry. Your writing is preserved.', 400)
   }
