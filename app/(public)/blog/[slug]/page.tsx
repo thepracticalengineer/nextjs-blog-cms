@@ -49,8 +49,8 @@ export default async function PostPage({ params }: PostPageProps) {
   }
 
   const [author, latestPosts] = post.author ? await Promise.all([
-    getPublicAuthor(post.author.id),
-    getAuthorLatestPosts(post.author.id, post.id),
+    getPublicAuthor(post.author.id).catch(() => null),
+    getAuthorLatestPosts(post.author.id, post.id).catch(() => []),
   ]) : [null, []]
 
   const baseUrl = siteUrl()

@@ -12,7 +12,7 @@ const externalLinks = [
 ] as const
 const linkClass = 'rounded-sm hover:text-primary hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary'
 
-export function AuthorSidebar({ author, posts }: { author: PublicAuthor; posts: AuthorLatestPost[] }) {
+export function AuthorSidebar({ author, posts }: Readonly<{ author: PublicAuthor; posts: AuthorLatestPost[] }>) {
   const name = authorName(author.full_name)
   const avatar = publicWebUrl(author.avatar_url)
   const links = externalLinks.flatMap(([field, label]) => {

@@ -2,7 +2,7 @@
 
 Public article bylines and avatars link to `/authors/<profile UUID>`. Profiles show the author's public name, avatar, biography and website/social links, followed by their published articles, newest first, with 12 articles per page. Authors manage this information in **Dashboard → Profile**.
 
-Public article pages also show an author sidebar: the first card contains the public name/avatar linked to the author's profile, biography and valid website/social links. Empty optional fields are omitted, blank names fall back to “Author”, and missing or failed avatars use initials. If the public author is unavailable, the article keeps its existing byline fallback and omits the sidebar.
+Public article pages also show an author sidebar: the first card contains the public name/avatar linked to the author's profile, biography and valid website/social links. Empty optional fields are omitted, blank names fall back to “Author”, and missing or failed avatars use initials. Sidebar lookups are best-effort: a failed latest-post query hides only the second card. If the public author is unavailable or its lookup fails, the article keeps its existing byline fallback and omits the sidebar.
 
 A second “More from <author name>” card contains up to two other published articles from that author, ordered by publication date descending (null dates last), then ID descending to break ties. The current article is excluded in the database query before limiting results. One other article produces one link; no other articles hides the second card. The query selects only IDs, titles and slugs from published posts and never reads private working copies.
 

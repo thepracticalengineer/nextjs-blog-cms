@@ -71,3 +71,14 @@ for (const width of [320, 1280]) {
     await expect(page.getByRole('heading', { level: 1, name: 'A'.repeat(120), exact: true })).toBeVisible()
   })
 }
+
+test('article byline remains keyboard accessible alongside the sidebar profile link', async ({ page }) => {
+  await page.goto('/blog/queue-guide-9')
+  await expect(page.getByRole('link', { name: 'Jane Doe', exact: true })).toHaveCount(2)
+  const byline = page.getByRole('article').getByRole('link', { name: 'Jane Doe', exact: true })
+  await byline.focus()
+  await expect(byline).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/authors\/5af2b64d-c7c0-465f-901f-75cf70737172$/)
+  await expect(page.getByRole('heading', { level: 1, name: 'Jane Doe', exact: true })).toBeVisible()
+})

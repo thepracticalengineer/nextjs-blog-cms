@@ -26,6 +26,22 @@ const extraPosts = [
   { ...post, id: 'private-working-copy', slug: 'private-working-copy', title: 'Private working copy', status: 'draft' },
 ]
 
+function matchingPosts(params) {
+  const slugFilter = params.get('slug')
+  const authorFilter = params.get('author_id')
+  const statusFilter = params.get('status')
+  const exclude = params.get('id')
+  let matches = slugFilter || authorFilter ? [...posts, ...extraPosts] : posts
+  if (slugFilter) matches = matches.filter(row => `eq.${row.slug}` === slugFilter)
+  if (authorFilter) matches = matches.filter(row => `eq.${row.author_id}` === authorFilter)
+  if (statusFilter) matches = matches.filter(row => `eq.${row.status}` === statusFilter)
+  if (exclude?.startsWith('neq.')) matches = matches.filter(row => row.id !== exclude.slice(4))
+  if (params.get('order') === 'published_at.desc.nullslast,id.desc') {
+    matches = [...matches].sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? '') || b.id.localeCompare(a.id))
+  }
+  return matches
+}
+
 // Synthetic, read-only Data API; no Auth, database writes or external services.
 createServer((request, response) => {
   if (request.method !== 'GET' && request.method !== 'HEAD' && request.url !== '/rest/v1/rpc/get_popular_tags') {
@@ -38,18 +54,7 @@ createServer((request, response) => {
   let offset = 0
   switch (url.pathname) {
     case '/rest/v1/posts': {
-      const slugFilter = url.searchParams.get('slug')
-      const authorFilter = url.searchParams.get('author_id')
-      const statusFilter = url.searchParams.get('status')
-      const exclude = url.searchParams.get('id')
-      let matches = slugFilter || authorFilter ? [...posts, ...extraPosts] : posts
-      if (slugFilter) matches = matches.filter(row => `eq.${row.slug}` === slugFilter)
-      if (authorFilter) matches = matches.filter(row => `eq.${row.author_id}` === authorFilter)
-      if (statusFilter) matches = matches.filter(row => `eq.${row.status}` === statusFilter)
-      if (exclude?.startsWith('neq.')) matches = matches.filter(row => row.id !== exclude.slice(4))
-      if (url.searchParams.get('order') === 'published_at.desc.nullslast,id.desc') {
-        matches = [...matches].sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? '') || b.id.localeCompare(a.id))
-      }
+      const matches = matchingPosts(url.searchParams)
       total = matches.length
       offset = Number(url.searchParams.get('offset') || 0)
       const limit = Number(url.searchParams.get('limit') || total)

@@ -43,7 +43,7 @@ test.afterAll(async () => {
 
 test('anonymous reader follows byline and browses only this author’s published posts', async ({ page, request }) => {
   await page.goto(`/blog/${marker}-12`)
-  const byline = page.getByRole('link', { name: 'Same Name', exact: true })
+  const byline = page.getByRole('article').getByRole('link', { name: 'Same Name', exact: true })
   await byline.focus()
   await expect(byline).toBeFocused()
   await page.keyboard.press('Enter')

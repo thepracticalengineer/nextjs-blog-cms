@@ -85,3 +85,19 @@ it('loads the article author public profile and renders their other articles', a
   expect(screen.getByText('Author biography')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Other article' })).toHaveAttribute('href', '/blog/other')
 })
+
+it('keeps the article readable when the public author lookup fails', async () => {
+  vi.mocked(getPublicAuthor).mockRejectedValue(new Error('Profile unavailable'))
+  render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
+  expect(screen.getByRole('heading', { level: 1, name: 'Engineering' })).toBeInTheDocument()
+  expect(screen.queryByRole('complementary')).toBeNull()
+})
+
+it('keeps the author card when latest-post recommendations fail', async () => {
+  vi.mocked(getPublicAuthor).mockResolvedValue({ ...post.author, bio: 'Author biography' } as never)
+  vi.mocked(getAuthorLatestPosts).mockRejectedValue(new Error('Recommendations unavailable'))
+  render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
+  expect(screen.getByRole('heading', { level: 1, name: 'Engineering' })).toBeInTheDocument()
+  expect(screen.getByRole('complementary', { name: 'About the author' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: /More from/ })).toBeNull()
+})
