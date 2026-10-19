@@ -343,3 +343,10 @@ offline indexing readiness, ownership filters and storage failures. Run
 `node --test scripts/backfill-post-media.test.mjs` for resumable batch hashing,
 missing-object markers, transient failures and dry-run behavior. The full upload/storage
 flow remains covered by `e2e/browser/post-media.spec.ts` on a dedicated test stack.
+
+## Comment reactions
+
+See [comment reaction verification](../features/comment-reactions.md#migration-and-verification)
+for focused unit, desktop/mobile control, database-policy, concurrency and live
+article action checks. Isolated browser fixtures do not require Auth or database
+access; SQL and real-action E2E tests require the dedicated disposable stack.

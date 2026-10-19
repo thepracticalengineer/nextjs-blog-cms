@@ -106,6 +106,15 @@ export type Database = {
         }
         Relationships: []
       }
+      comment_reactions: {
+        Row: { comment_id: string; user_id: string; reaction: string }
+        Insert: { comment_id: string; user_id: string; reaction: string }
+        Update: { comment_id?: string; user_id?: string; reaction?: string }
+        Relationships: [
+          { foreignKeyName: "comment_reactions_comment_id_fkey"; columns: ["comment_id"]; isOneToOne: false; referencedRelation: "comments"; referencedColumns: ["id"] },
+          { foreignKeyName: "comment_reactions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       comments: {
         Row: {
           author_id: string
@@ -355,6 +364,14 @@ export type Database = {
       }
     }
     Functions: {
+      get_comment_reactions: {
+        Args: { p_post_id: string; p_comment_id?: string | null }
+        Returns: { comment_id: string; counts: Json; selection: string | null }[]
+      }
+      set_comment_reaction: {
+        Args: { p_comment_id: string; p_reaction: string | null }
+        Returns: Json
+      }
       record_auth_login_failure: { Args: { p_account_key: string }; Returns: undefined }
       reserve_auth_attempt: {
         Args: { p_action: string; p_ip_key: string; p_account_key: string; p_bot_protection?: boolean; p_challenge_passed?: boolean; p_challenge_failed?: boolean; p_phase?: string; p_ip_attempts?: number }

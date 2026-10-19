@@ -203,6 +203,11 @@ jobs:
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media_dedup.sql
           node database/tests/post-media-concurrency.mjs
 
+      - name: Verify comment reaction eligibility, privacy and concurrency
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/comment_reactions.sql
+          node database/tests/comment-reactions-concurrency.mjs
+
       - name: Verify newsletter queue retry and cancellation contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
 
@@ -225,6 +230,9 @@ jobs:
 
       - name: Verify image dialog layout, dismissal and upload retries
         run: pnpm exec playwright test --config=e2e/image-dialog.config.ts
+
+      - name: Verify comment reaction controls on desktop and mobile
+        run: pnpm exec playwright test --config=e2e/comment-reactions.config.ts
 
       - name: Verify homepage reader navigation and responsive controls
         run: pnpm exec playwright test --config=e2e/homepage.config.ts

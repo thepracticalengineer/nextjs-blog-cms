@@ -1,4 +1,7 @@
 // features/comments/components/CommentSection.tsx
+import { AuthProvider } from '@/features/auth/context/AuthProvider'
+import { CommentReactionProvider } from './CommentReactionProvider'
+import { readCommentReactions } from '../reaction-actions'
 import { createClient } from '@/lib/supabase/server'
 import { getCommentsByPost } from '../queries'
 import { CommentForm } from './CommentForm'
@@ -24,7 +27,7 @@ export async function CommentSection({ postId, postSlug }: CommentSectionProps) 
     currentProfile = data
   }
 
-  const comments = await getCommentsByPost(postId)
+  const [comments, reactions] = await Promise.all([getCommentsByPost(postId), readCommentReactions(postId)])
 
   return (
     <section className="mt-12 pt-8 border-t border-border space-y-8">
@@ -36,12 +39,16 @@ export async function CommentSection({ postId, postSlug }: CommentSectionProps) 
           authorName={currentProfile?.full_name ?? null}
         />
       </div>
-      <CommentList
-        comments={comments}
-        currentProfileId={currentProfile?.id ?? null}
-        currentProfileRole={(currentProfile?.role as Role) ?? null}
-        postSlug={postSlug}
-      />
+      <AuthProvider>
+        <CommentReactionProvider postId={postId} initialData={reactions.data ?? null} initialViewerId={reactions.viewerId ?? null}>
+          <CommentList
+            comments={comments}
+            currentProfileId={currentProfile?.id ?? null}
+            currentProfileRole={(currentProfile?.role as Role) ?? null}
+            postSlug={postSlug}
+          />
+        </CommentReactionProvider>
+      </AuthProvider>
     </section>
   )
 }

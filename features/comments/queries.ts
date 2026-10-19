@@ -20,6 +20,8 @@ export async function getCommentsByPost(postId: string): Promise<CommentWithAuth
     .select(COMMENT_SELECT)
     .eq('post_id', postId)
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(1000)
 
   if (error) throw error
   return (data ?? []) as unknown as CommentWithAuthor[]

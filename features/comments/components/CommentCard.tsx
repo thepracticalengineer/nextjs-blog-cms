@@ -1,6 +1,7 @@
 // features/comments/components/CommentCard.tsx
 import { formatDistanceToNow } from 'date-fns'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { CommentReactions } from './CommentReactions'
 import { DeleteCommentButton } from './DeleteCommentButton'
 import type { CommentWithAuthor } from '../types'
 import type { Role } from '@/lib/permissions'
@@ -41,6 +42,7 @@ export function CommentCard({ comment, currentProfileId, currentProfileRole, pos
           )}
         </div>
         <p className="text-sm text-muted-foreground leading-relaxed">{comment.content}</p>
+        <CommentReactions commentId={comment.id} />
       </div>
     </div>
   )
