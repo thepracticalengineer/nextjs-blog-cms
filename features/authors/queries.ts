@@ -41,3 +41,20 @@ export async function getAuthorPublishedPosts(id: string, page = 1, limit = 12):
   if (error) throw error
   return { posts: (data ?? []).map(normalizeSummary) as PublicPostSummary[], total: count ?? 0 }
 }
+
+export type AuthorLatestPost = Pick<PublicPostSummary, 'id' | 'title' | 'slug'>
+
+export async function getAuthorLatestPosts(id: string, currentPostId: string): Promise<AuthorLatestPost[]> {
+  if (!UUID.test(id)) return []
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('posts')
+    .select('id, title, slug')
+    .eq('author_id', id)
+    .eq('status', 'published')
+    .neq('id', currentPostId)
+    .order('published_at', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(2)
+  if (error) throw error
+  return data ?? []
+}

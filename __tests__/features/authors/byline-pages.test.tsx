@@ -3,8 +3,10 @@ import { redirect } from 'next/navigation'
 import { render, screen } from '@testing-library/react'
 import HomePage from '@/app/(public)/page'
 import PostPage from '@/app/(public)/blog/[slug]/page'
+import { getPublicAuthor, getAuthorLatestPosts } from '@/features/authors/queries'
 import { getPostBySlug, getPublishedPosts } from '@/features/posts/queries'
 
+vi.mock('@/features/authors/queries', () => ({ getPublicAuthor: vi.fn().mockResolvedValue(null), getAuthorLatestPosts: vi.fn().mockResolvedValue([]) }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn((path: string) => { throw new Error(`redirect:${path}`) }) }))
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPublishedPosts: vi.fn(), getPopularTags: vi.fn().mockResolvedValue([]) }))
 vi.mock('next/link', () => ({ default: ({ children, ...props }: React.ComponentProps<'a'>) => <a {...props}>{children}</a> }))
@@ -26,6 +28,8 @@ const post = {
   author: { id: 'author-1', full_name: 'Jane Doe', avatar_url: null },
 }
 beforeEach(() => {
+  vi.mocked(getPublicAuthor).mockResolvedValue(null)
+  vi.mocked(getAuthorLatestPosts).mockResolvedValue([])
   vi.mocked(getPostBySlug).mockResolvedValue(post as never)
   vi.mocked(getPublishedPosts).mockResolvedValue({ posts: [post], total: 1 } as never)
 })
@@ -69,4 +73,31 @@ it('introduces the audience and offers reader destinations without a public dash
 it('keeps the primary heading outside complementary landmarks', async () => {
   render(await HomePage({ searchParams: Promise.resolve({}) }))
   expect(screen.getByRole('heading', { level: 1 }).closest('aside')).toBeNull()
+})
+
+it('loads the article author public profile and renders their other articles', async () => {
+  vi.mocked(getPublicAuthor).mockResolvedValue({ ...post.author, bio: 'Author biography' } as never)
+  vi.mocked(getAuthorLatestPosts).mockResolvedValue([{ id: 'other', slug: 'other', title: 'Other article' }])
+  render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
+  expect(getPublicAuthor).toHaveBeenCalledWith('author-1')
+  expect(getAuthorLatestPosts).toHaveBeenCalledWith('author-1', 'post')
+  expect(screen.getByRole('complementary', { name: 'About the author' })).toBeInTheDocument()
+  expect(screen.getByText('Author biography')).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Other article' })).toHaveAttribute('href', '/blog/other')
+})
+
+it('keeps the article readable when the public author lookup fails', async () => {
+  vi.mocked(getPublicAuthor).mockRejectedValue(new Error('Profile unavailable'))
+  render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
+  expect(screen.getByRole('heading', { level: 1, name: 'Engineering' })).toBeInTheDocument()
+  expect(screen.queryByRole('complementary')).toBeNull()
+})
+
+it('keeps the author card when latest-post recommendations fail', async () => {
+  vi.mocked(getPublicAuthor).mockResolvedValue({ ...post.author, bio: 'Author biography' } as never)
+  vi.mocked(getAuthorLatestPosts).mockRejectedValue(new Error('Recommendations unavailable'))
+  render(await PostPage({ params: Promise.resolve({ slug: post.slug }) }))
+  expect(screen.getByRole('heading', { level: 1, name: 'Engineering' })).toBeInTheDocument()
+  expect(screen.getByRole('complementary', { name: 'About the author' })).toBeInTheDocument()
+  expect(screen.queryByRole('heading', { name: /More from/ })).toBeNull()
 })

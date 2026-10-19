@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 
 import { createClient } from '@/lib/supabase/server'
-import { getAuthorPublishedPosts, getPublicAuthor, parseAuthorPage } from '@/features/authors/queries'
+import { getAuthorLatestPosts, getAuthorPublishedPosts, getPublicAuthor, parseAuthorPage } from '@/features/authors/queries'
 import { PUBLIC_POST_SELECT } from '@/features/posts/queries'
 
 const id = 'bc565d83-86ca-49b0-b23f-90db6c099567'
@@ -11,10 +11,10 @@ const mockCreateClient = vi.mocked(createClient)
 
 function mockQuery(result: { data?: unknown; count?: number | null; error?: unknown }) {
   const chain = {
-    select: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), order: vi.fn(), range: vi.fn(),
+    select: vi.fn(), neq: vi.fn(), limit: vi.fn(), eq: vi.fn(), maybeSingle: vi.fn(), order: vi.fn(), range: vi.fn(),
     then: (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve),
   }
-  for (const method of ['select', 'eq', 'maybeSingle', 'order', 'range'] as const) {
+  for (const method of ['select', 'neq', 'limit', 'eq', 'maybeSingle', 'order', 'range'] as const) {
     chain[method].mockReturnValue(chain)
   }
   const from = vi.fn().mockReturnValue(chain)
@@ -109,5 +109,32 @@ describe('author page parameter', () => {
   })
   it.each([['1', 1], ['2', 2], ['1000000', 1_000_000]] as const)('parses %s', (value, expected) => {
     expect(parseAuthorPage(value)).toBe(expected)
+  })
+})
+
+describe('latest other author posts', () => {
+  it('filters author, publication and current article before ordering and limiting to two', async () => {
+    const { chain } = mockQuery({ data: [{ id: 'other', title: 'Other article', slug: 'other' }], error: null })
+    expect(await getAuthorLatestPosts(id, 'current')).toEqual([{ id: 'other', title: 'Other article', slug: 'other' }])
+    expect(chain.select).toHaveBeenCalledWith('id, title, slug')
+    expect(chain.eq.mock.calls).toEqual([['author_id', id], ['status', 'published']])
+    expect(chain.neq).toHaveBeenCalledWith('id', 'current')
+    expect(chain.order.mock.calls).toEqual([
+      ['published_at', { ascending: false, nullsFirst: false }], ['id', { ascending: false }],
+    ])
+    expect(chain.limit).toHaveBeenCalledWith(2)
+    expect(chain.neq.mock.invocationCallOrder[0]).toBeLessThan(chain.limit.mock.invocationCallOrder[0])
+  })
+  it('rejects invalid authors without a query', async () => {
+    expect(await getAuthorLatestPosts('invalid', 'current')).toEqual([])
+    expect(mockCreateClient).not.toHaveBeenCalled()
+  })
+  it('returns no recommendations for empty data', async () => {
+    mockQuery({ data: null, error: null })
+    expect(await getAuthorLatestPosts(id, 'current')).toEqual([])
+  })
+  it('propagates query errors', async () => {
+    mockQuery({ error: new Error('Unavailable') })
+    await expect(getAuthorLatestPosts(id, 'current')).rejects.toThrow('Unavailable')
   })
 })
