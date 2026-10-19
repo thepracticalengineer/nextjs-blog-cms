@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Find current PR for the completed CI run
         id: source
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const run = context.payload.workflow_run;
@@ -37,7 +37,7 @@ jobs:
       # This privileged job has no repository checkout or dependency install.
       - name: Load publisher code from an immutable trusted main commit
         if: steps.source.outputs.number != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           PUBLISHER_CODE_ROOT: ${{ runner.temp }}/coverage-publisher-code
         with:
@@ -87,7 +87,7 @@ jobs:
 
       - name: Create or update the coverage comment
         if: steps.source.outputs.number != ''
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           COVERAGE_RUN_ID: ${{ github.event.workflow_run.id }}
           COVERAGE_PR_NUMBER: ${{ steps.source.outputs.number }}
