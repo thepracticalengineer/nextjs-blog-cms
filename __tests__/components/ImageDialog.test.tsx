@@ -182,3 +182,22 @@ it('does not apply a pending URL validation while the discard prompt is open', a
   fireEvent.click(screen.getByRole('button', { name: 'Use image' }))
   await waitFor(() => expect(save).toHaveBeenCalledWith({ ...ready, alt: 'Changed' }))
 })
+
+it('opens legacy TipTap images with null alt text and closes unchanged', () => {
+  const close = vi.fn()
+  render(<ImageDialog editorId="author-a" initial={{ ...ready, alt: null as unknown as string }} onSave={vi.fn()} onClose={close} />)
+  expect(screen.getByLabelText('This image is decorative')).toBeChecked()
+  expect(screen.getByLabelText('Image description (alt text)')).toHaveValue('')
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(close).toHaveBeenCalledOnce()
+})
+
+it('does not change selected input when an image is pasted into the discard prompt', async () => {
+  render(<ImageDialog editorId="author-a" initialFile={file()} onSave={vi.fn()} onClose={vi.fn()} />)
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+  const confirm = await screen.findByRole('dialog', { name: 'Discard image changes?' })
+  fireEvent.paste(confirm, { clipboardData: { files: [new File(['replacement'], 'replacement.png', { type: 'image/png' })], getData: () => '' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+  expect(screen.getByText('Selected: circuit.png')).toBeVisible()
+  expect(screen.queryByText('Selected: replacement.png')).not.toBeInTheDocument()
+})

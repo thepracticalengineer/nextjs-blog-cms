@@ -1,5 +1,5 @@
 import { authorizeApi } from '@/lib/auth/api'
-import { storeImage } from '@/features/posts/media/store'
+import { ImageStorageError, storageUnavailable, storeImage } from '@/features/posts/media/store'
 import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
 import { optimizeImage } from '@/features/posts/media/optimize'
 import { MAX_IMAGE_BYTES } from '@/features/posts/media/validation'
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       const stored = await storeImage(profile.id, optimized.data)
       return Response.json({ ...stored, width: optimized.width, height: optimized.height })
     } catch (error) {
-      return failure(error instanceof Error ? error.message : 'Image storage is unavailable. Retry shortly.', 503)
+      return failure(error instanceof ImageStorageError ? error.message : storageUnavailable, 503)
     }
   } catch {
     return failure('Image request failed. Check your connection, choose a valid file and retry. Your writing is preserved.', 400)

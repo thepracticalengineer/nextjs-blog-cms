@@ -2,7 +2,7 @@
 
 **Goal:** Implement https://github.com/thepracticalengineer/nextjs-blog-cms/issues/168 on a branch from main and open a PR against main.
 
-**Design:** Keep the shared cover/inline dialog within the viewport, with a vertically scrolling body and visible footer. Every dismissal of changed input offers Keep editing or Discard changes; busy dismissal explains cancellation. A synchronous request guard prevents repeated activation. Uploads hash normalized WebP bytes on the server. A service-only database reservation serializes each owner/hash and returns one immutable UUID path, compatible with retention and cleanup. Storage uploads never overwrite; concurrent duplicate-object responses reuse the existing path. Older owner uploads are hashed lazily without deleting or rewriting objects. Reuse refreshes the abandonment grace period under the retention row lock; tombstones are never revived.
+**Design:** Keep the shared cover/inline dialog within the viewport, with a vertically scrolling body and visible footer. Every dismissal of changed input offers Keep editing or Discard changes; busy dismissal explains cancellation. A synchronous request guard prevents repeated activation. Uploads hash normalized WebP bytes on the server. A service-only database reservation serializes each owner/hash and returns one immutable UUID path, compatible with retention and cleanup. Storage uploads never overwrite; concurrent duplicate-object responses reuse the existing path. Older uploads are hashed by a resumable deployment command without deleting or rewriting objects; request-time readiness uses an indexed one-row check. Reuse refreshes the abandonment grace period under the retention row lock; tombstones are never revived.
 
 **Constraints:** Node 24.21.0, pnpm 10.29.3. No production writes, secrets, automatic editorial review, new dependencies, or deletion of existing objects. Preserve ownership and service-only registry access.
 
@@ -34,3 +34,9 @@ on an isolated schema clone, plus 20-connection media concurrency. The standalon
 shared-dialog browser suite covers desktop and mobile. The database-backed full
 post-media browser test was updated for concurrent reuse and explicit discard; its
 full Auth/Storage stack is exercised by CI rather than this local schema-only clone.
+
+PR review follow-up: normalize null TipTap alt text, ignore portal paste during
+discard confirmation, expose only curated storage errors, move legacy hashing
+outside requests with persistent missing-object markers, and align browser
+expectations with confirmation and single-object reuse. The auth regression now
+waits for the replacement widget effect rather than assuming synchronous setup.

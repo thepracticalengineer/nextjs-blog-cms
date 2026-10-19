@@ -52,12 +52,23 @@ concurrent requests and retries target the same reserved key. Failures remain
 retryable at that key. Reuse refreshes the seven-day abandonment grace period under
 the cleanup row lock; deleting/deleted tombstones always require a new path.
 
-Existing owner objects are hashed lazily on that owner's next upload, in pages of
-50 registry entries. They are downloaded server-side once for hashing and their
-objects/URLs stay unchanged. This first upload can take longer for a large library.
-A storage/indexing outage fails the request with retry guidance instead of bypassing
-deduplication. Missing objects from interrupted legacy uploads are skipped. Existing
-duplicate objects are preserved; future uploads reuse an active matching object.
+Legacy media must be indexed during deployment, outside the request time budget.
+Temporarily pause and drain image uploads on the old deployment, apply the migration, then
+preview and run this resumable server-only command with the intended environment:
+
+```bash
+node --env-file=.env.local scripts/backfill-post-media.mjs
+node --env-file=.env.local scripts/backfill-post-media.mjs --apply
+```
+
+Deploy the endpoint and resume uploads after the command reports zero pending rows.
+The command downloads existing objects in batches of 50, hashes their stored bytes,
+and updates only registry metadata. Missing objects are marked checked once;
+transient errors stay pending and a rerun resumes without downloading indexed rows.
+Existing objects, URLs and duplicates remain unchanged. Upload requests only perform
+an indexed one-row readiness check for the current owner. An incomplete handoff
+returns an explicit indexing message instead of silently creating a duplicate of
+unindexed legacy media. There are no legacy object downloads in the upload path.
 Only the requesting owner's registry is searched or returned. Hash identity uses the
 current optimized representation, so a future encoder/quality change needs an
 explicit hash-version/migration decision.

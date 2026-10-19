@@ -64,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify resumable legacy image indexing
+        run: node --test scripts/backfill-post-media.test.mjs
+
       - name: Run tests with coverage
         run: pnpm run test:coverage
 

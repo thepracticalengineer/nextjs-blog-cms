@@ -40,6 +40,8 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   const dialog = page.getByRole('dialog', { name: 'Article image' })
   await expect(dialog.getByText('Selected: dropped.png')).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: 'Discard changes' }).click()
+  await expect(dialog).not.toBeVisible()
   await expect(article).toHaveJSProperty('innerHTML', content)
   await page.getByText('Settings', { exact: true }).click()
   const cover = page.getByLabel('Cover image', { exact: true })
@@ -179,7 +181,8 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     expect(saved.data.content).toContain('Test points on a blue board')
     const registered = await db.from('post_media').select('path, retained, owner_id').in('path', paths)
     expect(registered.error).toBeNull()
-    expect(registered.data).toHaveLength(2)
+    expect(registered.data).toHaveLength(1)
+    expect(registered.data?.[0].path).toBe(path)
     expect(registered.data?.every(image => image.retained && image.path.startsWith(`${image.owner_id}/`))).toBe(true)
     // Exercise the operations command against actual stored objects.
     const abandoned = `${signedIn.data.user!.id}/${randomUUID()}.webp`
@@ -187,6 +190,17 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     const abandonedUrl = db.storage.from('post-media').getPublicUrl(abandoned).data.publicUrl
     expect((await db.from('post_media').insert({ path: abandoned, owner_id: signedIn.data.user!.id, url: abandonedUrl })).error).toBeNull()
     expect((await db.storage.from('post-media').upload(abandoned, await sharp(bytes).webp().toBuffer(), { contentType: 'image/webp' })).error).toBeNull()
+    // Legacy indexing is an offline deployment step, including one-time missing markers.
+    const missing = `${signedIn.data.user!.id}/${randomUUID()}.webp`
+    paths.push(missing)
+    expect((await db.from('post_media').insert({ path: missing, owner_id: signedIn.data.user!.id, url: db.storage.from('post-media').getPublicUrl(missing).data.publicUrl })).error).toBeNull()
+    const index = (apply: boolean) => JSON.parse(execFileSync(process.execPath, ['scripts/backfill-post-media.mjs', ...(apply ? ['--apply'] : [])], { encoding: 'utf8' }).trim().split('\n').at(-1)!)
+    expect(index(false)).toMatchObject({ pending: 2, hashed: 0, missing: 0 })
+    expect(index(true)).toMatchObject({ pending: 0, hashed: 1, missing: 1 })
+    expect(index(true)).toMatchObject({ pending: 0, hashed: 0, missing: 0 })
+    const checkedMissing = await db.from('post_media').select('content_sha256, hash_checked_at').eq('path', missing).single()
+    expect(checkedMissing.data?.content_sha256).toBeNull()
+    expect(checkedMissing.data?.hash_checked_at).toBeTruthy()
     expect((await db.from('post_media').update({ created_at: new Date(Date.now() - 8 * 86400_000).toISOString() }).in('path', paths)).error).toBeNull()
     const dryRun = JSON.parse(execFileSync(process.execPath, ['scripts/cleanup-post-media.mjs'], { encoding: 'utf8' }))
     expect(dryRun.candidates.map((media: { path: string }) => media.path)).toContain(abandoned)

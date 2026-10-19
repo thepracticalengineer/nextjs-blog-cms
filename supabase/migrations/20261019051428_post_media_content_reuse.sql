@@ -1,7 +1,10 @@
 -- Keep UUID paths, public URLs, RLS and retention/tombstones unchanged.
--- Legacy rows are hashed lazily by the server, without rewriting/deleting objects.
+-- Index legacy rows with scripts/backfill-post-media.mjs before deploying uploads.
 alter table public.post_media add column content_sha256 text
   check (content_sha256 ~ '^[0-9a-f]{64}$');
+alter table public.post_media add column hash_checked_at timestamptz;
+create index post_media_legacy_pending_idx on public.post_media(owner_id)
+  where state = 'active' and content_sha256 is null and hash_checked_at is null;
 create index post_media_owner_content_idx on public.post_media(owner_id, content_sha256)
   where state = 'active';
 

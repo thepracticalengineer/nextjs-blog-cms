@@ -17,8 +17,9 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   const [file, setFile] = useState(initialFile)
   const [url, setUrl] = useState(initialFile ? '' : initial?.src ?? '')
   const [image, setImage] = useState<ImageValue | undefined>(initialFile ? undefined : initial)
-  const [alt, setAlt] = useState(initial?.alt ?? '')
-  const initiallyDecorative = !cover && !!initial && !initial.alt.trim()
+  const initialAlt = initial?.alt ?? ''
+  const [alt, setAlt] = useState(initialAlt)
+  const initiallyDecorative = !cover && !!initial && !initialAlt.trim()
   const [decorative, setDecorative] = useState(initiallyDecorative)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [error, setError] = useState(initialFile ? imageFileError(initialFile) : undefined)
@@ -29,7 +30,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   const inFlight = useRef(false)
   useEffect(() => () => request.current?.abort(), [])
 
-  const dirty = !!file || url !== (initial?.src ?? '') || alt !== (initial?.alt ?? '') || decorative !== initiallyDecorative
+  const dirty = !!file || url !== (initial?.src ?? '') || alt !== initialAlt || decorative !== initiallyDecorative
   function close() {
     if (dirty || inFlight.current) {
       // A pending save must never apply behind the discard confirmation.
@@ -95,7 +96,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
     <Dialog open onOpenChange={open => { if (!open) close() }}>
       <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden sm:max-w-lg" onPaste={event => {
         const pasted = pastedImageFile(event.clipboardData)
-        if (pasted && !busy) { event.preventDefault(); chooseFile(pasted) }
+        if (pasted && !busy && !confirmDiscard) { event.preventDefault(); chooseFile(pasted) }
       }}>
         <DialogHeader className="min-w-0 pr-6 pb-4">
           <DialogTitle>{cover ? 'Cover image' : 'Article image'}</DialogTitle>
@@ -111,7 +112,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
             {file && <p className="text-sm [overflow-wrap:anywhere]" title={file.name}>Selected: {file.name || 'Pasted image'}</p>}
             <Button type="button" variant="outline" disabled={!file || busy || !!imageFileError(file)} onClick={() => void upload()}>{image && image.src === url ? 'Upload again' : 'Upload image / retry'}</Button>
             {busy && <div role="status" aria-live="polite">{phase === 'upload' && <progress aria-label="Image upload progress" value={progress} max={100} className="w-full" />}<p>{phase === 'validate' ? 'Checking image URL…' : progress === 100 ? 'Optimizing and storing image…' : progress ? `Uploading image: ${progress}%` : 'Preparing image…'}</p></div>}
-            {image && <p role="status">{'reused' in image && image.reused ? 'This image has already been uploaded. Reusing the existing image' : 'Image ready'}{image.width && image.height ? ` (${image.width} × ${image.height})` : ''}. Add its description, then use the image.</p>}
+            {image && <output className="block">{'reused' in image && image.reused ? 'This image has already been uploaded. Reusing the existing image' : 'Image ready'}{image.width && image.height ? ` (${image.width} × ${image.height})` : ''}. Add its description, then use the image.</output>}
           </div>
           <div className="mt-4 min-w-0 space-y-2">
             <Label htmlFor={`${id}-url`}>Image URL</Label>

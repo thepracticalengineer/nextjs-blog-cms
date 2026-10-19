@@ -82,7 +82,7 @@ it('replaces the login bot token after a lost server response so retry can succe
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Check your connection'))
   expect(screen.getByRole('button', { name: 'Sign in' })).toBeDisabled()
-  expect(options).toHaveLength(2)
+  await waitFor(() => expect(options).toHaveLength(2))
   act(() => options[1].callback('replacement-token'))
   fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Provider retry completed'))

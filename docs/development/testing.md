@@ -339,5 +339,7 @@ On a disposable migrated database, run `database/tests/post_media_dedup.sql` and
 `supabase_db_nextjs-blog-cms` local test container. It creates/removes its own owner
 and media rows and exercises 20 independent connections. API unit tests cover
 content hashing, renamed identical files, distinct same-name images, retry paths,
-legacy hashing, ownership filters and storage failures. The full upload/storage
+offline indexing readiness, ownership filters and storage failures. Run
+`node --test scripts/backfill-post-media.test.mjs` for resumable batch hashing,
+missing-object markers, transient failures and dry-run behavior. The full upload/storage
 flow remains covered by `e2e/browser/post-media.spec.ts` on a dedicated test stack.
