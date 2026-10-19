@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/authors/queries', () => ({ getPublicAuthor: vi.fn(), getAuthorLatestPosts: vi.fn() }))
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPostRedirect: vi.fn() }))
 vi.mock('@/components/editor/EditorContent', () => ({ EditorContent: () => null }))
 vi.mock('@/features/comments/components/CommentSection', () => ({ CommentSection: () => null }))
