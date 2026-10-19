@@ -64,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify resumable legacy image indexing
+        run: node --test scripts/backfill-post-media.test.mjs
+
       - name: Run tests with coverage
         run: pnpm run test:coverage
 
@@ -195,7 +198,10 @@ jobs:
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/tag_taxonomy.sql
 
       - name: Verify image retention and cleanup permissions
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media.sql
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media_dedup.sql
+          node database/tests/post-media-concurrency.mjs
 
       - name: Verify newsletter queue retry and cancellation contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
@@ -216,6 +222,9 @@ jobs:
 
       - name: Verify MFA recovery controls with isolated Auth responses
         run: pnpm exec playwright test --config=e2e/mfa.config.ts
+
+      - name: Verify image dialog layout, dismissal and upload retries
+        run: pnpm exec playwright test --config=e2e/image-dialog.config.ts
 
       - name: Verify homepage reader navigation and responsive controls
         run: pnpm exec playwright test --config=e2e/homepage.config.ts

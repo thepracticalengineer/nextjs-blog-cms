@@ -20,8 +20,13 @@ cover images require a description in the dialog. Select an existing inline imag
 and use the toolbar button again to edit its description or source.
 
 Failed validation, upload or URL checks leave the article and selected file intact.
-Retry uses that same file. Cancel stops the active browser request without inserting
-an image. A server upload that finishes after cancellation remains an abandoned
+Retry uses that same file. Long filenames wrap within the dialog and remain available
+in full, while tall content scrolls vertically above the visible footer. Choose
+**Use image** to apply the image and description to the post. Closing a changed dialog
+through Cancel, Close, Escape or its backdrop opens **Discard image changes?**.
+**Keep editing** preserves the selected file, URL, description and active request;
+**Discard changes** closes without inserting an image and cancels the browser request.
+Unchanged dialogs close immediately. Uploading an image does not apply it to the post. A server upload that finishes after cancellation remains an abandoned
 upload until saved or cleaned up. The cover thumbnail reports broken URLs and offers
 retry rather than silently hiding the image. Manual cover URL entry remains available;
 its thumbnail and reader preview enforce the configured host policy.
@@ -36,6 +41,37 @@ on each side without enlargement; the output must fit within **2 MiB**. SVG and 
 are unsupported. The 4 MiB input limit leaves room for multipart framing under
 [Vercel's 4.5 MB function payload limit](https://vercel.com/docs/functions/limitations#request-body-size).
 Immutable object names use `<uploader UUID>/<random UUID>.webp`.
+
+Apply `supabase/migrations/20261019051428_post_media_content_reuse.sql` before
+deploying the image reuse endpoint. The server hashes optimized WebP bytes with
+SHA-256 and atomically reserves one active path for each owner/content pair. Names
+are not part of identity: renamed identical files reuse the image, while different
+images with the same name remain uploadable. Reuse announces **This image has already
+been uploaded** and returns its existing URL. Storage writes never overwrite;
+concurrent requests and retries target the same reserved key. Failures remain
+retryable at that key. Reuse refreshes the seven-day abandonment grace period under
+the cleanup row lock; deleting/deleted tombstones always require a new path.
+
+Legacy media must be indexed during deployment, outside the request time budget.
+Temporarily pause and drain image uploads on the old deployment, apply the migration, then
+preview and run this resumable server-only command with the intended environment:
+
+```bash
+node --env-file=.env.local scripts/backfill-post-media.mjs
+node --env-file=.env.local scripts/backfill-post-media.mjs --apply
+```
+
+Deploy the endpoint and resume uploads after the command reports zero pending rows.
+The command downloads existing objects in batches of 50, hashes their stored bytes,
+and updates only registry metadata. Missing objects are marked checked once;
+transient errors stay pending and a rerun resumes without downloading indexed rows.
+Existing objects, URLs and duplicates remain unchanged. Upload requests only perform
+an indexed one-row readiness check for the current owner. An incomplete handoff
+returns an explicit indexing message instead of silently creating a duplicate of
+unindexed legacy media. There are no legacy object downloads in the upload path.
+Only the requesting owner's registry is searched or returned. Hash identity uses the
+current optimized representation, so a future encoder/quality change needs an
+explicit hash-version/migration decision.
 
 `POST /api/post-media` requires a same-origin authenticated author/admin session
 and the editor's original account ID. Only the server can upload objects or access
@@ -90,6 +126,14 @@ URLs. Failed deletion stays resumable on the next run. Device-only drafts that n
 reached the server must be recovered within seven days to retain their uploads.
 
 ## Verification
+
+`database/tests/post_media_dedup.sql` checks service-only reservation access, owner
+isolation, grace-period refresh and tombstones. `node database/tests/post-media-concurrency.mjs`
+checks 20 independent connections reserve one path in the designated disposable
+`supabase_db_nextjs-blog-cms` container. `pnpm exec playwright test --config=e2e/image-dialog.config.ts`
+checks the actual shared component/CSS at desktop/mobile/short viewports, dismissal
+paths, keyboard focus, URL and file workflows, failures, retries and reuse feedback
+with isolated HTTP fixtures and no database access.
 
 `database/tests/post_media.sql` checks registry permissions, post/recovery retention,
 shared references, the grace period, cleanup retries, expired URL rejection and atomic

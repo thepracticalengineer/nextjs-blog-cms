@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import sharp from 'sharp'
+import { createHash } from 'node:crypto'
 import { crc32 } from 'node:zlib'
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/auth/session', () => ({ authorizeSession: vi.fn() }))
@@ -15,7 +16,9 @@ import { MAX_IMAGE_BYTES } from '@/features/posts/media/validation'
 
 const actor = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const upload = vi.fn()
-const insert = vi.fn()
+const rpc = vi.fn()
+const legacyRows = vi.fn()
+const ownerFilter = vi.fn()
 function request(file?: File, editorId = actor, origin = 'http://localhost') {
   const form = new FormData()
   if (file) form.set('file', file)
@@ -30,9 +33,17 @@ beforeEach(() => {
   vi.mocked(checkRateLimit).mockReturnValue({ allowed: true })
   vi.mocked(authorizeSession).mockResolvedValue({ profile: { id: actor, role: 'author' }, failure: null } as Awaited<ReturnType<typeof authorizeSession>>)
   upload.mockResolvedValue({ error: null })
-  insert.mockResolvedValue({ error: null })
+  ownerFilter.mockImplementation(() => ({ eq: () => ({ is: () => ({ is: () => ({ limit: legacyRows }) }) }) }))
+  legacyRows.mockResolvedValue({ data: [], error: null })
+  const reservations = new Map<string, { path: string; url: string }>()
+  rpc.mockImplementation(async (_name, args) => {
+    const key = `${args.p_owner_id}:${args.p_content_sha256}`
+    if (!reservations.has(key)) reservations.set(key, { path: args.p_path, url: args.p_url })
+    return { data: reservations.get(key), error: null }
+  })
   vi.mocked(createServiceClient).mockReturnValue({
-    from: vi.fn(() => ({ insert })),
+    rpc,
+    from: vi.fn(() => ({ select: () => ({ eq: ownerFilter }) })),
     storage: { from: vi.fn(() => ({ upload, getPublicUrl: (path: string) => ({ data: { publicUrl: `https://test.supabase.co/storage/v1/object/public/post-media/${path}` } }) })) },
   } as unknown as ReturnType<typeof createServiceClient>)
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co')
@@ -52,7 +63,7 @@ describe('owned, decoded post image upload', () => {
     expect(meta.format).toBe('webp')
     expect(meta.width).toBe(2400)
     expect(meta.exif).toBeUndefined()
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ owner_id: actor }))
+    expect(rpc).toHaveBeenCalledWith('reserve_post_media', expect.objectContaining({ p_owner_id: actor, p_content_sha256: createHash('sha256').update(upload.mock.calls[0][1]).digest('hex') }))
   })
   it('rejects anonymous, unauthorized-role, changed-account and cross-origin requests before storage', async () => {
     vi.mocked(authorizeSession).mockResolvedValueOnce({ profile: null, failure: { code: 'UNAUTHENTICATED', status: 401, error: 'Sign in again' } })
@@ -102,7 +113,7 @@ describe('owned, decoded post image upload', () => {
     await expect(optimizeImage(new File([pixels], 'huge.png', { type: 'image/png' }))).rejects.toThrow()
   })
   it('reports registration and upload failures as retryable without returning an unusable URL', async () => {
-    insert.mockResolvedValueOnce({ error: { message: 'missing migration' } })
+    rpc.mockResolvedValueOnce({ error: { message: 'missing migration' } })
     expect((await POST(request(await fixture()))).status).toBe(503)
     expect(upload).not.toHaveBeenCalled()
     upload.mockResolvedValueOnce({ error: { message: 'offline' } })
@@ -123,4 +134,62 @@ describe('owned, decoded post image upload', () => {
     vi.mocked(checkRateLimit).mockReturnValueOnce({ allowed: false, retryAfter: 60 })
     expect((await POST(request())).status).toBe(429)
   })
+})
+
+
+describe('content-addressed image reuse', () => {
+  it('reuses identical bytes even when renamed, including concurrent requests', async () => {
+    const original = await fixture()
+    const renamed = new File([await original.arrayBuffer()], 'renamed.png', { type: original.type })
+    const responses = await Promise.all([POST(request(original)), POST(request(renamed))])
+    const images = await Promise.all(responses.map(response => response.json()))
+    expect(responses.map(r => r.status)).toEqual([200, 200])
+    expect(images[0].src).toBe(images[1].src)
+    expect(upload.mock.calls[0][0]).toBe(upload.mock.calls[1][0])
+  })
+  it('returns reuse feedback on immutable storage conflicts, but not on arbitrary failures', async () => {
+    upload.mockResolvedValueOnce({ error: { statusCode: '400', code: 'ResourceAlreadyExists', message: 'Already exists' } })
+    const response = await POST(request(await fixture()))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ reused: true })
+    upload.mockResolvedValueOnce({ error: { statusCode: '400', message: 'Invalid upload' } })
+    expect((await POST(request(await fixture()))).status).toBe(503)
+  })
+  it('allows different content with the same filename', async () => {
+    const a = await (await POST(request(await fixture('png', 48)))).json()
+    const b = await (await POST(request(await fixture('png', 49)))).json()
+    expect(a.src).not.toBe(b.src)
+  })
+  it('retries a failed upload at the same reserved path', async () => {
+    const original = await fixture()
+    upload.mockResolvedValueOnce({ error: { message: 'Connection lost' } })
+    expect((await POST(request(original))).status).toBe(503)
+    expect((await POST(request(original))).status).toBe(200)
+    expect(upload.mock.calls[0][0]).toBe(upload.mock.calls[1][0])
+  })
+})
+
+
+describe('offline legacy media readiness', () => {
+  it('blocks an incomplete library handoff without downloading any media or creating duplicate objects', async () => {
+    legacyRows.mockResolvedValueOnce({ data: [{ path: `${actor}/pending.webp` }], error: null })
+    const response = await POST(request(await fixture()))
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: expect.stringContaining('indexing is pending') })
+    expect(ownerFilter).toHaveBeenCalledWith('owner_id', actor)
+    expect(upload).not.toHaveBeenCalled()
+    expect(rpc).not.toHaveBeenCalled()
+  })
+  it('does not upload when the readiness check fails', async () => {
+    legacyRows.mockResolvedValueOnce({ error: { message: 'Database unavailable' } })
+    expect((await POST(request(await fixture()))).status).toBe(503)
+    expect(upload).not.toHaveBeenCalled()
+  })
+})
+
+it('does not expose unexpected storage/client exceptions to the browser', async () => {
+  vi.mocked(createServiceClient).mockImplementationOnce(() => { throw new Error('PRIVATE internal provider configuration') })
+  const response = await POST(request(await fixture()))
+  expect(response.status).toBe(503)
+  expect(await response.json()).toEqual({ error: 'Image storage is unavailable. Retry shortly or ask an administrator to check image storage.' })
 })

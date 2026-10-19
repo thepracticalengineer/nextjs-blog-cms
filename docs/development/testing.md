@@ -324,3 +324,22 @@ checks use the same scoped, exact accessible-name locator as the main smoke suit
 ## Public search metadata
 
 Run `pnpm exec vitest run __tests__/app/public-metadata.test.ts __tests__/features/posts/archive-range.test.ts __tests__/app/sitemap.test.ts __tests__/app/robots.test.ts __tests__/features/authors/page.test.tsx` for canonical pagination, article previews and complete published-only sitemap discovery. Run `pnpm exec playwright test --config=e2e/seo.config.ts` for rendered browser/crawler HTML, local social fallback images and sitemap consistency. The standalone suite uses a read-only loopback synthetic Data API and `.next-seo-ui`, disables external services, and performs no database writes. See [search indexing operations](../operations/search-indexing.md) for production and Search Console checks.
+
+## Image dialog and upload reuse
+
+Run `pnpm exec playwright test --config=e2e/image-dialog.config.ts` for the isolated
+shared cover/inline component and real Tailwind CSS. It checks long filenames at
+1280, 390 and 320 pixels, short viewports, dismissal/keep/discard, keyboard focus,
+URL insertion and file failure/retry/reuse feedback. Upload responses are fixtures;
+this harness has no database, mail or production access.
+
+On a disposable migrated database, run `database/tests/post_media_dedup.sql` and
+`database/tests/post_media.sql` with `psql -v ON_ERROR_STOP=1`. Run
+`node database/tests/post-media-concurrency.mjs` only against the designated
+`supabase_db_nextjs-blog-cms` local test container. It creates/removes its own owner
+and media rows and exercises 20 independent connections. API unit tests cover
+content hashing, renamed identical files, distinct same-name images, retry paths,
+offline indexing readiness, ownership filters and storage failures. Run
+`node --test scripts/backfill-post-media.test.mjs` for resumable batch hashing,
+missing-object markers, transient failures and dry-run behavior. The full upload/storage
+flow remains covered by `e2e/browser/post-media.spec.ts` on a dedicated test stack.

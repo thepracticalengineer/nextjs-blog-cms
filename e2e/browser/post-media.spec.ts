@@ -40,6 +40,8 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   const dialog = page.getByRole('dialog', { name: 'Article image' })
   await expect(dialog.getByText('Selected: dropped.png')).toBeVisible()
   await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: 'Discard changes' }).click()
+  await expect(dialog).not.toBeVisible()
   await expect(article).toHaveJSProperty('innerHTML', content)
   await page.getByText('Settings', { exact: true }).click()
   const cover = page.getByLabel('Cover image', { exact: true })
@@ -59,6 +61,8 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   const coverDialog = page.getByRole('dialog', { name: 'Cover image', exact: true })
   await expect(coverDialog.getByText('Selected: cover.png')).toBeVisible()
   await coverDialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await page.getByRole('button', { name: 'Discard changes' }).click()
+  await expect(coverDialog).not.toBeVisible()
   await expect(cover).toHaveValue('')
 })
 
@@ -104,6 +108,19 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     expect((await untrusted.storage.from('post-media').update(path, bytes, { contentType: 'image/webp' })).error).toBeTruthy()
     await untrusted.storage.from('post-media').remove([path])
     expect((await request.get(coverUrl)).status()).toBe(200)
+    // Independent HTTP requests (not the client busy guard) must reuse one object.
+    const repeated = await Promise.all(['renamed.png', 'another-name.png'].map(name => page.request.post('/api/post-media', {
+      headers: { origin: new URL(page.url()).origin },
+      multipart: { editorId: signedIn.data.user!.id, file: { name, mimeType: 'image/png', buffer: bytes } },
+    })))
+    for (const response of repeated) {
+      expect(response.status()).toBe(200)
+      expect(await response.json()).toMatchObject({ src: coverUrl, reused: true })
+    }
+    const media = await db.from('post_media').select('content_sha256').eq('path', path).single()
+    expect(media.error).toBeNull()
+    const matching = await db.from('post_media').select('path').eq('owner_id', signedIn.data.user!.id).eq('content_sha256', media.data!.content_sha256)
+    expect(matching.data).toEqual([{ path }])
     // Image-file paste uses the same dialog and endpoint, without losing article text.
     await page.locator('.ProseMirror').focus()
     await page.locator('.ProseMirror').evaluate((element, base64) => {
@@ -127,8 +144,9 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     await expect(inlineDialog.getByRole('alert')).toContainText('Temporary storage failure')
     await expect(page.locator('.ProseMirror')).toContainText('A reliable integration test')
     await inlineDialog.getByRole('button', { name: 'Upload image / retry' }).click()
-    await expect(inlineDialog.getByText(/Image ready/)).toBeVisible()
+    await expect(inlineDialog.getByRole('status')).toContainText('already been uploaded')
     const inlineUrl = await inlineDialog.getByLabel('Image URL', { exact: true }).inputValue()
+    expect(inlineUrl).toBe(coverUrl)
     paths.push(decodeURIComponent(new URL(inlineUrl).pathname.split('/post-media/')[1]))
     await inlineDialog.getByLabel('Image description (alt text)').fill('Initial board description')
     await inlineDialog.getByRole('button', { name: 'Use image' }).click()
@@ -163,7 +181,8 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     expect(saved.data.content).toContain('Test points on a blue board')
     const registered = await db.from('post_media').select('path, retained, owner_id').in('path', paths)
     expect(registered.error).toBeNull()
-    expect(registered.data).toHaveLength(2)
+    expect(registered.data).toHaveLength(1)
+    expect(registered.data?.[0].path).toBe(path)
     expect(registered.data?.every(image => image.retained && image.path.startsWith(`${image.owner_id}/`))).toBe(true)
     // Exercise the operations command against actual stored objects.
     const abandoned = `${signedIn.data.user!.id}/${randomUUID()}.webp`
@@ -171,6 +190,17 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     const abandonedUrl = db.storage.from('post-media').getPublicUrl(abandoned).data.publicUrl
     expect((await db.from('post_media').insert({ path: abandoned, owner_id: signedIn.data.user!.id, url: abandonedUrl })).error).toBeNull()
     expect((await db.storage.from('post-media').upload(abandoned, await sharp(bytes).webp().toBuffer(), { contentType: 'image/webp' })).error).toBeNull()
+    // Legacy indexing is an offline deployment step, including one-time missing markers.
+    const missing = `${signedIn.data.user!.id}/${randomUUID()}.webp`
+    paths.push(missing)
+    expect((await db.from('post_media').insert({ path: missing, owner_id: signedIn.data.user!.id, url: db.storage.from('post-media').getPublicUrl(missing).data.publicUrl })).error).toBeNull()
+    const index = (apply: boolean) => JSON.parse(execFileSync(process.execPath, ['scripts/backfill-post-media.mjs', ...(apply ? ['--apply'] : [])], { encoding: 'utf8' }).trim().split('\n').at(-1)!)
+    expect(index(false)).toMatchObject({ pending: 2, hashed: 0, missing: 0 })
+    expect(index(true)).toMatchObject({ pending: 0, hashed: 1, missing: 1 })
+    expect(index(true)).toMatchObject({ pending: 0, hashed: 0, missing: 0 })
+    const checkedMissing = await db.from('post_media').select('content_sha256, hash_checked_at').eq('path', missing).single()
+    expect(checkedMissing.data?.content_sha256).toBeNull()
+    expect(checkedMissing.data?.hash_checked_at).toBeTruthy()
     expect((await db.from('post_media').update({ created_at: new Date(Date.now() - 8 * 86400_000).toISOString() }).in('path', paths)).error).toBeNull()
     const dryRun = JSON.parse(execFileSync(process.execPath, ['scripts/cleanup-post-media.mjs'], { encoding: 'utf8' }))
     expect(dryRun.candidates.map((media: { path: string }) => media.path)).toContain(abandoned)

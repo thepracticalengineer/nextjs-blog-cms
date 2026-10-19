@@ -12,6 +12,7 @@ vi.mock('@/features/ai-assistant/chatService', () => ({
 vi.mock('@/features/ai-assistant/pdfService', () => ({ extractTextFromPdf: vi.fn() }))
 vi.mock('@/features/ai-assistant/llmService', () => ({ validateProviderKey: vi.fn(), generateBlogPost: vi.fn() }))
 vi.mock('@/features/api-keys/apiKeyService', () => ({ listApiKeys: vi.fn(), createApiKey: vi.fn(), revokeApiKey: vi.fn(), deleteApiKey: vi.fn(), resolveCategoryId: vi.fn() }))
+vi.mock('@/features/posts/media/store', () => ({ storeImage: vi.fn() }))
 vi.mock('@/features/posts/media/optimize', () => ({ optimizeImage: vi.fn() }))
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
