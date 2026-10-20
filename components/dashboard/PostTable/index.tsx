@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { unpublishPost, deletePost } from '@/features/posts/actions'
 import type { DashboardPostSummary } from '@/features/posts/types'
 import { dashboardListUrl, type DashboardListState, type SortField, type SortDir } from '@/features/posts/list-state'
+import { BulkActions } from './BulkActions'
 import { PostEmptyState } from './EmptyState'
 import { PostTableToolbar } from './Toolbar'
 import { PostRow } from './PostRow'
@@ -28,6 +29,14 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
 
 export function PostTable({ posts, total, categories, state }: PostTableProps) {
   const router = useRouter()
+  const [selected, setSelected] = useState<string[]>([])
+  const [mutating, setMutating] = useState(false)
+  const [outcome, setOutcome] = useState('')
+  const selectedPosts = posts.filter(post => selected.includes(post.id))
+  const allSelected = posts.length > 0 && selectedPosts.length === posts.length
+  function toggle(id: string) {
+    setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])
+  }
   const [search, setSearch] = useState(state.search)
   const [pending, startTransition] = useTransition()
   const { sort: sortField, direction: sortDir, category: categoryFilter, page, pageSize } = state
@@ -35,6 +44,8 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
   const hasFilters = state.search !== '' || categoryFilter !== null
 
   function navigate(change: Partial<DashboardListState>) {
+    setSelected([])
+    setOutcome('')
     startTransition(() => router.push(dashboardListUrl({ ...state, ...change }), { scroll: false }))
   }
   function handleSort(field: SortField) {
@@ -71,8 +82,8 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
   const thClass = 'inline-flex items-center text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:text-gray-900 transition-colors'
 
   return (
-    <div className="space-y-3" aria-busy={pending}>
-      <fieldset disabled={pending} className="min-w-0 flex flex-col gap-3">
+    <div className="space-y-3" aria-busy={pending || mutating}>
+      <fieldset disabled={pending || mutating} className="min-w-0 flex flex-col gap-3">
         <PostTableToolbar
           search={search}
           onSearch={setSearch}
@@ -83,6 +94,13 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
           hasFilters={hasFilters}
           onClearFilters={handleClearFilters}
         />
+
+        {selectedPosts.length > 0 && <BulkActions
+          posts={selectedPosts}
+          onClear={() => setSelected([])}
+          onPending={setMutating}
+          onComplete={(ids, message) => { setSelected(ids); setOutcome(message) }}
+        />}
 
         <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden">
           {posts.length === 0 ? (
@@ -96,6 +114,12 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/70">
+                    <th className="px-3 py-3.5 w-10">
+                      <input type="checkbox" className="h-4 w-4 accent-blue-600" aria-label="Select all posts on this page"
+                        checked={allSelected}
+                        ref={element => { if (element) element.indeterminate = selectedPosts.length > 0 && !allSelected }}
+                        onChange={() => setSelected(allSelected ? [] : posts.map(post => post.id))} />
+                    </th>
                     <th className="text-left px-5 py-3.5">
                       <button className={thClass} onClick={() => handleSort('title')}>
                         Title <SortIcon field="title" sortField={sortField} sortDir={sortDir} />
@@ -126,6 +150,8 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
                     <PostRow
                       key={post.id}
                       post={post}
+                      selected={selected.includes(post.id)}
+                      onSelect={() => toggle(post.id)}
                       onPublish={handlePublish}
                       onUnpublish={handleUnpublish}
                       onDelete={handleDelete}
@@ -146,6 +172,7 @@ export function PostTable({ posts, total, categories, state }: PostTableProps) {
           onPageSizeChange={handlePageSizeChange}
         />
       </fieldset>
+      <p role="status" aria-live="polite" className="text-sm">{mutating ? `Processing ${selectedPosts.length} posts…` : outcome}</p>
       <p role="status" className="sr-only">{pending ? 'Loading posts' : `${total} posts found`}</p>
     </div>
   )

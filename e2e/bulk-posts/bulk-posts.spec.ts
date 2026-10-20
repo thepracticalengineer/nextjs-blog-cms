@@ -1,0 +1,67 @@
+import { test, expect } from '@playwright/test'
+const fixture = '/e2e/bulk-posts/fixture.html'
+test('keyboard selection, mixed unpublish, cancellation and pending controls', async ({ page }) => {
+  let submissions = 0
+  let release!: () => void
+  const submitted = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/__bulk', async route => {
+    submissions++
+    const { items } = route.request().postDataJSON()
+    await submitted
+    await route.fulfill({ json: { results: items.map((item: { id: string }, i: number) => ({ id: item.id, status: i % 2 === 0 ? 'success' : 'skipped' })) } })
+  })
+  await page.goto(fixture)
+  const first = page.getByRole('checkbox', { name: 'Select Post 1', exact: true })
+  await first.focus(); await page.keyboard.press('Space')
+  await expect(first).toBeChecked()
+  const all = page.getByRole('checkbox', { name: 'Select all posts on this page' })
+  await expect(all).toBeChecked({ checked: false })
+  await expect(all).toHaveJSProperty('indeterminate', true)
+  await all.check()
+  await expect(page.getByText('5 selected', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toBeInViewport()
+  await expect(page.getByRole('button', { name: 'Clear selection' })).toBeInViewport()
+  await page.getByRole('button', { name: 'Unpublish selected' }).click()
+  await expect(page.getByRole('dialog')).toContainText('Unpublish 3 posts')
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toBeHidden()
+  await expect(all).toBeChecked()
+  expect(submissions).toBe(0)
+  await page.getByRole('button', { name: 'Unpublish selected' }).click()
+  await page.getByRole('button', { name: 'Unpublish 3 posts', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Processing posts…' })).toBeDisabled()
+  await expect(page.locator('input[aria-label="Select all posts on this page"]')).toBeDisabled()
+  release()
+  await expect(page.getByRole('status').filter({ hasText: '3 successful, 2 skipped, 0 failed' })).toBeVisible()
+  expect(submissions).toBe(1)
+})
+test('partial delete preserves retry and applied navigation clears selection', async ({ page }) => {
+  await page.route('**/__bulk', async route => {
+    const { items } = route.request().postDataJSON()
+    await route.fulfill({ json: { results: items.map((item: { id: string }, i: number) => ({ id: item.id, status: i === 0 ? 'failed' : 'success', message: i === 0 ? 'Post changed' : undefined })) } })
+  })
+  await page.goto(fixture)
+  await page.getByRole('checkbox', { name: 'Select all posts on this page' }).check()
+  await page.getByRole('button', { name: 'Delete selected' }).click()
+  await expect(page.getByRole('dialog')).toContainText('cannot be undone')
+  await page.getByRole('button', { name: 'Delete 5 posts', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Select Post 1', exact: true })).toBeChecked()
+  await expect(page.getByRole('checkbox', { name: 'Select Post 2', exact: true })).toHaveCount(0)
+  await page.getByRole('textbox', { name: 'Search posts' }).fill('Post 6')
+  await page.getByRole('button', { name: 'Search', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Select Post 6', exact: true })).not.toBeChecked()
+  await expect(page.getByRole('button', { name: 'Delete selected' })).toHaveCount(0)
+})
+test('deleting the only row on the last page refreshes the previous page', async ({ page }) => {
+  await page.route('**/__bulk', async route => {
+    const { items } = route.request().postDataJSON()
+    await route.fulfill({ json: { results: items.map((item: { id: string }) => ({ id: item.id, status: 'success' })) } })
+  })
+  await page.goto(`${fixture}?page=2`)
+  await page.getByRole('checkbox', { name: 'Select Post 6', exact: true }).check()
+  await expect(page.getByRole('button', { name: 'Unpublish selected' })).toBeDisabled()
+  await page.getByRole('button', { name: 'Delete selected' }).click()
+  await page.getByRole('button', { name: 'Delete 1 post', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: 'Select Post 1', exact: true })).toBeVisible()
+  await expect(page.getByText('Showing 1–5 of 5 posts', { exact: true })).toBeVisible()
+})

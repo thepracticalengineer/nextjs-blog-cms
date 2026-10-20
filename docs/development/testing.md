@@ -360,3 +360,21 @@ for unit, disposable database/concurrency, isolated desktop/mobile and full-stac
 ## AI retirement and retained settings (#209)
 
 Run `pnpm exec playwright test --config=e2e/retirement.config.ts` for inert HTTP tombstones without a database or live provider. Run `pnpm exec playwright test --config=e2e/ai-settings.config.ts` for the actual Settings page on desktop/mobile against synthetic loopback Auth and Data API responses. These isolated tests cannot establish hosted Auth behavior or deployed RLS. Run the retained main browser suite against a dedicated migrated Supabase stack for real save/publication/media/settings coverage. Provider verification uses SDK mocks; no paid generation or live credential probe is part of normal tests.
+
+## Bulk post actions
+
+Run `pnpm exec vitest run __tests__/features/posts/bulk-actions.test.ts __tests__/components/PostTable.bulk.test.tsx __tests__/components/PostTable.search.test.tsx`
+for per-ID authorization, bounded input, mixed statuses, optimistic concurrency,
+partial results, confirmation/cancellation and duplicate submission checks.
+
+`pnpm exec playwright test --config=e2e/bulk-posts.config.ts` checks the real table
+and dialog on desktop/mobile with isolated action/router responses, keyboard
+checkboxes, retry selection and pagination refresh. It makes no database calls.
+For actual Next.js actions and database changes, run
+`pnpm exec playwright test e2e/browser/bulk-posts.spec.ts --project=browser` against
+the dedicated migrated database described above. This verifies mixed unpublish,
+content/working-copy preservation, stale-row retry and emptied-page recovery.
+
+CI also runs `database/tests/bulk_post_retention.sql` after migrations to verify
+that deletion preserves retired AI provenance and chats, removes linked working
+copies, and rejects another author's deletion. All fixtures are rolled back.
