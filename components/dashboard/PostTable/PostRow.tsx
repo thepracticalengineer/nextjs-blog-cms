@@ -12,19 +12,24 @@ import {
 import type { DashboardPostSummary } from '@/features/posts/types'
 
 interface PostRowProps {
+  selected?: boolean
+  onSelect?: () => void
   post: DashboardPostSummary
   onPublish: (id: string) => void
   onUnpublish: (id: string) => void
   onDelete: (id: string, title: string) => void
 }
 
-export function PostRow({ post, onPublish, onUnpublish, onDelete }: PostRowProps) {
+export function PostRow({ selected, onSelect, post, onPublish, onUnpublish, onDelete }: PostRowProps) {
   const router = useRouter()
   const authorName = post.author ? publicAuthorName(post.author.full_name) : '—'
   const authorInitial = authorName[0]?.toUpperCase() ?? '?'
 
   return (
     <tr className="group hover:bg-blue-50/30 transition-colors duration-150">
+      {onSelect && <td className="px-3 py-4">
+        <input type="checkbox" className="h-4 w-4 accent-blue-600" aria-label={`Select ${post.title}`} checked={selected ?? false} onChange={onSelect} />
+      </td>}
       <td className="px-5 py-4">
         <div>
           <div className="flex items-center flex-wrap gap-1.5">
