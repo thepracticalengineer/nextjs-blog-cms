@@ -2,9 +2,9 @@
 
 ## Architecture and references
 
-Next.js App Router CMS: `app/` contains public/dashboard/AI routes and API handlers; `features/` owns domain logic; `components/` contains editor and shared UI; `lib/` contains Supabase clients and permissions. Ordered SQL migrations live in `supabase/migrations/`; `database/` holds snapshots, policies and SQL assertions. Unit tests are in `__tests__/`, browser/API tests in `e2e/`, documentation in `docs/`, project skills in `.agents/skills/`.
+Next.js App Router CMS: `app/` contains public/dashboard/settings routes and API handlers; `features/` owns domain logic; `components/` contains editor and shared UI; `lib/` contains Supabase clients and permissions. Ordered SQL migrations live in `supabase/migrations/`; `database/` holds snapshots, policies and SQL assertions. Unit tests are in `__tests__/`, browser/API tests in `e2e/`, documentation in `docs/`, project skills in `.agents/skills/`.
 
-Start at [documentation index](docs/README.md): [setup](docs/setup/local-development.md), [migrations](docs/setup/migrations.md), [development/testing](docs/development/testing.md), [API](docs/api/developer-api.md), [publication](docs/features/publication-and-slugs.md), and [operations](docs/operations/deployment-verification.md). `docs/superpowers/` is historical evidence, not current setup guidance. `CLAUDE.md` imports this file; skill-local agent files apply within their skill only.
+Start at [documentation index](docs/README.md): [setup](docs/setup/local-development.md), [migrations](docs/setup/migrations.md), [development/testing](docs/development/testing.md), [API retirement](docs/api/developer-api.md), [publication](docs/features/publication-and-slugs.md), and [operations](docs/operations/deployment-verification.md). `docs/superpowers/` is historical evidence, not current setup guidance. `CLAUDE.md` imports this file; skill-local agent files apply within their skill only.
 
 ## Toolchain and verification
 
@@ -29,6 +29,8 @@ Existing [Vitest](.agents/skills/vitest/SKILL.md), [Postgres](.agents/skills/sup
 
 ## Branches, commits and pull requests
 
+Create ordinary branches from `develop` and open PRs against `develop`. Promote `develop` to `main` and synchronize `main` back to `develop` with merge commits. Production hotfix branches start from `main` and require a `fix:` PR title plus a maintainer-applied `production-hotfix` label; stable Release Please stays on `main`. Follow [branch promotion](docs/operations/branch-promotion.md) for the source policy, merge-method limitations and rollout checklist.
+
 Choose the branch name before starting work: `<type>/<issue-number>-<short-kebab-case-description>` (for example `chore/192-contribution-conventions`), or `<type>/<short-kebab-case-description>` without an issue. Use only `feat`, `fix`, or `chore` as the branch type; do not use `codex/` for new branches. Honor explicit user-requested names and preserve existing branches and unrelated work; do not rename them automatically.
 
 Use meaningful, focused Conventional Commit messages and align the final PR title with the final scope: `<type>(optional-scope): <imperative description>`. Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. Choose the type from the actual change, never to force a release. Mark breaking changes with `!` and/or a `BREAKING CHANGE:` footer, explaining impact and migration. Prefer squash merging with the validated PR title as the final commit title; intermediate commits need not all be conventional when squash merging. See [contribution conventions and maintainer settings](docs/development/contributing.md#branch-commit-and-pr-conventions).
@@ -39,14 +41,6 @@ Keep service-role, provider/encryption, mail, cron and webhook secrets server-on
 
 Apply all required migrations before application deployment; pause newsletter dispatch for its handoff migration. Never seed/reset/test against production. Use disposable local or explicitly designated remote test databases; retain `e2e/environment.ts` protections. Disable external mail/webhooks during tests. AI output stays draft until a human confirms editorial review; agents must not assert that review automatically. Preserve publication checks, atomic saves, optimistic concurrency, URL reservations and idempotency contracts.
 
+Issue #209 retires standalone AI PDF/chat/full-post generation and the external Developer API. Preserve 410 `API_RETIRED` tombstones, revoked developer keys, owner-only encrypted AI Providers settings and indefinite private retention of legacy AI data. Do not restore environment provider fallbacks or implement editor assistance (#211–214) as part of retirement. Keep `LLM_KEY_ENCRYPTION_SECRET` unchanged.
+
 Make focused changes, preserve unrelated work, run checks appropriate to the change, and report unavailable verification honestly. Update canonical documentation with behavior/setup changes. Do not commit credentials, `node_modules`, build output, browser sessions or test artifacts.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->

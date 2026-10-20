@@ -35,3 +35,15 @@ test('expired or failed downloads discard partial files', t => {
   assert.equal(existsSync(join(result.directory, 'baseline.json')), false)
   assert.match(result.message, /missing, expired, or inaccessible/)
 })
+
+for (const branch of ['develop', 'main']) {
+  test(`accepts exact successful ${branch} push baseline`, t => {
+    const result = run(t, JSON.stringify({ workflow_runs: [{ ...good, head_branch: branch }] }))
+    assert.match(result.message, /Downloaded baseline/)
+  })
+}
+test('rejects feature branch baseline even at the same SHA', t => {
+  const result = run(t, JSON.stringify({ workflow_runs: [{ ...good, head_branch: 'feat/untrusted' }] }))
+  assert.equal(result.calls.length, 1)
+  assert.match(result.message, /Baseline unavailable/)
+})

@@ -32,7 +32,7 @@ You can expect an acknowledgement within **72 hours** and a resolution or status
 ### Authentication
 
 - User authentication is handled by **Supabase Auth** (email/password and session-based).
-- Protected dashboard pages use session-based authentication, while API routes use the mechanism appropriate to each endpoint: some require a user session, some accept developer API keys, webhook endpoints validate an `x-webhook-secret`, and some endpoints are intentionally public (for example, rate-limited submission routes).
+- Protected dashboard pages use session-based authentication, while API routes use the mechanism appropriate to each endpoint: some require a user session, webhook endpoints validate an `x-webhook-secret`, and some endpoints are intentionally public (for example, rate-limited submission routes).
 - Server-side session helpers (`lib/auth/session.ts`) are used to enforce authentication for pages/layouts and redirect unauthenticated users to `/login`; API handlers use endpoint-specific auth checks instead of page redirects.
 
 ### Role-Based Access Control
@@ -41,16 +41,17 @@ You can expect an acknowledgement within **72 hours** and a resolution or status
 - Access control is enforced at the database level via **Supabase Row Level Security (RLS)** policies defined in `database/policies/`.
 - Client-side permission helpers (`lib/permissions/`) provide additional UI-level gating.
 
-### API Key Authentication
+### Retired Developer API
 
-- Developer API keys use the format `fmblog_<64 hex characters>`.
-- Only a **SHA-256 hash** of the key is stored in the database — the raw key is shown once at generation time and never stored in plaintext.
-- Keys are validated on every request by `lib/apiAuth.ts` and can be revoked at any time from the Developer Settings dashboard.
+- External Developer API and standalone AI endpoints return `410 API_RETIRED` regardless of credentials, without mutations or provider calls.
+- The forward retirement migration revokes existing `api_keys` via `is_active = false`; hashes and rows remain. Rollback requires deliberate operator-reviewed key reprovisioning.
+- Legacy AI records remain private and retained indefinitely with owner read/export access; writes are disabled. Export/cleanup is separately reviewed.
 
 ### LLM Provider Key Encryption
 
 - User-supplied LLM API keys (Anthropic, Google, OpenAI) are encrypted at rest using **AES-256-GCM** before being written to the database (`lib/encryption.ts`).
 - Encryption requires a 32-byte secret (`LLM_KEY_ENCRYPTION_SECRET`) stored as an environment variable — never committed to source control.
+- Settings → AI Providers uses cookie sessions, MFA and owner checks for authors and admins. Configure only needed providers; environment keys are not a fallback. Keep the existing encryption secret unchanged on upgrade.
 - Authentication tags are verified on decryption, so any tampering with the ciphertext is detected and rejected.
 
 ### Rate Limiting
@@ -69,7 +70,7 @@ You can expect an acknowledgement within **72 hours** and a resolution or status
 
 - Post content is stored as a serialised TipTap JSON document (not raw HTML).
 - The `EditorContent` component (`components/editor/EditorContent.tsx`) renders content by walking the TipTap JSON tree and constructing HTML strings.
-- If JSON parsing fails the raw string is injected via `dangerouslySetInnerHTML`. Ensure post content written to the database originates only from the TipTap editor or the validated API, never from untrusted external sources without sanitisation.
+- If JSON parsing fails the raw string is injected via `dangerouslySetInnerHTML`. Ensure post content written to the database originates only from the TipTap editor or validated internal server actions, never from untrusted external sources without sanitisation.
 - The `sanitize-html` library is available as a dependency and is used where raw HTML input cannot be avoided.
 
 ---
@@ -94,7 +95,7 @@ Before deploying to production, confirm the following:
 
 Dependencies in `package.json` use caret/semver ranges, which generally pin updates to the same major version (with special handling for `0.x` versions). It is recommended to:
 
-- Regularly run `npm audit` and address reported vulnerabilities.
+- Regularly run `pnpm audit` and address reported vulnerabilities.
 - Keep Next.js, Supabase libraries, and AI SDK packages up to date, as they receive active security patches.
 - Review any new dependency before adding it to the project.
 

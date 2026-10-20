@@ -1,3 +1,4 @@
+import { readPost, removePost } from '../post-fixtures'
 import { execFileSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { createClient } from '@supabase/supabase-js'
@@ -43,7 +44,7 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   await page.getByRole('button', { name: 'Discard changes' }).click()
   await expect(dialog).not.toBeVisible()
   await expect(article).toHaveJSProperty('innerHTML', content)
-  await page.getByText('Settings', { exact: true }).click()
+  await page.getByRole('form', { name: 'Post editor' }).locator('summary').filter({ hasText: /^Settings$/ }).click()
   const cover = page.getByLabel('Cover image', { exact: true })
   const defaultPasteAllowed = await cover.evaluate(element => {
     const data = new DataTransfer()
@@ -66,11 +67,10 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   await expect(cover).toHaveValue('')
 })
 
-test('cover picker and inline paste upload owned images with descriptions, preview and public parity', async ({ page, request, apiKey }) => {
+test('cover picker and inline paste upload owned images with descriptions, preview and public parity', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const db = admin()
   const bytes = await sharp({ create: { width: 640, height: 480, channels: 3, background: '#2468ad' } }).png().toBuffer()
-  const headers = { Authorization: `Bearer ${apiKey}` }
   const slug = `post-media-${Date.now()}`
   const paths: string[] = []
   let id: string | undefined
@@ -85,7 +85,7 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     await page.getByLabel('Slug', { exact: true }).fill(slug)
     await page.getByLabel('Excerpt', { exact: true }).fill(readyArticle.excerpt)
     await page.locator('.ProseMirror').fill(readyArticle.content.replace(/<[^>]+>/g, ' '))
-    await page.getByText('Settings', { exact: true }).click()
+    await page.getByRole('form', { name: 'Post editor' }).locator('summary').filter({ hasText: /^Settings$/ }).click()
     await page.getByRole('button', { name: 'Choose cover image' }).click()
     const coverDialog = page.getByRole('dialog', { name: 'Cover image', exact: true })
     await coverDialog.getByLabel('Image file', { exact: true }).setInputFiles({ name: 'circuit.png', mimeType: 'image/png', buffer: bytes })
@@ -174,10 +174,10 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     await page.getByRole('button', { name: 'Publish', exact: true }).click()
     await page.getByRole('button', { name: 'Confirm publication', exact: true }).click()
     await expect(page.getByRole('button', { name: 'View Post', exact: true })).toBeVisible()
-    const saved = await request.get(`/api/posts/${id}`, { headers }).then(r => r.json())
+    const saved = { data: await readPost(id!) }
     expect(saved.data.slug).toBe(slug)
     expect(saved.data.status).toBe('published')
-    expect(saved.data.image_alt).toBe('A blue circuit board viewed from above')
+    expect(saved.data.cover_image_alt).toBe('A blue circuit board viewed from above')
     expect(saved.data.content).toContain('Test points on a blue board')
     const registered = await db.from('post_media').select('path, retained, owner_id').in('path', paths)
     expect(registered.error).toBeNull()
@@ -218,7 +218,7 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     const publicCover = page.getByAltText('A blue circuit board viewed from above')
     await expect.poll(() => publicCover.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
   } finally {
-    if (id) await request.delete(`/api/posts/${id}`, { headers })
+    if (id) await removePost(id)
     if (paths.length) {
       await db.storage.from('post-media').remove(paths)
       await db.from('post_media').delete().in('path', paths)

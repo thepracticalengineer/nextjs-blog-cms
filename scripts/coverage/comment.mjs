@@ -19,7 +19,7 @@ export async function publishCoverageComment({ github, owner, repo, runId, prNum
   const { data: run } = await github.rest.actions.getWorkflowRun({ owner, repo, run_id: runId })
   if (run.path !== '.github/workflows/ci.yml' || run.name !== 'CI' || run.event !== 'pull_request' || run.status !== 'completed' || run.conclusion === 'cancelled') return
   const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: prNumber })
-  if (pr.state !== 'open' || pr.base.ref !== 'main' || pr.base.repo.full_name !== `${owner}/${repo}` || pr.head.sha !== run.head_sha) return
+  if (pr.state !== 'open' || !['main', 'develop'].includes(pr.base.ref) || pr.base.repo.full_name !== `${owner}/${repo}` || pr.head.sha !== run.head_sha) return
 
   const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: prNumber, per_page: 100 })
   const previous = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker))

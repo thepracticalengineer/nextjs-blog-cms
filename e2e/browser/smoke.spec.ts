@@ -119,40 +119,23 @@ test('profile changes persist across reloads', async ({ page }) => {
   await expect(page.getByLabel('Full Name', { exact: true })).toHaveValue('Migration Browser Author')
 })
 
-// PDF with an accurate xref table, enough text to pass book upload validation.
-function bookPdf() {
-  const text = 'BT /F1 12 Tf 72 720 Td (Browser migration document for book upload.) Tj 0 -20 Td (A conversation about testing modern frameworks.) Tj 0 -20 Td (PDF parsing should preserve these three lines.) Tj ET'
-  const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>', `<< /Length ${text.length} >>\nstream\n${text}\nendstream`]
-  let pdf = '%PDF-1.4\n'
-  const offsets: number[] = []
-  objects.forEach((object, index) => { offsets.push(Buffer.byteLength(pdf)); pdf += `${index + 1} 0 obj\n${object}\nendobj\n` })
-  const xref = Buffer.byteLength(pdf)
-  pdf += `xref\n0 6\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`
-  return Buffer.from(pdf)
-}
-
-test('book upload and chat UI work with a stubbed provider response', async ({ page }) => {
+test('AI provider settings retain a masked unverified key and remove it', async ({ page }) => {
   await login(page)
-  // Provider billing/network calls are stubbed; auth, PDF parsing, books and chats use the real API/database.
-  await page.route('**/api/developer/llm-keys', (route) => route.fulfill({ json: { keys: [{ provider: 'gemini', is_valid: true }] } }))
-  await page.route('**/api/ai-assistant/chats/*/messages', (route) => route.request().method() === 'POST'
-    ? route.fulfill({ contentType: 'text/plain', body: 'The migrated chat streams a provider response.' })
-    : route.continue())
-  await page.goto('/dashboard/ai-assistant')
-  await page.getByRole('button', { name: 'New Chat', exact: true }).first().click()
-  const uploaded = page.waitForResponse((response) => response.url().endsWith('/api/ai-assistant/books') && response.request().method() === 'POST')
-  await page.locator('input[type=file]').setInputFiles({ name: 'migration.pdf', mimeType: 'application/pdf', buffer: bookPdf() })
-  const uploadResponse = await uploaded
-  expect(uploadResponse.status(), await uploadResponse.text()).toBe(201)
-  await page.getByRole('button', { name: /Gemini 3.5 Flash-Lite/ }).click()
-  await expect(page.getByRole('button', { name: 'Start Chat', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: 'Start Chat', exact: true }).click()
-  await expect(page).toHaveURL(/\/dashboard\/ai-assistant\/.+/)
-  await page.getByPlaceholder('Ask something about the document…').fill('What is this document about?')
-  await page.getByPlaceholder('Ask something about the document…').press('Enter')
-  await expect(page.getByText('The migrated chat streams a provider response.', { exact: true })).toBeVisible()
+  await page.goto('/dashboard/settings/ai-providers')
+  const key = 'sk-e2e-provider-key-never-sent-to-a-provider'
+  await page.getByLabel('OpenAI API key', { exact: true }).fill(key)
+  await page.getByRole('button', { name: 'Save OpenAI key', exact: true }).click()
+  await expect(page.getByText(/saved.*unverified|unverified/i).first()).toBeVisible()
+  await expect(page.getByLabel('OpenAI API key', { exact: true })).toHaveValue('')
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Remove OpenAI key', exact: true })).toBeVisible()
+  expect(await page.content()).not.toContain(key)
+  await page.getByRole('button', { name: 'Remove OpenAI key', exact: true }).click()
+  await page.getByRole('button', { name: 'Confirm remove OpenAI key', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Remove OpenAI key', exact: true })).not.toBeVisible()
+  const retired = await page.request.post('/api/ai-assistant/generate', { data: { prompt: 'must not run' } })
+  expect(retired.status()).toBe(410)
+  expect(await retired.json()).toMatchObject({ code: 'API_RETIRED' })
 })
 
 function totp(secret: string) {

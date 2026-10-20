@@ -19,6 +19,7 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261019051428_post_media_content_reuse.sql` | Owner-scoped content hashes and service-only atomic media reservations; pause uploads, migrate, run the [media backfill](../features/post-images.md#validation-and-storage), then deploy and resume uploads |
 | `20261019140000_comment_reactions.sql` | Private reaction rows, MFA/eligibility RPCs and shared change budgets; migrate before deploying [comment reactions](../features/comment-reactions.md) |
 | `20261020070000_article_reactions.sql` | Private article reaction rows, aggregate/own-selection RPCs and change budgets; migrate before deploying [article reactions](../features/article-reactions.md) |
+| `20261020134445_retire_legacy_ai_api.sql` | Revoke developer keys, freeze legacy AI writes and retain owner read/export access; inventory consumers, announce cutoff and drain retries before migration/deploy |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 
@@ -30,3 +31,11 @@ the migration. Reading time is derived from content and must not be supplied by
 clients. The dashboard RPC uses invoker permissions and retains RLS; the public
 author projection is unchanged. See [post list performance](../operations/post-list-performance.md)
 for verification and measurements.
+
+## Legacy AI and Developer API retirement (#209)
+
+Before applying `20261020134445_retire_legacy_ai_api.sql`, inventory external consumers, announce their cutoff, stop callers and drain retries. At deployment all retired routes return `410 API_RETIRED`; there is no grace period. The migration revokes existing `api_keys` with `is_active = false`, disables writes to legacy AI tables and historical `ai-books` storage, and retains owner-scoped reads/exports. `llm_provider_keys` remains writable by eligible authors/admins only for their own keys.
+
+No data is deleted: posts (including generated posts and drafts), provenance, idempotency receipts, books, extracted text, chats and messages remain indefinitely pending a separately reviewed owner export/cleanup. Current PDF upload stored extracted text rather than files; privately inventory historical `ai-books` objects. Keep `LLM_KEY_ENCRYPTION_SECRET` unchanged. Application rollback does not reactivate keys and requires deliberate key reprovisioning if external access is restored. See [retirement rollout](../api/developer-api.md#consumer-cutoff-and-rollout).
+
+Run the rolled-back `database/tests/legacy_ai_retirement.sql` assertions against a designated disposable migrated database, together with existing MFA and atomic-post assertions. Never use production for these fixtures.

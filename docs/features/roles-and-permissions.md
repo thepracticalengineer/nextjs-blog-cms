@@ -2,10 +2,10 @@
 
 | Role   | Access                                          |
 | ------ | ----------------------------------------------- |
-| Admin  | Full control (users, posts, roles, comments, developer settings) |
+| Admin  | Full control (users, posts, roles, comments; own provider settings) |
 | Author | Create and manage own posts, delete own comments |
 
-Session clients enforce Supabase RLS. Service-role clients bypass RLS and must perform explicit authentication, ownership and role checks. Authors also manage their own developer API and provider keys.
+Session clients enforce Supabase RLS. Service-role clients bypass RLS and must perform explicit authentication, ownership and role checks. Authors and admins manage only their own encrypted provider keys in Settings → AI Providers, with cookie authentication and MFA. External developer keys are revoked and their API/UI is retired; admins receive no cross-owner provider-key access.
 
 Public email/password, Google, and GitHub signup all use the database default `author` role with immediate author access, including publishing (subject to publication checks). There is no pending-contributor approval state; issue #111 tracks any future invitation/approval policy. Provider names, avatars, and editable user metadata never assign roles. Existing linked identities retain their user ID and database role. See [social authentication](../setup/social-auth.md) for identity and MFA behavior.
 

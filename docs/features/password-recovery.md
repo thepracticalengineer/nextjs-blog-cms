@@ -162,8 +162,7 @@ The dashboard proxy, server authorization helper and cookie-authenticated APIs
 check assurance. `authorizeSession` verifies the user with Auth before checking
 assurance and the private profile/role; `getProfile` remains the fail-closed action
 wrapper. `authorizeApi` returns structured errors before request parsing, private
-queries, provider calls or service-role access. AI chat/book ownership remains
-mandatory after authorization, including for administrators. Protected layouts
+queries, provider calls or service-role access. AI Providers settings require owner scope after authorization, including for administrators. Retired AI routes return 410 without reading private data. Protected layouts
 redirect an incomplete session to `/mfa`; provider/database outages fail rendering
 instead of creating an MFA redirect loop.
 
@@ -178,9 +177,7 @@ public taxonomy/comments, public image URLs and the limited owner-executed
 `public_author_profiles` projection remain public.
 
 Service-role clients bypass these policies: session callers must pass the shared
-guard first. Existing API keys are separate machine credentials, not Supabase
-sessions with an AAL claim; key use retains its existing contract, while key
-management requires the session guard. Cron, webhook, newsletter capability and
+guard first. Existing developer API keys are revoked by the retirement migration; all retired routes return `410 API_RETIRED` regardless of credentials. Provider-key management requires the session guard and owner checks. Cron, webhook, newsletter capability and
 password-recovery grants retain their own authorization contracts. MFA enrollment,
 challenge and recovery must remain reachable before completing MFA.
 

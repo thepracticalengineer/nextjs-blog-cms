@@ -75,3 +75,12 @@ test('checks the head again before posting and allows a fork head with matching 
   await publishCoverageComment(f.args)
   assert.equal(f.calls.length, 1)
 })
+
+for (const branch of ['develop', 'main', 'feat/untrusted']) {
+  test(`coverage target ${branch} is checked independently of workflow filters`, async t => {
+    const f = fixture(t)
+    f.github.rest.pulls.get = async () => ({ data: { state: 'open', head: { sha: head }, base: { ref: branch, repo: { full_name: 'org/repo' } } } })
+    await publishCoverageComment(f.args)
+    assert.equal(f.calls.length, branch === 'feat/untrusted' ? 0 : 1)
+  })
+}

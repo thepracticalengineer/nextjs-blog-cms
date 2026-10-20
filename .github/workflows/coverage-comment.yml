@@ -30,7 +30,7 @@ jobs:
             const prs = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit, {
               ...context.repo, commit_sha: run.head_sha, per_page: 100,
             });
-            const pr = prs.find(pr => pr.state === 'open' && pr.base.ref === 'main' &&
+            const pr = prs.find(pr => pr.state === 'open' && ['main', 'develop'].includes(pr.base.ref) &&
               pr.base.repo.full_name === `${context.repo.owner}/${context.repo.repo}` && pr.head.sha === run.head_sha);
             if (pr) core.setOutput('number', String(pr.number));
 

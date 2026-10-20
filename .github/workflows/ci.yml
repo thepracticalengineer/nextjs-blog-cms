@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/**, feature/**, fix/**, chore/**, codex/**]
+    branches: [main, develop, feat/**, feature/**, fix/**, chore/**, codex/**]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
 
       - name: Check documentation
         run: |
-          node --test scripts/conventions/*.test.mjs
+          node --test scripts/conventions/*.test.mjs scripts/promotion/*.test.mjs
           pnpm run docs:test
           pnpm run docs:check
           node --test scripts/coverage/report.test.mjs scripts/coverage/baseline.test.mjs scripts/coverage/comment.test.mjs
@@ -180,6 +180,11 @@ jobs:
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse_review.sql
           node database/tests/auth-abuse-concurrency.mjs
 
+      - name: Verify legacy AI retirement and credential ownership
+        run: |
+          node database/tests/legacy-ai-upgrade.mjs
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/legacy_ai_retirement.sql
+
       - name: Verify MFA database and storage boundaries
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
 
@@ -220,13 +225,20 @@ jobs:
       - name: Verify newsletter queue retry and cancellation contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
 
+      - name: Generate disposable provider encryption key
+        run: |
+          node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { randomBytes } from "node:crypto"; appendFileSync(process.env.GITHUB_ENV, "LLM_KEY_ENCRYPTION_SECRET=" + randomBytes(16).toString("hex") + "\n")'
+
       - name: Run API and browser tests
         run: pnpm run test:e2e
 
       - name: Verify publication of URLs created after a production build
         run: |
           pnpm run build
-          E2E_PRODUCTION=1 pnpm exec playwright test e2e/api/posts.publication-pages.spec.ts --project=api
+          E2E_PRODUCTION=1 pnpm exec playwright test e2e/browser/publication-pages.spec.ts --project=browser
+
+      - name: Verify provider settings with isolated Auth and Data API responses
+        run: pnpm exec playwright test --config=e2e/ai-settings.config.ts
 
       - name: Verify OAuth controls with isolated provider navigation
         run: pnpm exec playwright test --config=e2e/oauth-ui.config.ts

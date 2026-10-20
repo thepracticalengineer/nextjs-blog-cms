@@ -21,11 +21,8 @@ export default defineConfig({
         'components/newsletter/SubscribeForm.tsx',
         'lib/permissions/index.ts',
         'lib/store/taxonomy.ts',
-        'lib/apiAuth.ts',
-        'lib/apiHelpers.ts',
         'lib/rateLimit.ts',
         'lib/encryption.ts',
-        'lib/api/auth.ts',
         'lib/auth/session.ts',
         'lib/auth/assurance.ts',
         'lib/auth/mfa-errors.ts',
@@ -67,6 +64,11 @@ export default defineConfig({
         'components/auth/ConfirmationResendForm.tsx',
         // notifications
         'lib/notifications/user-confirmed.ts',
+        // retained owner-scoped AI settings
+        'features/ai/**/*.ts',
+        'features/ai/components/*.tsx',
+        'app/api/settings/ai-providers/route.ts',
+        'lib/api-retirement.ts',
         // features
         'features/auth/context/*.tsx',
         'features/auth/hooks/*.ts',
@@ -92,10 +94,6 @@ export default defineConfig({
         'features/comments/components/CommentForm.tsx',
         'features/comments/components/CommentList.tsx',
         'features/comments/components/DeleteCommentButton.tsx',
-        'features/api-keys/apiKeyService.ts',
-        'features/ai-assistant/chatService.ts',
-        'features/ai-assistant/llmKeyService.ts',
-        'features/ai-assistant/pdfService.ts',
         // components
         'components/dashboard/RoleBadge.tsx',
         'components/dashboard/PostTable/utils.ts',
