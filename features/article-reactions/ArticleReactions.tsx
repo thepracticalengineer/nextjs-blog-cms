@@ -42,6 +42,18 @@ function ReactionState({ returnPath, ...props }: Props & { viewerId: string | nu
     void state.save(reaction, values.includes(reaction))
   }
 
+  // Keep recovery reachable in the active surface; a popup can cover page controls.
+  const recovery = (state.error || state.failed) && <div className="flex max-w-xs flex-col gap-2">
+    {state.error && <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+      <span>{state.error}</span><Button variant="link" size="sm" className="min-h-11" onClick={() => void state.refresh()}>Refresh reactions</Button>
+    </div>}
+    {state.failed && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+      <span>{state.failed.error}</span>
+      {state.failed.retryable && <Button variant="link" size="sm" className="min-h-11" disabled={state.pending}
+        onClick={() => { if (state.failed) void state.save(state.failed.reaction, state.failed.selected) }}>Retry reaction</Button>}
+    </div>}
+  </div>
+
   return <section id="article-reactions" aria-label="Article reactions" className="my-10 flex scroll-mt-24 flex-col gap-3">
     <div className="flex flex-wrap items-center gap-3">
       <Dialog open={loginOpen} onOpenChange={setLoginOpen}>
@@ -67,6 +79,7 @@ function ReactionState({ returnPath, ...props }: Props & { viewerId: string | nu
                     </Toggle>
                   })}
                 </ToggleGroup>
+                {recovery}
               </Popover.Popup>
             </Popover.Positioner>
           </Popover.Portal>
@@ -87,14 +100,7 @@ function ReactionState({ returnPath, ...props }: Props & { viewerId: string | nu
         {total === null ? 'Reactions unavailable' : `${total} ${total === 1 ? 'reaction' : 'reactions'}`}
       </span>
     </div>
-    {state.error && <div role="status" className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-      <span>{state.error}</span><Button variant="link" size="sm" onClick={() => void state.refresh()}>Refresh reactions</Button>
-    </div>}
-    {state.failed && <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
-      <span>{state.failed.error}</span>
-      {state.failed.retryable && <Button variant="link" size="sm" disabled={state.pending}
-        onClick={() => { if (state.failed) void state.save(state.failed.reaction, state.failed.selected) }}>Retry reaction</Button>}
-    </div>}
+    {!pickerOpen && recovery}
     <span className="sr-only" role="status" aria-live="polite">{state.feedback}</span>
   </section>
 }

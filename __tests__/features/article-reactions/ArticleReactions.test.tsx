@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { ArticleReactions } from '@/features/article-reactions/ArticleReactions'
 import { setArticleReaction } from '@/features/article-reactions/actions'
@@ -68,7 +68,8 @@ describe('article reactions',()=>{
   vi.mocked(readArticleReactions).mockResolvedValue({data:loved,viewerId:'reader'})
   fireEvent.click(screen.getByRole('button',{name:'Love: 0 reactions'}))
   await screen.findByRole('button',{name:'Love: 1 reaction',pressed:true})
-  fireEvent.click(screen.getByRole('button',{name:'Retry reaction'}))
+  const picker=screen.getByRole('dialog',{name:'How did this article land?'})
+  fireEvent.click(within(picker).getByRole('button',{name:'Retry reaction'}))
   await waitFor(()=>expect(setArticleReaction).toHaveBeenLastCalledWith(id,'love',true))
  })
  it('ignores a read started before a successful write',async()=>{
@@ -100,6 +101,16 @@ describe('article reactions',()=>{
   vi.mocked(readArticleReactions).mockResolvedValue({data:zero,viewerId:'reader'})
   fireEvent.click(screen.getByRole('button',{name:'Refresh reactions'}))
   await screen.findByText('0 reactions')
+ })
+ it('keeps read recovery inside an open picker',async()=>{
+  vi.mocked(readArticleReactions).mockResolvedValue({error:'Could not refresh reactions. Try again.'})
+  render(ui());await open()
+  const picker=screen.getByRole('dialog',{name:'How did this article land?'})
+  const refresh=await within(picker).findByRole('button',{name:'Refresh reactions'})
+  vi.mocked(readArticleReactions).mockResolvedValue({data:both,viewerId:'reader'})
+  fireEvent.click(refresh)
+  await screen.findByText('2 reactions')
+  expect(screen.queryByRole('button',{name:'Refresh reactions'})).not.toBeInTheDocument()
  })
  it('hides old counts when an article becomes unavailable',async()=>{
   vi.mocked(readArticleReactions).mockResolvedValue({data:null,viewerId:'reader'})

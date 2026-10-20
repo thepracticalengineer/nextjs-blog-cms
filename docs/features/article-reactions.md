@@ -29,6 +29,8 @@ Counts and selections update from the successful server snapshot. Writes are
 serialized in each mounted control and disable selection while pending. Failed or
 uncertain writes trigger reconciliation and offer a retry of the original desired
 state where retryable; permanent authorization/input/unavailable errors do not.
+Errors and recovery controls appear inside the open picker, and on the article
+when the picker is closed, so the popup cannot cover the retry/refresh buttons.
 Requests expire in the UI after 15 seconds; late responses cannot overwrite newer
 state. Identity changes discard pending UI/private selections. Background reads
 bypass Next's action queue, coalesce focus/visibility events, and refresh every
