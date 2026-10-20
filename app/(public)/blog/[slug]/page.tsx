@@ -1,3 +1,5 @@
+import { Suspense } from 'react'
+import { ArticleReactionSection } from '@/features/article-reactions/ArticleReactionSection'
 import { AnalyticsPage } from '@/components/analytics/AnalyticsPage'
 import { notFound, permanentRedirect } from 'next/navigation'
 import Link from 'next/link'
@@ -123,6 +125,10 @@ export default async function PostPage({ params }: PostPageProps) {
               ))}
             </div>
           )}
+
+          <Suspense fallback={<p role="status" className="my-10 text-sm text-muted-foreground">Loading reactions…</p>}>
+            <ArticleReactionSection postId={post.id} postSlug={post.slug} />
+          </Suspense>
 
           <SubscribeForm />
 

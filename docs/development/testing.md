@@ -354,3 +354,8 @@ access; SQL and real-action E2E tests require the dedicated disposable stack.
 ## Release automation
 
 Run `pnpm run release:test` for offline Release Please generation, PR reuse, publication planning and retry checks. These tests use the real pinned library with in-memory GitHub responses and cannot publish a production release. See [release verification and hosted limits](../operations/releases.md#safe-verification-and-upgrade-checks).
+
+## Article reactions
+
+See [article reaction verification](../features/article-reactions.md#migration-and-verification)
+for unit, disposable database/concurrency, isolated desktop/mobile and full-stack browser checks.
