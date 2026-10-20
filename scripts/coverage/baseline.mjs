@@ -16,8 +16,8 @@ export function downloadBaseline({ sha, repo, directory = 'baseline', run = spaw
   const runs = run(githubCli, ['api', `repos/${repo}/actions/workflows/ci.yml/runs?event=push&status=success&head_sha=${sha}&per_page=20`], { encoding: 'utf8' })
   let candidates = []
   try { candidates = JSON.parse(runs.stdout).workflow_runs ?? [] } catch { /* unavailable API/token */ }
-  const baseline = candidates.find(candidate => candidate.head_sha === sha && candidate.head_branch === 'main' && candidate.event === 'push' && candidate.conclusion === 'success')
-  if (!baseline) return 'Baseline unavailable: no successful main CI run for the exact base commit.'
+  const baseline = candidates.find(candidate => candidate.head_sha === sha && ['main', 'develop'].includes(candidate.head_branch) && candidate.event === 'push' && candidate.conclusion === 'success')
+  if (!baseline) return 'Baseline unavailable: no successful main/develop CI run for the exact base commit.'
   const download = run(githubCli, ['run', 'download', String(baseline.id), '--repo', repo, '--name', 'coverage-baseline', '--dir', directory], { encoding: 'utf8' })
   if (download.status !== 0) {
     rmSync(directory, { recursive: true, force: true })

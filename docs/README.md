@@ -45,6 +45,8 @@
 
 ## Operations
 
+- [Develop promotion, synchronization, hotfixes and rollout checklist](operations/branch-promotion.md)
+
 - [Numbered releases, Release Please setup and recovery](operations/releases.md)
 
 - [Search indexing, canonical metadata and issue #94 verification](operations/search-indexing.md)

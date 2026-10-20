@@ -1,0 +1,43 @@
+name: Synchronize develop
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: synchronize-main-to-develop
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  synchronize:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Only immutable trusted main code; never check out a PR head or install dependencies.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Create repository-scoped synchronization token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Maintain main to develop PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { pathToFileURL } = require('node:url');
+            const { synchronize } = await import(pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/promotion/sync.mjs`).href);
+            await synchronize({ github, core, ...context.repo });
