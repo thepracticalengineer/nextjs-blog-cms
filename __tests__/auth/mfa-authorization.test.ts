@@ -4,30 +4,15 @@ import type { NextRequest } from 'next/server'
 vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }))
 vi.mock('@/lib/supabase/service', () => ({ createServiceClient: vi.fn() }))
 vi.mock('next/navigation', () => ({ redirect: vi.fn((url: string) => { throw new Error(url) }) }))
-vi.mock('@/features/ai-assistant/chatService', () => ({
-  getChats: vi.fn(), createChat: vi.fn(), getChat: vi.fn(), deleteChat: vi.fn(),
-  getBooks: vi.fn(), createBook: vi.fn(), deleteBook: vi.fn(), getMessages: vi.fn(),
-  addMessage: vi.fn(), updateChatLastMessage: vi.fn(), updateChatTitle: vi.fn(), getBookById: vi.fn(),
-}))
-vi.mock('@/features/ai-assistant/pdfService', () => ({ extractTextFromPdf: vi.fn() }))
-vi.mock('@/features/ai-assistant/llmService', () => ({ validateProviderKey: vi.fn(), generateBlogPost: vi.fn() }))
-vi.mock('@/features/api-keys/apiKeyService', () => ({ listApiKeys: vi.fn(), createApiKey: vi.fn(), revokeApiKey: vi.fn(), deleteApiKey: vi.fn(), resolveCategoryId: vi.fn() }))
+vi.mock('server-only', () => ({}))
+vi.mock('@/features/ai/providers', () => ({ verifyProviderKey: vi.fn() }))
 vi.mock('@/features/posts/media/store', () => ({ storeImage: vi.fn() }))
 vi.mock('@/features/posts/media/optimize', () => ({ optimizeImage: vi.fn() }))
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { authorizeSession, requireAuth } from '@/lib/auth/session'
 import { ownsResource } from '@/lib/auth/api'
-import { getChats, deleteChat } from '@/features/ai-assistant/chatService'
-import * as keys from '@/app/api/developer/keys/route'
-import * as key from '@/app/api/developer/keys/[id]/route'
-import * as llmKeys from '@/app/api/developer/llm-keys/route'
-import * as chats from '@/app/api/ai-assistant/chats/route'
-import * as chat from '@/app/api/ai-assistant/chats/[chatId]/route'
-import * as books from '@/app/api/ai-assistant/books/route'
-import * as book from '@/app/api/ai-assistant/books/[bookId]/route'
-import * as messages from '@/app/api/ai-assistant/chats/[chatId]/messages/route'
-import * as generatePost from '@/app/api/ai-assistant/chats/[chatId]/generate-post/route'
+import * as keys from '@/app/api/settings/ai-providers/route'
 import * as media from '@/app/api/post-media/route'
 import * as subscribers from '@/app/api/newsletter/subscribers/export/route'
 
@@ -48,17 +33,7 @@ beforeEach(() => vi.clearAllMocks())
 
 const request = () => new Request('http://localhost/api/test', { method: 'POST', body: '{invalid', headers: { 'content-type': 'application/json' } }) as NextRequest
 const endpoints: [string, () => Promise<Response>][] = [
-  ['keys GET', () => keys.GET()], ['keys POST', () => keys.POST(request())],
-  ['key PATCH', () => key.PATCH(request(), { params: Promise.resolve({ id: 'key' }) })],
-  ['key DELETE', () => key.DELETE(request(), { params: Promise.resolve({ id: 'key' }) })],
-  ['llm GET', () => llmKeys.GET()], ['llm POST', () => llmKeys.POST(request())], ['llm DELETE', () => llmKeys.DELETE(request())],
-  ['chats GET', () => chats.GET()], ['chats POST', () => chats.POST(request())],
-  ['chat DELETE', () => chat.DELETE(request(), { params: Promise.resolve({ chatId: 'chat' }) })],
-  ['books GET', () => books.GET(request())], ['books POST', () => books.POST(request())],
-  ['book DELETE', () => book.DELETE(request(), { params: Promise.resolve({ bookId: 'book' }) })],
-  ['messages GET', () => messages.GET(request(), { params: Promise.resolve({ chatId: 'chat' }) })],
-  ['messages POST', () => messages.POST(request(), { params: Promise.resolve({ chatId: 'chat' }) })],
-  ['generate post', () => generatePost.POST(request(), { params: Promise.resolve({ chatId: 'chat' }) })],
+  ['providers GET', () => keys.GET()], ['providers POST', () => keys.POST(request())], ['providers DELETE', () => keys.DELETE(request())],
   ['post media', () => media.POST(request())], ['subscribers export', () => subscribers.GET(request())],
 ]
 
@@ -79,16 +54,13 @@ describe.each(endpoints)('%s direct authorization', (_name, call) => {
     expect(response.headers.get('cache-control')).toBe('no-store')
     expect(client.from).not.toHaveBeenCalled()
     expect(createServiceClient).not.toHaveBeenCalled()
-    expect(getChats).not.toHaveBeenCalled()
-    expect(deleteChat).not.toHaveBeenCalled()
   })
 })
 it.each([['aal2', true], ['aal1', false]] as const)('allows %s enrolled=%s and retains role checks', async (level, enrolled) => {
   clientFor(level, enrolled)
   expect((await authorizeSession()).profile?.id).toBe('owner')
   expect((await authorizeSession('users:read')).failure?.code).toBe('FORBIDDEN')
-  vi.mocked(getChats).mockResolvedValue([])
-  expect((await chats.GET()).status).toBe(200)
+  expect((await authorizeSession('ai_providers:write')).profile?.id).toBe('owner')
 })
 it('denies a stale AAL1 session even when cached factors say no enrollment', async () => {
   const client = clientFor()
@@ -102,7 +74,7 @@ it('fails closed when the profile lookup fails', async () => {
 })
 it('redirects protected pages to MFA with a safe return path', async () => {
   clientFor()
-  await expect(requireAuth('/dashboard/ai-assistant')).rejects.toThrow('/mfa?next=%2Fdashboard%2Fai-assistant')
+  await expect(requireAuth('/dashboard/settings/ai-providers')).rejects.toThrow('/mfa?next=%2Fdashboard%2Fsettings%2Fai-providers')
 })
 it('never treats a different owner or missing owner as authorized', () => {
   expect(ownsResource({ id: 'owner' }, 'owner')).toBe(true)
@@ -112,7 +84,7 @@ it('never treats a different owner or missing owner as authorized', () => {
 it('fails page rendering on outages without entering a challenge redirect loop', async () => {
   const client = clientFor('aal2')
   client.from().maybeSingle.mockResolvedValue({ data: null, error: { message: 'unavailable' } })
-  await expect(requireAuth('/dashboard/ai-assistant')).rejects.toThrow('Authentication could not be verified')
+  await expect(requireAuth('/dashboard/settings/ai-providers')).rejects.toThrow('Authentication could not be verified')
 })
 it.each([
   new AuthSessionMissingError(),

@@ -3,7 +3,7 @@
 import { config } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { chromium, expect } from '@playwright/test'
-import { randomUUID, randomBytes, createHash } from 'node:crypto'
+import { randomUUID, randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { assertDedicatedTestProject } from '../e2e/environment.ts'
 
@@ -21,7 +21,6 @@ const admin = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: {
 const prefix = `perf77-${randomUUID()}`
 const email = `${prefix}@example.com`
 const password = randomBytes(24).toString('base64url') + 'aA1!'
-const rawKey = `fmblog_${randomBytes(32).toString('hex')}`
 const samples = 7
 const count = 1500
 const sentence = 'A reliable engineering system records each request before applying a change and verifies the result before returning a response. '
@@ -47,7 +46,6 @@ try {
   check(await admin.from('profiles').update({ role: 'author', full_name: 'Performance Fixture Author' }).eq('id', userId))
   categoryId = check(await admin.from('categories').insert({ name: prefix, slug: prefix }).select('id').single()).id
   tagId = check(await admin.from('tags').insert({ name: prefix, slug: prefix }).select('id').single()).id
-  check(await admin.from('api_keys').insert({ user_id: userId, name: 'Disposable benchmark', key_hash: createHash('sha256').update(rawKey).digest('hex'), key_preview: 'benchmark', is_active: true }))
   let editorId
   for (let offset = 0; offset < count; offset += 100) {
     const rows = check(await admin.from('posts').insert(Array.from({ length: Math.min(100, count - offset) }, (_, n) => ({
@@ -88,15 +86,17 @@ try {
         await expect(page.getByRole('button', { name: 'Save Draft', exact: true })).toBeEnabled()
         if (i) readiness.push(performance.now() - start)
         start = performance.now()
-        // Synthetic fixture only: exercise the supported REST publication contract.
-        const published = await page.request.patch(`${base}/api/posts/${editorId}`, { headers: { Authorization: `Bearer ${rawKey}` }, data: { status: 'published', editorial_reviewed: true } })
-        if (published.status() !== 200) throw new Error(`Publish failed: ${await published.text()}`)
+        // Exercise the supported manual-editor publication path.
+        await page.getByRole('checkbox', { name: /I have reviewed/ }).check()
+        await page.getByRole('button', { name: 'Publish', exact: true }).click()
+        await page.getByRole('button', { name: 'Confirm publication', exact: true }).click()
+        await expect(page.getByRole('button', { name: 'Unpublish', exact: true })).toBeVisible()
         if (i) publish.push(performance.now() - start)
-        const unpublished = await page.request.patch(`${base}/api/posts/${editorId}`, { headers: { Authorization: `Bearer ${rawKey}` }, data: { status: 'draft' } })
-        if (unpublished.status() !== 200) throw new Error(`Unpublish failed: ${await unpublished.text()}`)
+        await page.getByRole('button', { name: 'Unpublish', exact: true }).click()
+        await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeVisible()
       }
       htmlBytes = Buffer.byteLength(await (await page.request.get(`${base}/dashboard/posts`)).text())
-      result.browser[label] = { dashboardReadyMs: stats(dashboard), dashboardHtmlBytes: htmlBytes, editorReadyMs: stats(readiness), restPublishCompletionMs: stats(publish) }
+      result.browser[label] = { dashboardReadyMs: stats(dashboard), dashboardHtmlBytes: htmlBytes, editorReadyMs: stats(readiness), editorPublishCompletionMs: stats(publish) }
       await page.close()
     }
   }

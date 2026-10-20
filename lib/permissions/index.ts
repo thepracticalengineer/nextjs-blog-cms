@@ -16,7 +16,7 @@ const rolePermissions: Record<Role, Permission[]> = {
     'tags:write',
     'comments:delete:own',
     'comments:delete:all',
-    'api_keys:write',
+    'ai_providers:write',
   ],
   author: [
     'posts:create',
@@ -25,7 +25,7 @@ const rolePermissions: Record<Role, Permission[]> = {
     'posts:delete:own',
     'posts:publish',
     'comments:delete:own',
-    'api_keys:write',
+    'ai_providers:write',
   ],
 }
 

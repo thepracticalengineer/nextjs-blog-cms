@@ -1,3 +1,4 @@
+import { seedPost } from '../post-fixtures'
 import { createClient } from '@supabase/supabase-js'
 import { test, expect } from '../fixtures'
 import { readyArticle } from '../publication-fixture'
@@ -7,12 +8,9 @@ const admin = () => createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.
   auth: { persistSession: false, autoRefreshToken: false },
 })
 
-test('author reviews, publishes, corrects a rejected live edit and unpublishes safely', async ({ page, request, apiKey }) => {
-  const headers = { Authorization: `Bearer ${apiKey}` }
+test('author reviews, publishes, corrects a rejected live edit and unpublishes safely', async ({ page, request }) => {
   const slug = `publication-readiness-${Date.now()}`
-  const created = await request.post('/api/posts/create', { headers, data: { ...readyArticle, slug, status: 'draft' } })
-  expect(created.status()).toBe(201)
-  const id = (await created.json()).data.post.id as string
+  const { id } = await seedPost({ ...readyArticle, slug, status: 'draft' })
   try {
     await page.goto('/login')
     await page.getByLabel('Email address').fill('e2e-test@playwright.local')

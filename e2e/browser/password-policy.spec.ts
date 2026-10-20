@@ -227,7 +227,7 @@ test('MFA rejects direct AAL1 updates and account settings retain AAL2 through a
     await expect(page.getByRole('status').filter({ hasText: 'Password updated' })).toBeVisible()
     // Private API access proves the original AAL2 session was not replaced by
     // the temporary AAL1 password-verification session.
-    expect((await page.request.get('/api/ai-assistant/books')).status()).toBe(200)
+    expect((await page.request.get('/api/settings/ai-providers')).status()).toBe(200)
     expect((await client().auth.signInWithPassword({ email, password: 'NewMfaPassword123!' })).error).toBeNull()
   } finally {
     expect((await service.auth.admin.deleteUser(userId)).error).toBeNull()

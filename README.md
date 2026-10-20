@@ -1,6 +1,6 @@
 # Next.js Blog CMS
 
-A full-stack blog CMS with a TipTap editor, Supabase authentication, Admin/Author roles, draft publication, an AI writing assistant, newsletter subscriptions and a headless REST API.
+A full-stack blog CMS with a TipTap editor, Supabase authentication, Admin/Author roles, draft publication, encrypted personal AI provider settings and newsletter subscriptions.
 
 ## Features and stack
 
@@ -8,8 +8,8 @@ A full-stack blog CMS with a TipTap editor, Supabase authentication, Admin/Autho
 - Supabase Postgres, Auth and Storage with private author data and role/ownership checks.
 - Rich text, images, tags/categories, comments, public author profiles and SEO metadata.
 - Human-reviewed publication, reserved article URLs, redirects and atomic saves.
-- PDF-assisted drafting with Claude, Gemini or OpenAI and encrypted per-user provider keys.
-- Developer API keys, optional idempotent creation and delayed Resend newsletters.
+- Owner-scoped AI Providers settings with encrypted per-user credentials.
+- Delayed Resend newsletters. Standalone AI drafting and the external Developer API are retired (#209); editor assistance (#211–214) is future work.
 - Vitest, Playwright API/browser tests and Vercel deployment.
 
 ## Quick start
@@ -37,7 +37,7 @@ Open [localhost:3000](http://localhost:3000). Keep tests on disposable databases
 ## Project structure
 
 ```text
-app/                   Public, dashboard, AI routes and backend API
+app/                   Public, dashboard, settings and backend API
 components/            Shared UI, blog and TipTap editor
 features/              Posts, auth, profiles, AI, newsletter and other domains
 lib/                   Supabase clients, permissions and utilities
@@ -56,8 +56,8 @@ Start at the [documentation index](docs/README.md). Coding agents should read [A
 
 - [Setup and environment](docs/setup/local-development.md), [migrations](docs/setup/migrations.md), [deployment](docs/setup/deployment.md), [webhooks](docs/setup/webhooks.md).
 - [Agent skills](docs/development/agent-skills.md), [AI/MCP workflows](docs/development/ai-workflows.md), [testing](docs/development/testing.md), [dependency management](docs/dependency-upgrade.md).
-- [Developer API](docs/api/developer-api.md) and [publication, concurrency and idempotency](docs/api/publication-and-writes.md).
-- [Roles](docs/features/roles-and-permissions.md), [AI assistant](docs/features/ai-assistant.md), [newsletter](docs/features/newsletter.md), [password recovery](docs/features/password-recovery.md), [author profiles](docs/features/public-author-profiles.md), [publication and slugs](docs/features/publication-and-slugs.md).
+- [Developer API retirement](docs/api/developer-api.md) and [publication, concurrency and idempotency](docs/api/publication-and-writes.md).
+- [Roles](docs/features/roles-and-permissions.md), [AI Providers and retired assistant](docs/features/ai-assistant.md), [newsletter](docs/features/newsletter.md), [password recovery](docs/features/password-recovery.md), [author profiles](docs/features/public-author-profiles.md), [publication and slugs](docs/features/publication-and-slugs.md).
 - [Deployment verification](docs/operations/deployment-verification.md), [content cleanup and dated audit](docs/operations/content-cleanup.md), [screenshots](docs/features/screenshots.md), [roadmap](docs/features/roadmap.md).
 
 ## Contributing and license

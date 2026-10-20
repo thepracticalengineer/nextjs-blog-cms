@@ -13,7 +13,7 @@ async function seedSession(context: BrowserContext, outage = false, expired = fa
 }
 async function expectPrivateAccessDenied(page: Page, context: BrowserContext) {
   expect((await context.cookies()).filter(cookie => cookie.name.startsWith(key))).toEqual([])
-  expect((await page.request.get('/api/ai-assistant/books')).status()).toBe(401)
+  expect((await page.request.get('/api/settings/ai-providers')).status()).toBe(401)
   await page.goto('/dashboard')
   await expect(page).toHaveURL(/\/login\?next=/)
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible()

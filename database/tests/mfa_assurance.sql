@@ -53,15 +53,15 @@ BEGIN
   ASSERT (changed = 1) = allowed, 'Published content is not publicly writable';
   DELETE FROM storage.objects WHERE bucket_id = 'ai-books' AND name = auth.uid()::text || '/private.pdf';
   GET DIAGNOSTICS changed = ROW_COUNT;
-  ASSERT (changed = 1) = allowed, 'Private storage delete';
+  ASSERT changed = 0, 'Retired storage delete';
   BEGIN
     INSERT INTO public.ai_books (user_id, title, file_name, extracted_text) VALUES (auth.uid(), 'new', 'new.pdf', 'private');
-    ASSERT allowed, 'AAL1 book insert succeeded';
-  EXCEPTION WHEN insufficient_privilege THEN ASSERT NOT allowed, 'Authorized book insert denied'; END;
+    RAISE EXCEPTION 'Retired book insert succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   BEGIN
     INSERT INTO storage.objects (bucket_id, name) VALUES ('ai-books', auth.uid()::text || '/new.pdf');
-    ASSERT allowed, 'AAL1 storage insert succeeded';
-  EXCEPTION WHEN insufficient_privilege THEN ASSERT NOT allowed, 'Authorized storage insert denied'; END;
+    RAISE EXCEPTION 'Retired storage insert succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 GRANT EXECUTE ON FUNCTION pg_temp.assert_mfa_access(boolean) TO authenticated;
 
@@ -92,7 +92,10 @@ DO $$ BEGIN
   ASSERT auth_private.has_required_assurance(), 'Unverified factor blocked AAL1';
   ASSERT (SELECT count(*) FROM public.profiles WHERE id = auth.uid()) = 1, 'Non-enrolled profile blocked';
   ASSERT (SELECT count(*) FROM public.ai_books) = 0, 'Other user books exposed';
-  INSERT INTO public.ai_books (user_id, title, file_name, extracted_text) VALUES (auth.uid(), 'new', 'new.pdf', 'private');
+  BEGIN
+    INSERT INTO public.ai_books (user_id, title, file_name, extracted_text) VALUES (auth.uid(), 'new', 'new.pdf', 'private');
+    RAISE EXCEPTION 'Retired book insert succeeded';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
   UPDATE public.profiles SET bio = 'non-enrolled update' WHERE id = auth.uid();
   ASSERT FOUND, 'Non-enrolled profile update blocked';
 END $$;

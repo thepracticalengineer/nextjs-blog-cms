@@ -92,8 +92,8 @@ article preserve those dimensions and use lazy loading and asynchronous decoding
 Cover containers reserve responsive layout space and use the edited description,
 falling back to the post title when none is saved. Newsletter covers use the same
 description and fallback.
-REST create/update accepts `image_alt`, returned with `image_url`; dashboard saves
-and recovery copies preserve cover descriptions. Alt text does not replace human
+Dashboard saves and recovery copies preserve cover descriptions (`image_alt`)
+alongside `image_url`. The external REST write API is retired. Alt text does not replace human
 editorial review of image meaning, rights or suitability.
 
 ## Abandoned uploads

@@ -1,10 +1,11 @@
+import { publishEditor, unpublishEditor, changePublishedSlug, savePublishedEditor } from '../editor-actions'
+import { seedPost, readPost, removePost } from '../post-fixtures'
 import { createClient } from '@supabase/supabase-js'
 import { test, expect } from '../fixtures'
 import { readyArticle } from '../publication-fixture'
 
-test('preserves custom slugs and redirects deliberate published URL changes', async ({ page, request, apiKey }) => {
+test('preserves custom slugs and redirects deliberate published URL changes', async ({ page, request }) => {
   page.on('dialog', dialog => dialog.accept())
-  const headers = { Authorization: `Bearer ${apiKey}` }
   const slug = `slug-safety-${Date.now()}`
   const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -28,18 +29,15 @@ test('preserves custom slugs and redirects deliberate published URL changes', as
   await expect(page.getByText('Post saved as draft', { exact: true })).toBeVisible()
   const draftId = new URL(page.url()).searchParams.get('draft')!
   try {
-    const saved = await request.get(`/api/posts/${draftId}`, { headers })
-    expect(saved.status()).toBe(200)
-    expect((await saved.json()).data.slug).toMatch(/^integration-testing-at-service-boundaries(?:-\d+)?$/)
+    expect((await readPost(draftId)).slug).toMatch(/^integration-testing-at-service-boundaries(?:-\d+)?$/)
   } finally {
-    await request.delete(`/api/posts/${draftId}`, { headers })
+    await removePost(draftId)
   }
 
-  const created = await request.post('/api/posts/create', { headers, data: { ...readyArticle, slug, status: 'published', editorial_reviewed: true } })
-  expect(created.status()).toBe(201)
-  const id = (await created.json()).data.post.id as string
+  const { id } = await seedPost({ ...readyArticle, slug, status: 'draft' })
   try {
     await page.goto(`/dashboard/posts/${id}/edit`)
+    await publishEditor(page)
     await expect(page.getByLabel('Slug')).toHaveAttribute('readonly')
     await page.getByLabel('Post title').fill('Updated Integration Testing at Service Boundaries')
     await page.getByLabel('Post title').blur()
@@ -57,17 +55,27 @@ test('preserves custom slugs and redirects deliberate published URL changes', as
     expect(redirect.status()).toBe(308)
     expect(redirect.headers().location).toBe(`/blog/${slug}-new`)
     expect((await request.get(`/blog/${slug}`)).status()).toBe(200)
-    const conflict = await request.post('/api/posts/create', { headers, data: { title: 'Another draft', slug } })
-    expect(conflict.status()).toBe(409)
-    expect((await conflict.json()).details.field_errors.slug).toBeDefined()
+    // Exercise the editor's reserved-alias validation in a separate writing tab.
+    const conflictPage = await page.context().newPage()
+    await conflictPage.goto('/dashboard/posts/new')
+    await expect(conflictPage.locator('.ProseMirror')).toBeVisible()
+    await conflictPage.getByLabel('Post title').fill('Another draft')
+    await conflictPage.getByLabel('Post title').blur()
+    await expect(conflictPage.getByLabel('Slug', { exact: true })).toHaveValue('another-draft')
+    await conflictPage.getByLabel('Slug', { exact: true }).fill(slug)
+    await expect(conflictPage.getByLabel('Slug', { exact: true })).toHaveValue(slug)
+    await conflictPage.getByRole('button', { name: 'Save Draft', exact: true }).click()
+    await expect(conflictPage.locator('#slug-error')).toContainText('Choose another')
+    await conflictPage.close()
 
-    expect((await request.patch(`/api/posts/${id}`, { headers, data: { status: 'draft' } })).status()).toBe(200)
+    await unpublishEditor(page)
     expect((await request.get(`/blog/${slug}`, { maxRedirects: 0 })).status()).toBe(404)
-    expect((await request.patch(`/api/posts/${id}`, { headers, data: { status: 'published', editorial_reviewed: true } })).status()).toBe(200)
+    await publishEditor(page)
     expect((await request.get(`/blog/${slug}`, { maxRedirects: 0 })).status()).toBe(308)
 
     // Reverting to an owned URL resolves aliases directly, without a loop.
-    expect((await request.patch(`/api/posts/${id}`, { headers, data: { slug, confirm_slug_change: true, editorial_reviewed: true } })).status()).toBe(200)
+    await changePublishedSlug(page, slug)
+    await savePublishedEditor(page)
     const reverted = await request.get(`/blog/${slug}-new`, { maxRedirects: 0 })
     expect(reverted.status()).toBe(308)
     expect(reverted.headers().location).toBe(`/blog/${slug}`)

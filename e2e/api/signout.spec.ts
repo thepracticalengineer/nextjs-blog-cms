@@ -38,10 +38,10 @@ for (const scope of ['local', 'global'] as const) {
       }
       expect((await other.auth.signInWithPassword({ email, password })).error).toBeNull()
       browser = await apiRequest.newContext({ baseURL, storageState: { origins: [], cookies: [...jar].map(([name, value]) => ({ name, value, domain: new URL(baseURL!).hostname, path: '/', expires: -1, httpOnly: false, secure: false, sameSite: 'Lax' })) } })
-      expect((await browser.get('/api/ai-assistant/books')).status()).toBe(rejectedAccess ? 401 : 200)
+      expect((await browser.get('/api/settings/ai-providers')).status()).toBe(rejectedAccess ? 401 : 200)
       expect((await browser.post(`/api/auth/signout?scope=${scope}`)).status()).toBe(204)
       expect((await browser.storageState()).cookies.filter(cookie => cookie.name.startsWith('sb-'))).toEqual([])
-      expect((await browser.get('/api/ai-assistant/books')).status()).toBe(401)
+      expect((await browser.get('/api/settings/ai-providers')).status()).toBe(401)
       const dashboard = await browser.get('/dashboard', { maxRedirects: 0 })
       expect(dashboard.status()).toBe(307)
       expect(dashboard.headers().location).toContain('/login')

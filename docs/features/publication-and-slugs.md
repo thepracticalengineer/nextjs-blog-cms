@@ -44,12 +44,7 @@ An editor must assess originality, sources, appropriate examples, category/tags 
 assets before confirming review. SEO title/description may use the site's title and
 excerpt fallbacks; editors must check their rendered meaning.
 
-REST `POST /api/posts/create` and `PATCH /api/posts/{id}` require
-`"editorial_reviewed": true` when the resulting article is published, including
-PATCH requests that omit `status` while editing a published article. This is an
-attestation by a human reviewer, not permission for an AI pipeline to assert review
-automatically. AI generation routes continue to create drafts and must go through
-the same publishing checks. There is currently no scheduled article-publication
+The dashboard requires explicit human editorial confirmation when publishing or editing a published article. Agents must not assert this review automatically. Existing generated drafts use the same checks. External REST and standalone AI generation routes are retired and return `410 API_RETIRED`; they cannot publish or create drafts. There is currently no scheduled article-publication
 flow; any future flow must reuse `validatePublication` and require prior human
 review. Newsletter scheduling and dispatch independently check readiness and current
 publication state.
@@ -57,8 +52,7 @@ publication state.
 Public cache invalidation covers the root layout (home, blog, author and taxonomy
 pages), affected old/new article URLs and the sitemap. Changing a slug is deliberate;
 the editor locks published URLs until you choose **Change published URL** and
-confirm the permanent redirect. REST PATCH requests that change a published slug
-must include `confirm_slug_change: true` as well as `editorial_reviewed: true`.
+confirm the permanent redirect. The internal save must retain published-slug and editorial confirmation checks.
 Former published URLs return **308** and resolve directly to the current published
 URL. They remain reserved through unpublish/republish; unpublished destinations
 return 404, and deleting a post removes its reservations. Title edits and clearing
@@ -141,16 +135,15 @@ bodies. Blog/category/tag pages show 12 articles per page. Reading time is store
 the database from TipTap text nodes or legacy HTML/plain text at 200 words/minute,
 with a minimum of one minute; it updates automatically for all content writers.
 
-Dashboard and REST publication mutations use `features/posts/cache.ts` to refresh
+Dashboard publication mutations use `features/posts/cache.ts` to refresh
 home, the blog layout (including current/former article URLs and taxonomy pages),
 author pages and sitemap. This covers old/new taxonomy membership without another
 relationship lookup on the write path. It does not invalidate the root layout.
-Draft saves and AI-generated drafts refresh only the dashboard. Route-handler
+Draft saves refresh only the dashboard. Route-handler
 invalidation takes effect on the next visit; it does not push updates into another
 already-open browser tab. Article metadata and page reads share a request-scoped
 React cache, with no cross-user or persistent post cache.
 
-Author and slug validation lookups run concurrently. REST response hydration overlaps
-newsletter transitions, and editor newsletter loading begins after ownership is
+Author and slug validation lookups run concurrently. Editor newsletter loading begins after ownership is
 verified while taxonomy loads continue. Publication validation, atomic writes,
 optimistic concurrency, working-copy cleanup and newsletter handoff remain required.

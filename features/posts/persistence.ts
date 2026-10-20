@@ -27,7 +27,7 @@ export async function savePostAtomic(input: {
   actorId: string; payload: Record<string, unknown>; postId?: string
   expectedUpdatedAt?: string | null; expectedStatus?: string
   tagIds?: string[]; tagNames?: string[]; requestKey?: string; fingerprint?: string
-  chatId?: string; allowAdmin?: boolean
+  allowAdmin?: boolean
 }) {
   const tagNames = input.tagNames?.map(name => ({ name: name.trim(), slug: slugify(name.trim(), { lower: true, strict: true }) }))
     .filter(tag => tag.name)
@@ -37,7 +37,8 @@ export async function savePostAtomic(input: {
     p_expected_updated_at: input.expectedUpdatedAt ?? null, p_expected_status: input.expectedStatus ?? null,
     p_tag_ids: input.tagIds ?? null, p_tag_names: tagNames ?? null,
     p_request_key: input.requestKey ?? null, p_fingerprint: input.fingerprint ?? null,
-    p_chat_id: input.chatId ?? null, p_allow_admin: input.allowAdmin ?? false,
+    // Database compatibility only: retired AI provenance is never written by the app.
+    p_chat_id: null, p_allow_admin: input.allowAdmin ?? false,
   })
   if (!error && !data) return { data: null, error: { code: 'P0001', message: 'The post could not be saved.' } }
   return { data: error ? null : (data as { post: Post; replayed: boolean } | null), error }

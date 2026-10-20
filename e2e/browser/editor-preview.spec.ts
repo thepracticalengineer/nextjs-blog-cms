@@ -1,3 +1,4 @@
+import { seedPost, readPost, removePost } from '../post-fixtures'
 import { createClient } from '@supabase/supabase-js'
 import { test, expect } from '../fixtures'
 import { readyArticle } from '../publication-fixture'
@@ -11,7 +12,7 @@ async function login(page: import('@playwright/test').Page) {
   await expect(page).toHaveURL(/\/dashboard$/)
 }
 
-test('mobile writing keeps unsaved preview private and publishes from the same editor', async ({ page, request, apiKey }) => {
+test('mobile writing keeps unsaved preview private and publishes from the same editor', async ({ page, request }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await login(page)
   await page.goto('/dashboard/posts/new')
@@ -19,7 +20,6 @@ test('mobile writing keeps unsaved preview private and publishes from the same e
   const documentId = new URL(page.url()).searchParams.get('draft')!
   const editorUrl = page.url()
   const slug = `editor-preview-${Date.now()}`
-  const headers = { Authorization: `Bearer ${apiKey}` }
   let id: string | undefined
   try {
     await page.getByLabel('Post title').fill(readyArticle.title)
@@ -38,7 +38,7 @@ test('mobile writing keeps unsaved preview private and publishes from the same e
     expect(page.url()).toBe(editorUrl)
     expect(await page.evaluate(() => (window as unknown as { issue73Title: Element | null }).issue73Title === document.querySelector('input[name=title]'))).toBe(true)
     expect((await request.get(`/blog/${slug}`)).status()).toBe(404)
-    const before = (await request.get(`/api/posts/${id}`, { headers }).then(r => r.json())).data
+    const before = await readPost(id!)
     const unsavedTitle = 'Practical Integration Testing Before Deployment'
     await page.getByLabel('Post title').fill(unsavedTitle)
     await page.getByRole('button', { name: 'Preview', exact: true }).click()
@@ -46,7 +46,7 @@ test('mobile writing keeps unsaved preview private and publishes from the same e
     await expect(preview.getByRole('heading', { name: unsavedTitle, exact: true })).toBeVisible()
     await expect(preview.locator('.prose')).toContainText('A reliable integration test')
     const previewBody = await preview.locator('.prose').textContent()
-    const after = (await request.get(`/api/posts/${id}`, { headers }).then(r => r.json())).data
+    const after = await readPost(id!)
     expect(after.updated_at).toBe(before.updated_at)
     expect(after.title).toBe(readyArticle.title)
     expect((await admin().from('newsletter_sends').select('id').eq('post_id', id)).data).toEqual([])
@@ -61,7 +61,7 @@ test('mobile writing keeps unsaved preview private and publishes from the same e
     await page.getByRole('button', { name: 'Confirm publication', exact: true }).click()
     await expect(page.getByRole('button', { name: 'View Post', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Newsletter notification' })).toContainText('Queued')
-    const published = (await request.get(`/api/posts/${id}`, { headers }).then(r => r.json())).data
+    const published = await readPost(id!)
     expect(published).toMatchObject({ status: 'published', title: unsavedTitle })
     await page.getByLabel('Excerpt', { exact: true }).fill(`${readyArticle.excerpt} Updated after publication.`)
     await page.getByRole('checkbox', { name: /I have reviewed/ }).check()
@@ -72,11 +72,11 @@ test('mobile writing keeps unsaved preview private and publishes from the same e
     expect(await page.locator('article .prose').textContent()).toBe(previewBody)
     await expect(page.getByRole('heading', { name: unsavedTitle, exact: true })).toBeVisible()
   } finally {
-    if (id) await request.delete(`/api/posts/${id}`, { headers })
+    if (id) await removePost(id)
   }
 })
 
-test('new writing can publish directly after human confirmation', async ({ page, request, apiKey }) => {
+test('new writing can publish directly after human confirmation', async ({ page, request }) => {
   await login(page)
   await page.goto('/dashboard/posts/new')
   await expect(page.locator('.ProseMirror')).toBeVisible()
@@ -99,27 +99,19 @@ test('new writing can publish directly after human confirmation', async ({ page,
     id = documentId
     const persisted = await admin().from('posts').select('id, slug, status').eq('id', id).single()
     expect(persisted.data).toMatchObject({ id, slug, status: 'published' })
-    const saved = await request.get(`/api/posts/${id}`, { headers: { Authorization: `Bearer ${apiKey}` } })
-    expect(saved.status()).toBe(200)
-    expect((await saved.json()).data).toMatchObject({ slug, status: 'published' })
+    expect(await readPost(id!)).toMatchObject({ slug, status: 'published' })
     expect((await request.get(`/blog/${slug}`)).status()).toBe(200)
   } finally {
-    if (id) await request.delete(`/api/posts/${id}`, { headers: { Authorization: `Bearer ${apiKey}` } })
+    if (id) await removePost(id)
   }
 })
 
-test('clicking into a long article preserves the viewport and keyboard navigation reveals the caret', async ({ page, request, apiKey }) => {
-  const headers = { Authorization: `Bearer ${apiKey}` }
-  const created = await request.post('/api/posts/create', {
-    headers,
-    data: {
+test('clicking into a long article preserves the viewport and keyboard navigation reveals the caret', async ({ page }) => {
+  const { id } = await seedPost({
       title: 'Long article focus regression',
       slug: `long-article-focus-${Date.now()}`,
       content: Array.from({ length: 400 }, (_, index) => `<p>Paragraph ${index + 1}: keep the clicked text in view while editing this long article.</p>`).join(''),
-    },
   })
-  expect(created.status()).toBe(201)
-  const id = (await created.json()).data.post.id as string
   try {
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await login(page)
@@ -146,6 +138,6 @@ test('clicking into a long article preserves the viewport and keyboard navigatio
     })).toBe(true)
     await expect(editor).toBeFocused()
   } finally {
-    await request.delete(`/api/posts/${id}`, { headers })
+    await removePost(id)
   }
 })

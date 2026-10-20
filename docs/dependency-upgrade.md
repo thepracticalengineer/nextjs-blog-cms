@@ -1,3 +1,5 @@
+> Historical upgrade evidence: references below to PDF upload, chat, generation and posts REST API describe checks performed before #209. Those features are now retired. SDK dependencies remain; current behavior and rollout are documented in [AI Providers](features/ai-assistant.md), [API retirement](api/developer-api.md) and [testing](development/testing.md).
+
 # Dependency modernization
 
 The October 5, 2026 upgrade moves the app to Next.js 16.3.8, React 19.3.0, TipTap 3.31.4, Tailwind 4.3.3, Zod 4.6.5, Supabase SSR 0.12.7/client 2.117.2, and Vitest 5.0.3 with Vite 8.3.2. It updates the other direct dependencies to stable compatible releases and refreshes transitive dependencies. Exact manifest versions and `pnpm-lock.yaml` keep installations reproducible.

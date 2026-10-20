@@ -46,7 +46,6 @@ export default async function globalTeardown() {
     await supabase.from('posts').delete().eq('author_id', userId)
   }
 
-  await supabase.from('api_keys').delete().eq('user_id', userId)
   await supabase.from('profiles').delete().eq('id', userId)
   await supabase.auth.admin.deleteUser(userId)
 

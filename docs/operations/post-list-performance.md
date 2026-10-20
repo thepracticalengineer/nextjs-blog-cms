@@ -76,7 +76,7 @@ the new response contains 10 summaries while the RPC counts all 1,500 posts.
 Payload sizes are uncompressed UTF-8 JSON/HTML. Query timings include local HTTP and
 JSON decoding, not SQL execution alone. Browser readiness means the dashboard
 pagination is visible, or the editor is visible and its Save Draft button is enabled
-(including working-copy recovery). Publish timing measures the supported REST response,
+(including working-copy recovery). Historical publish timing measured the then-supported REST response,
 including newsletter scheduling but not eventual email delivery. No subscribers or
 external delivery providers were involved.
 
@@ -124,3 +124,7 @@ existing mutable-search-path functions, and the intentional public-author define
 view. Neither new function was flagged. No policy/view redesign was made as part of
 this performance change. Apply the [migration prerequisites](../setup/migrations.md)
 before deploying the application.
+
+## Benchmark after API retirement (#209)
+
+The benchmark no longer creates developer keys or calls retired REST writes. Current publish timings use the authenticated editor and are reported as `editorPublishCompletionMs`; historical REST response timings above are not directly comparable. Use local builds sharing the same disposable test database. The production publication regression now lives in `e2e/browser/publication-pages.spec.ts` and drives editor actions.
