@@ -4,6 +4,7 @@ import { PostTable } from '@/components/dashboard/PostTable'
 
 const push = vi.hoisted(() => vi.fn())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }))
+vi.mock('@/features/posts/bulk-actions', () => ({ bulkPostAction: vi.fn() }))
 vi.mock('@/features/posts/actions', () => ({ unpublishPost: vi.fn(), deletePost: vi.fn() }))
 
 const state = { search: 'applied', category: null, sort: 'title' as const, direction: 'asc' as const, page: 2, pageSize: 10 }

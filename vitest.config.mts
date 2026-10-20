@@ -74,6 +74,8 @@ export default defineConfig({
         'features/auth/hooks/*.ts',
         'features/posts/components/**/*.{ts,tsx}',
         'features/posts/actions.ts',
+        'features/posts/bulk-actions.ts',
+        'components/dashboard/PostTable/BulkActions.tsx',
         'features/posts/queries.ts',
         'features/posts/list-state.ts',
         'features/posts/cache.ts',
