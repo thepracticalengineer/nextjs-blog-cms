@@ -27,6 +27,12 @@ Read the relevant project skill before applying its guidance:
 
 Existing [Vitest](.agents/skills/vitest/SKILL.md), [Postgres](.agents/skills/supabase-postgres-best-practices/SKILL.md), [accessibility](.agents/skills/web-design-guidelines/SKILL.md), [Tailwind](.agents/skills/tailwindcss-advanced-layouts/SKILL.md), and [frontend design](.agents/skills/frontend-design/SKILL.md) guides remain available. See [skill setup and maintenance](docs/development/agent-skills.md) for all skills and framework refresh steps. Version-matched Next.js references are installed at `node_modules/next/dist/docs/`; preserve the generated block below.
 
+## Branches, commits and pull requests
+
+Choose the branch name before starting work: `codex/<issue-number>-<short-kebab-case-description>` (for example `codex/192-contribution-conventions`), or `codex/<short-kebab-case-description>` without an issue. Honor explicit user-requested names and preserve existing branches and unrelated work; do not rename them automatically.
+
+Use meaningful, focused Conventional Commit messages and align the final PR title with the final scope: `<type>(optional-scope): <imperative description>`. Types: `feat`, `fix`, `docs`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`. Choose the type from the actual change, never to force a release. Mark breaking changes with `!` and/or a `BREAKING CHANGE:` footer, explaining impact and migration. Prefer squash merging with the validated PR title as the final commit title; intermediate commits need not all be conventional when squash merging. See [contribution conventions and maintainer settings](docs/development/contributing.md#branch-commit-and-pr-conventions).
+
 ## Safeguards and change discipline
 
 Keep service-role, provider/encryption, mail, cron and webhook secrets server-only. Service-role clients bypass RLS: explicitly check identity, ownership and roles before privileged access. Preserve private profiles, working copies and recovery grants. `public_author_profiles` deliberately exposes a limited public projection with owner privileges; do not change it to security-invoker without redesigning public access and passing privacy assertions.
