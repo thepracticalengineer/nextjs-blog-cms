@@ -1,123 +1,17 @@
-# Developer API
+# Developer API retirement
 
-Admins and authors can generate API keys to allow external tools to create posts without a browser session.
+Issue #209 retires the external Developer API and its dashboard key-management UI. At deployment, `/api/posts`, `/api/posts/create`, `/api/posts/[id]`, `/api/ai-assistant/**` and `/api/developer/**` return HTTP **410 Gone** with code **`API_RETIRED`**, regardless of missing, invalid or formerly valid credentials. These routes perform no successful reads, provider calls or mutations. There is no runtime grace period and no supported headless replacement in this release.
 
-## Access Developer Settings
+Use the authenticated dashboard editor to manage articles. Provider credentials move to [Settings → AI Providers](../features/ai-assistant.md), using the cookie-authenticated `/api/settings/ai-providers` endpoint with MFA and owner checks. A developer bearer key cannot authorize that endpoint.
 
-1. Log in as Admin or Author
-2. Go to **Dashboard → Developer**
-3. Click **Generate New Key**, name it, and copy the key — shown only once
+## Consumer cutoff and rollout
 
-## API Key Format
+Before migration or deployment, operators must inventory scripts, CI jobs, integrations and scheduled callers; announce the cutoff to their owners; stop callers and drain queued work and automatic retries. Do not advise consumers to retry a 410 response. Apply the forward retirement migration before deploying the application, then verify 410 responses without creating production content. See [migration prerequisites](../setup/migrations.md) and [deployment verification](../operations/deployment-verification.md).
 
-Keys are prefixed with `fmblog_` followed by 64 hex characters. Only a SHA-256 hash is stored in the database.
+The migration sets existing `api_keys.is_active = false`; stored hashes and rows remain. Application rollback does not restore those credentials. Any rollback that deliberately restores external access requires an operator-reviewed key reprovisioning plan, consumer coordination and a security review of the restored code.
 
-## Endpoints
+## Retained contracts and data
 
-### POST /api/posts/create
+Retirement does not delete articles, generated drafts, provenance, idempotency receipts, books, extracted text, chats or messages. Legacy AI data is retained indefinitely with owner-scoped read/export access; writes are disabled. Export/cleanup requires a separately reviewed owner workflow. Keep historical storage private; do not infer an empty `ai-books` bucket from the current uploader's text-only behavior.
 
-Create a new post from any HTTP client.
-
-**Headers:**
-```
-Authorization: Bearer fmblog_your_key_here
-Content-Type: application/json
-```
-
-**Body:**
-
-| Field              | Type                   | Required | Description                                            |
-| ------------------ | ---------------------- | -------- | ------------------------------------------------------ |
-| `title`            | string                 | Yes      | Post title                                             |
-| `content`          | string                 | Yes      | HTML content (TipTap-compatible)                       |
-| `slug`             | string                 | No       | Custom URL slug; normalized server-side. Omit for automatic generation. |
-| `status`           | `draft` \| `published` | No       | Defaults to `draft`                                    |
-| `excerpt`          | string                 | No       | Plain-text summary                                     |
-| `meta_title`       | string                 | No       | SEO title — defaults to `title`                        |
-| `meta_description` | string                 | No       | SEO description — defaults to `excerpt`                |
-| `tags`             | string[]               | No       | Tag names — created automatically if they don't exist  |
-| `category`         | string                 | No       | Category name — matched by name or slug                |
-| `image_url`        | string                 | No       | Featured image URL                                     |
-
-**Example:**
-```bash
-curl -X POST https://your-domain.com/api/posts/create \
-  -H "Authorization: Bearer fmblog_your_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "title": "Hello from n8n",
-    "content": "<p>This post was created via the API.</p>",
-    "status": "draft",
-    "tags": ["automation", "n8n"],
-    "category": "Technology"
-  }'
-```
-
-**Response (201):**
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid",
-    "title": "Hello from n8n",
-    "slug": "hello-from-n8n",
-    "status": "draft"
-  }
-}
-```
-
-### POST /api/ai-assistant/generate
-
-Generate a blog post headlessly using the AI assistant.
-
-**Headers:**
-```
-Authorization: Bearer fmblog_your_key_here
-Content-Type: application/json
-```
-
-### GET /api/posts
-
-List posts with pagination and filters.
-
-### GET /api/posts/[id]
-
-Retrieve a single post by ID.
-
-### PATCH /api/posts/[id]
-
-Update a post by ID.
-
-### DELETE /api/posts/[id]
-
-Delete a post by ID.
-
-## Security Notes
-
-- Raw API keys are never stored — only SHA-256 hashes
-- The key is shown exactly once after generation
-- Keys can be revoked or deleted at any time from Developer Settings
-- `author_id` is always set to the user who owns the API key
-- API routes are rate-limited in-memory
-
-See [publication and write contracts](publication-and-writes.md) for published requests, concurrency and idempotency. AI generation creates drafts requiring human editorial review.
-
-Cover metadata uses `image_url` and optional `image_alt` (at most 1000 characters) on create/update. Read endpoints return both. See [post images](../features/post-images.md) for authenticated dashboard upload and storage policy.
-
-## Session MFA errors
-
-Cookie-authenticated AI, developer-key, provider-key, post-media and subscriber
-export endpoints use a shared session guard. Errors include a human-readable
-`error` and stable `code`, with `Cache-Control: no-store`:
-
-| Status | Code | Meaning |
-| --- | --- | --- |
-| 401 | `UNAUTHENTICATED` | Sign in again; no valid session is available. |
-| 403 | `MFA_REQUIRED` | Complete `/mfa` before retrying the private operation. |
-| 403 | `FORBIDDEN` | The profile or required permission is unavailable. |
-| 503 | `AUTH_UNAVAILABLE` | Identity, assurance or profile lookup failed; retry later. |
-
-A verified MFA factor requires an AAL2 session. Accounts without verified factors
-can continue at AAL1. These errors do not change Bearer API-key authentication:
-existing keys remain machine credentials, while creating/listing/revoking/deleting
-keys through a session requires the appropriate assurance and permission.
+The internal [publication and write contracts](publication-and-writes.md) remain in force. Historical API examples and AI plans under `docs/superpowers/` describe retired behavior and are evidence only.

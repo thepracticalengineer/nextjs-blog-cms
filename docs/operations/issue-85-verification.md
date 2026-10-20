@@ -1,3 +1,5 @@
+> Historical verification evidence: the provider fallback configuration mentioned below was removed by #209. Use [current environment setup](../setup/local-development.md) and [API retirement](../api/developer-api.md) for active behavior.
+
 # Issue #85 verification
 
 Verification date: October 7, 2026. Node 24.21.0, pnpm 10.29.3, Next.js 16.3.8 and Playwright 1.63.0.

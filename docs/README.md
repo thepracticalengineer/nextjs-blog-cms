@@ -21,7 +21,7 @@
 
 ## API
 
-- [Authentication, endpoints and examples](api/developer-api.md)
+- [Developer API retirement and consumer cutoff](api/developer-api.md)
 - [Publication errors, concurrency, atomic saves and idempotency](api/publication-and-writes.md)
 
 ## Features
@@ -32,7 +32,7 @@
 - [Article reactions](features/article-reactions.md)
 - [Comment reactions](features/comment-reactions.md)
 - [Roles and permissions](features/roles-and-permissions.md)
-- [AI writing assistant](features/ai-assistant.md)
+- [AI Providers and retired assistant](features/ai-assistant.md)
 - [Newsletter subscriptions, retries and cron](features/newsletter.md)
 - [MFA verification, retries and lost authenticators](features/mfa.md)
 - [Password recovery and MFA](features/password-recovery.md)
@@ -57,7 +57,7 @@
 
 ## Historical plans and specifications
 
-`superpowers/` preserves original decisions and commands; use the guides above for current setup.
+`superpowers/` preserves original decisions and commands, including retired Developer API and standalone AI workflows; use the guides above for current setup. Historical plans do not authorize restoring retired features.
 
 - PDF extraction: [plan](superpowers/plans/2026-04-14-openai-pdf-text-extraction.md).
 - Playwright API suite: [plan](superpowers/plans/2026-04-15-playwright-api-e2e.md), [specification](superpowers/specs/2026-04-15-playwright-api-e2e-design.md).

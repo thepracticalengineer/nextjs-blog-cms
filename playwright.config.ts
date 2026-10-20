@@ -24,7 +24,7 @@ export default defineConfig({
   projects: [
     {
       name: 'api',
-      testMatch: '**/api/**/*.spec.ts',
+      testMatch: ['**/api/**/*.spec.ts', '**/retirement/**/*.spec.ts'],
     },
     {
       name: 'browser',
@@ -39,5 +39,6 @@ export default defineConfig({
     timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
+    env: { RESEND_API_KEY: '', SLACK_WEBHOOK_URL: '', ANTHROPIC_API_KEY: '', OPENAI_API_KEY: '', GOOGLE_GENERATIVE_AI_KEY: '' },
   },
 })

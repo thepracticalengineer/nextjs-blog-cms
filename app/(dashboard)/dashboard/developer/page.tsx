@@ -1,46 +1,9 @@
-import type { Metadata } from 'next'
-import { listApiKeys } from '@/features/api-keys/apiKeyService'
-import { ApiKeysManager } from './ApiKeysManager'
-import { LLMProvidersManager } from '@/components/ai-assistant/LLMProvidersManager'
-import { ApiReferenceSection } from '@/components/developer/ApiReferenceSection'
-import { requirePermission } from '@/lib/auth/session'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
-export const metadata: Metadata = { title: 'Developer Settings' }
-
-export default async function DeveloperPage() {
-  const profile = await requirePermission('api_keys:write')
-
-  const keys = await listApiKeys(profile.id)
-
-  return (
-    <div className="p-8 space-y-6 animate-page">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Developer Settings</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Manage API keys for external integrations
-        </p>
-      </div>
-
-      <Tabs defaultValue="api-keys">
-        <TabsList>
-          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
-          <TabsTrigger value="llm-providers">LLM Providers</TabsTrigger>
-          <TabsTrigger value="api-reference">API Reference</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="api-keys" className="mt-6">
-          <ApiKeysManager initialKeys={keys} />
-        </TabsContent>
-
-        <TabsContent value="llm-providers" className="mt-6">
-          <LLMProvidersManager />
-        </TabsContent>
-
-        <TabsContent value="api-reference" className="mt-6">
-          <ApiReferenceSection />
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
+import Link from 'next/link'
+export default function RetiredPage() {
+  return <div className="p-8 flex flex-col gap-4 max-w-2xl">
+    <h1 className="text-2xl font-bold">This workspace has been retired</h1>
+    <p>The AI Assistant and Developer API are retired. Your existing articles and drafts are preserved.</p>
+    <Link className="underline" href="/dashboard/posts">Open your articles</Link>
+    <Link className="underline" href="/dashboard/settings/ai-providers">Settings → AI Providers</Link>
+  </div>
 }

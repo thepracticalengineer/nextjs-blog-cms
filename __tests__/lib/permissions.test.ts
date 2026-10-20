@@ -70,11 +70,11 @@ describe('can', () => {
   })
 
   it('admin can write api keys', () => {
-    expect(can('admin', 'api_keys:write')).toBe(true)
+    expect(can('admin', 'ai_providers:write')).toBe(true)
   })
 
   it('author can write api keys', () => {
-    expect(can('author', 'api_keys:write')).toBe(true)
+    expect(can('author', 'ai_providers:write')).toBe(true)
   })
 })
 

@@ -2,7 +2,6 @@ import { config } from 'dotenv'
 import { assertDedicatedTestProject } from './environment'
 import { createClient } from '@supabase/supabase-js'
 import { writeFileSync } from 'node:fs'
-import crypto from 'node:crypto'
 
 config({ path: '.env.e2e' })
 
@@ -48,24 +47,6 @@ export default async function globalSetup() {
     .upsert({ id: userId, email: E2E_EMAIL, full_name: 'E2E Test User', role: 'author' })
   if (profileError) throw new Error(`Failed to upsert profile: ${profileError.message}`)
 
-  // ── 3. Create API key ─────────────────────────────────────────────────────
-  // Remove any leftover keys from a previous run
-  await supabase.from('api_keys').delete().eq('user_id', userId)
-
-  const rawBytes = crypto.randomBytes(32)
-  const apiKey = `fmblog_${rawBytes.toString('hex')}`
-  const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex')
-  const keyPreview = `fmblog_...${apiKey.slice(-4)}`
-
-  const { error: keyError } = await supabase.from('api_keys').insert({
-    name: 'E2E Test Key',
-    key_hash: keyHash,
-    key_preview: keyPreview,
-    user_id: userId,
-    is_active: true,
-  })
-  if (keyError) throw new Error(`Failed to create API key: ${keyError.message}`)
-
   // ── 4. Seed three posts ───────────────────────────────────────────────────
   // Remove leftover posts from a previous interrupted run
   const { data: oldPosts } = await supabase.from('posts').select('id').eq('author_id', userId)
@@ -110,7 +91,7 @@ export default async function globalSetup() {
   if (postsError || !posts) throw new Error(`Failed to seed posts: ${postsError?.message}`)
 
   // ── 5. Write state file ───────────────────────────────────────────────────
-  const state = { apiKey, userId, email: E2E_EMAIL, seedPostIds: posts.map((p) => p.id) }
+  const state = { userId, email: E2E_EMAIL, seedPostIds: posts.map((p) => p.id) }
   writeFileSync('.e2e-state.json', JSON.stringify(state, null, 2))
 
   console.log(`✓ E2E setup complete — user: ${E2E_EMAIL}, posts: ${posts.length}`)

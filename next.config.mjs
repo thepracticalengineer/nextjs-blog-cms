@@ -5,8 +5,6 @@ import { getImageRemotePatterns, allowLocalImageOptimization } from './lib/image
 const nextConfig = {
   // Repository agent instructions are maintained alongside the source.
   agentRules: false,
-  // PDF.js loads its worker relative to the package at runtime.
-  serverExternalPackages: ['pdf-parse'],
   // Keep verification output separate from any existing Next 14 dev server.
   distDir: process.env.NEXT_DIST_DIR || '.next',
   images: {

@@ -64,11 +64,6 @@ NEXT_PUBLIC_GA_MEASUREMENT_ID= # optional public ID; alone does not enable analy
 GA_ENABLED=false # keep false locally and until the GA4 rollout checklist is complete
 LLM_KEY_ENCRYPTION_SECRET=   # exactly 32 UTF-8 bytes; 32 ASCII characters work
 
-# Optional server-side provider fallbacks (used by legacy provider lookup)
-ANTHROPIC_API_KEY=
-OPENAI_API_KEY=
-GOOGLE_GENERATIVE_AI_KEY=
-
 # Newsletter
 RESEND_API_KEY=
 RESEND_FROM_EMAIL=            # verified sender address, e.g. noreply@yourdomain.com
@@ -96,7 +91,7 @@ Copy the local API URL, anon key and service-role key into `.env.local`. Never u
 pnpm run dev
 ```
 
-Supabase URL/anon key, trusted site URL and the optional Google Analytics measurement ID are public configuration and may use `NEXT_PUBLIC_`. Provider fallback keys are optional and server-only; they do not replace per-user provider key setup in Developer Settings. Keep service-role, provider encryption, Resend, cron and webhook secrets server-only and out of Git. Configure `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. Optional confirmation alerts use `ADMIN_EMAIL`, `RESEND_FROM_EMAIL` and `SLACK_WEBHOOK_URL`; see [webhooks](webhooks.md). See [password recovery](../features/password-recovery.md) for redirect/template/SMTP setup.
+Supabase URL/anon key, trusted site URL and the optional Google Analytics measurement ID are public configuration and may use `NEXT_PUBLIC_`. Configure only needed providers per author under Settings → AI Providers. There is no environment provider-key fallback. Keep the existing `LLM_KEY_ENCRYPTION_SECRET` unchanged when upgrading to preserve decryption of stored keys. Keep service-role, provider encryption, Resend, cron and webhook secrets server-only and out of Git. Configure `NEXT_PUBLIC_SITE_URL=http://localhost:3000`. Optional confirmation alerts use `ADMIN_EMAIL`, `RESEND_FROM_EMAIL` and `SLACK_WEBHOOK_URL`; see [webhooks](webhooks.md). See [password recovery](../features/password-recovery.md) for redirect/template/SMTP setup.
 
 ## Social sign-in
 

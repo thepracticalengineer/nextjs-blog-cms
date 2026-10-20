@@ -1,6 +1,6 @@
 # Client auth state and profiles
 
-`AuthProvider` wraps the dashboard and AI assistant layouts. It supplies client
+`AuthProvider` wraps the dashboard layout. It supplies client
 session/profile state; authorization still belongs to server identity, MFA, role,
 ownership and RLS checks. Client profile state must never grant privileged access.
 

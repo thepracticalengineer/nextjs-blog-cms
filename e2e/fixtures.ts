@@ -2,7 +2,6 @@ import { test as base, expect } from './coverage/fixture'
 import { readFileSync } from 'fs'
 
 interface E2EState {
-  apiKey: string
   userId: string
   seedPostIds: string[]
 }
@@ -12,13 +11,8 @@ function readState(): E2EState {
 }
 
 export const test = base.extend<{
-  apiKey: string
   seedPostIds: string[]
 }>({
-  // Playwright requires object destructuring for the fixture dependency argument.
-  apiKey: async ({}, provideFixture) => {
-    await provideFixture(readState().apiKey)
-  },
   seedPostIds: async ({}, provideFixture) => {
     await provideFixture(readState().seedPostIds)
   },

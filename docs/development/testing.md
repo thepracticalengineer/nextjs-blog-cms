@@ -13,9 +13,9 @@ pnpm run test:coverage     # coverage report
 
 ## End-to-End Tests (Playwright)
 
-The suite covers posts REST API contracts and browser flows including public navigation/newsletter/registration validation, editor save and publish, profile updates, PDF upload/chat, and MFA enrollment/login. Provider generation is stubbed; auth, PDF parsing, and database writes use the real local services.
+The suite covers retired API tombstones and browser flows including public navigation/newsletter/registration validation, editor save and publish, profile updates, AI Providers settings and MFA enrollment/login. Verify retired routes return `410 API_RETIRED` for absent, invalid and formerly valid credentials without mutations or provider calls. PDF upload/chat/full-post generation are retired; do not run paid generation as a retirement smoke check.
 
-Use a **dedicated disposable Supabase test project**, never production. Apply all `supabase/migrations` or start the local stack with `pnpm dlx supabase@2.119.0 start`. Put its `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the ignored `.env.e2e` file. The Playwright server inherits those values. Set `RESEND_API_KEY` and `SLACK_WEBHOOK_URL` to empty values in that file to keep local verification isolated from external integrations.
+Use a **dedicated disposable Supabase test project**, never production. Apply all `supabase/migrations` or start the local stack with `pnpm dlx supabase@2.119.0 start`. Put its `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` in the ignored `.env.e2e` file. The Playwright server inherits those values. Set a disposable test-only 32-byte `LLM_KEY_ENCRYPTION_SECRET` for the provider settings save/remove smoke test; no verification/provider request is made. Set `RESEND_API_KEY` and `SLACK_WEBHOOK_URL` to empty values in that file to keep local verification isolated from external integrations.
 
 ```bash
 pnpm exec playwright install chromium
@@ -25,7 +25,7 @@ pnpm exec playwright test --project=browser      # browser tests only
 pnpm run test:e2e:report                # open the HTML report
 ```
 
-Playwright starts its own server by default. Set `E2E_BASE_URL` for a different port; `E2E_REUSE_SERVER=1` explicitly reuses an existing local server configured for the same test database. Global setup seeds a disposable author, API key, and posts; teardown removes that user's rows and auth account. The newsletter smoke test removes its own subscription.
+Playwright starts its own server by default. Set `E2E_BASE_URL` for a different port; `E2E_REUSE_SERVER=1` explicitly reuses an existing local server configured for the same test database. Global setup seeds a disposable author and posts; legacy credentials used by retirement assertions must remain test-only; teardown removes that user's rows and auth account. The newsletter smoke test removes its own subscription.
 
 CI also runs rolled-back database assertions from `database/tests/` for public author privacy, working copies, URL reservations, atomic saves and newsletter queue semantics. Run them only against an isolated migrated database. See [agent skills](agent-skills.md) for an additional interactive CLI smoke flow. Set `E2E_MAILPIT_URL` for password recovery email verification. Suite counts change; use `pnpm exec playwright test --list` for the current inventory.
 
@@ -47,9 +47,8 @@ permissions in a rolled-back transaction. CI runs it after migrations.
 
 `e2e/browser/post-lists.spec.ts` seeds and removes 1,005 posts in the dedicated test
 project. It checks URL navigation, filtering/sorting, reload/Back, taxonomy pagination
-and absence of article bodies in list responses. `e2e/api/posts.publication-pages.spec.ts`
-warms public pages and checks creation, edits, URL/taxonomy changes, unpublication and
-delete. Run the latter against a production build as well: development mode does not
+and absence of article bodies in list responses. `e2e/browser/publication-pages.spec.ts`
+warms public pages and checks editor publication, edits, URL/taxonomy changes and unpublication. Run the latter against a production build as well: development mode does not
 reproduce the static-to-dynamic failure for newly created URLs. CI builds the app and
 runs this regression with `E2E_PRODUCTION=1`, which makes Playwright start `next start`
 instead of `next dev`. Start a prebuilt local server with
@@ -161,9 +160,7 @@ This is **limited client coverage**, not coverage of the entire application:
 - Unloaded files are not in the denominator. Source maps and emitted client code
   differ between the Vite analytics harness and Next.js; suite percentages must
   not be averaged or combined with unit coverage.
-- The production publication suite uses HTTP requests only: its **client and
-  server coverage are unavailable**, while its test results and HTML report remain
-  available. API test counts are never presented as code coverage.
+- The production publication suite drives the authenticated editor and inspects public HTTP responses. Client coverage is collected only when explicitly enabled; server coverage remains unavailable. API test counts are never presented as code coverage.
 - Zero-denominator metrics and missing source maps are unavailable, not 100%.
 
 The summary compares each metric with a retained compatible artifact from a
@@ -202,7 +199,7 @@ E2E_COVERAGE=1 pnpm exec playwright test --config=e2e/analytics.config.ts
 E2E_COVERAGE=1 pnpm exec playwright test --config=e2e/oauth-ui.config.ts
 # Build with the same disposable database and disabled integrations first:
 pnpm run build
-E2E_COVERAGE=1 E2E_PRODUCTION=1 pnpm exec playwright test e2e/api/posts.publication-pages.spec.ts --project=api
+E2E_COVERAGE=1 E2E_PRODUCTION=1 pnpm exec playwright test e2e/browser/publication-pages.spec.ts --project=browser
 pnpm exec playwright show-report playwright-report/main
 node --test scripts/coverage/*.test.mjs
 ```
@@ -359,3 +356,7 @@ Run `pnpm run release:test` for offline Release Please generation, PR reuse, pub
 
 See [article reaction verification](../features/article-reactions.md#migration-and-verification)
 for unit, disposable database/concurrency, isolated desktop/mobile and full-stack browser checks.
+
+## AI retirement and retained settings (#209)
+
+Run `pnpm exec playwright test --config=e2e/retirement.config.ts` for inert HTTP tombstones without a database or live provider. Run `pnpm exec playwright test --config=e2e/ai-settings.config.ts` for the actual Settings page on desktop/mobile against synthetic loopback Auth and Data API responses. These isolated tests cannot establish hosted Auth behavior or deployed RLS. Run the retained main browser suite against a dedicated migrated Supabase stack for real save/publication/media/settings coverage. Provider verification uses SDK mocks; no paid generation or live credential probe is part of normal tests.
