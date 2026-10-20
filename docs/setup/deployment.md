@@ -11,3 +11,20 @@
 See [dependency upgrade notes](../dependency-upgrade.md) for image-host allowlists, runtime compatibility and audit findings. Preview/test environments must use separate disposable databases and disabled external notification integrations.
 
 Vercel Git integration continues deploying `main` independently of numbered releases. See the [release process](../operations/releases.md) for the human release checkpoint, App setup and migration timing.
+
+## Develop previews and production
+
+Explicitly retain `main` as Vercel's Production Branch when changing GitHub's
+default branch to `develop`. Enable Git previews for `develop` and feature
+branches. Configure Preview/develop with a separate non-production Supabase
+project, its own Auth redirect URLs and site URL, and non-production credentials.
+Never copy production service-role/provider/mail/webhook credentials into Preview.
+Disable external mail, newsletter dispatch and webhooks; use local mail capture
+or approved test integrations for verification. Check branch-specific overrides
+as well as Preview defaults. Apply migrations to that test database separately.
+
+Before a production promotion, apply required production migrations and verify
+compatibility; pause newsletter dispatch for its handoff migration. The promotion
+merge deploys code before the release PR publishes metadata, and that later merge
+causes another production deployment. A GitHub Release does not attest to Vercel
+success. See [promotion rollout](../operations/branch-promotion.md).

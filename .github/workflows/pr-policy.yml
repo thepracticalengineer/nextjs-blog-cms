@@ -1,0 +1,51 @@
+name: PR branch policy
+
+on:
+  pull_request_target:
+    branches: [main, develop]
+    types: [opened, edited, reopened, synchronize, ready_for_review, labeled, unlabeled]
+
+# Trusted base workflow; metadata only. Never check out contributor code.
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-policy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    name: PR branch policy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate current PR source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
+            const sameRepo = pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            const head = pr.head.ref;
+            if (pr.base.ref === 'develop') {
+              if (head === 'main' && (!sameRepo || !pr.title.startsWith('chore(sync): '))) {
+                core.setFailed('Synchronization requires this repository main branch and a chore(sync): title. Merge with a merge commit.');
+              }
+              return;
+            }
+            if (pr.base.ref !== 'main' || !sameRepo) {
+              core.setFailed('Ordinary and fork PRs must target develop. See docs/operations/branch-promotion.md.');
+              return;
+            }
+            if (head === 'develop' && pr.title.startsWith('chore(promotion): ')) {
+              core.notice('Promotion: select Create a merge commit. This check cannot enforce a future merge-button choice.');
+              return;
+            }
+            if (/^fix\/[a-z0-9][a-z0-9-]*$/.test(head)) return;
+            if (head === 'release-please--branches--main' &&
+                pr.user.login === 'the-practical-engineer-releases[bot]' &&
+                /^chore\(main\): release \d+\.\d+\.\d+$/.test(pr.title) &&
+                pr.labels.some(label => label.name === 'autorelease: pending')) {
+              const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: context.issue.number, per_page: 100 });
+              const allowed = ['package.json', '.release-please-manifest.json', 'CHANGELOG.md', 'pnpm-lock.yaml'];
+              if (files.length > 0 && files.every(file => file.status === 'modified' && allowed.includes(file.filename))) return;
+            }
+            core.setFailed('main accepts develop promotions titled chore(promotion): ..., App release metadata PRs, or same-repository fix/... production hotfixes. Ordinary work targets develop.');

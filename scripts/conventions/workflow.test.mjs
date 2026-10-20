@@ -45,7 +45,7 @@ async function validate(title) {
 
 test('title edits revalidate on a read-only workflow without contributor execution', () => {
   assert.deepEqual(workflow.on, { pull_request_target: {
-    branches: ['main'], types: ['opened', 'edited', 'reopened', 'synchronize', 'ready_for_review'],
+    branches: ['main', 'develop'], types: ['opened', 'edited', 'reopened', 'synchronize', 'ready_for_review'],
   } })
   assert.deepEqual(workflow.permissions, { 'pull-requests': 'read' })
   assert.equal(workflow.jobs.title.name, 'PR title')
@@ -56,10 +56,10 @@ test('title edits revalidate on a read-only workflow without contributor executi
 
 test('recommended branches retain push CI and dependency bots use compatible titles', () => {
   const ci = parse(read('.github/workflows/ci.yml'))
-  for (const branch of ['feat/**', 'fix/**', 'chore/**', 'feature/**', 'codex/**']) {
+  for (const branch of ['develop', 'main', 'feat/**', 'fix/**', 'chore/**', 'feature/**', 'codex/**']) {
     assert.ok(ci.on.push.branches.includes(branch))
   }
-  assert.deepEqual(ci.on.pull_request.branches, ['main'])
+  assert.deepEqual(ci.on.pull_request.branches, ['main', 'develop'])
   for (const update of parse(read('.github/dependabot.yml')).updates) {
     assert.deepEqual(update['commit-message'], { prefix: 'chore', 'include': 'scope' })
   }

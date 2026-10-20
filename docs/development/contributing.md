@@ -3,9 +3,9 @@
 Contributions are welcome. To contribute:
 
 1. Fork the repository
-2. Choose a focused branch using the conventions below
+2. Create a focused branch from `develop` using the conventions below
 3. Commit your changes with meaningful, focused Conventional Commit messages
-4. Open a Pull Request — describe what changed and why
+4. Open a Pull Request against `develop` — describe what changed and why
 
 For significant changes, open an issue first to discuss the approach.
 
@@ -21,7 +21,7 @@ as the branch type; do not use `codex/` for new branches. Honor an explicit user
 preserve existing branches and unrelated work rather than automatically renaming
 them. Other contributors may keep existing branch conventions. CI accepts
 `feat/**`, `fix/**`, and `chore/**`, the existing `feature/**` pattern,
-and legacy `codex/**` branches for compatibility; PR CI targets `main` regardless of
+and legacy `codex/**` branches for compatibility; PR CI targets both `develop` and `main` regardless of
 source branch. There is no branch-name rejection check.
 
 Commit messages and PR titles use `<type>(optional-scope): <imperative description>`.
@@ -47,8 +47,9 @@ cannot verify commit footers or migration completeness; reviewers must preserve
 them during merge. For footer-only breaking changes, explicitly include the
 footer in the squash commit body. See [release version selection](../operations/releases.md#version-and-changelog-policy).
 
-Prefer squash merging: the validated PR title becomes the final commit title on
-`main`. Intermediate branch commits need not all be conventional when squash
+Squash ordinary PRs into `develop`: the validated PR title becomes the final commit title.
+Promote `develop` into `main` and synchronize `main` into `develop` with **Create a merge commit**; never squash or rebase these PRs.
+See [branch promotion](../operations/branch-promotion.md) for production hotfixes and conflict recovery. Intermediate branch commits need not all be conventional when squash
 merging; do not rewrite useful history merely to satisfy this policy. If using
 another merge method, maintainers must inspect the resulting main commit messages
 for compatibility with release automation.
@@ -59,21 +60,19 @@ there are no actor-based exemptions. Configure other bots to use supported types
 
 ### Maintainer settings
 
-The `pull_request_target` workflow runs from the trusted base branch, so it first
-becomes active after this workflow reaches `main`. After merging it, confirm a
-**PR title** check on a real PR, then
-require it in an active `main` ruleset alongside the existing checks listed in
-[release setup](../operations/releases.md#initial-setup). Enable required PRs and
-human approval; avoid bot bypasses. A workflow alone does not prevent merging
-when repository rules are disabled.
+The metadata-only title and branch-policy workflows run from the trusted base
+branch. Require **PR title** and **PR branch policy**, alongside normal CI, on
+both long-lived branches after the workflows reach each branch.
 
-In **Settings → General → Pull Requests**, enable squash merging and set its
-default commit title to **Pull request title** (`squash_merge_commit_title=PR_TITLE`).
-Prefer **Pull request description** for the default body
-(`squash_merge_commit_message=PR_BODY`) so migration notes and breaking-change
-footers can carry through; inspect the final body before merging. Consider
-disabling merge/rebase methods if maintainers want squash-only enforcement.
-Repository settings are a separate administrator step, not changed by this PR.
+Enable squash and merge commits repository-wide, disable rebase merging, set
+`squash_merge_commit_title=PR_TITLE` and `squash_merge_commit_message=PR_BODY`.
+Keep breaking-change footers in the final squash body. Require merge commits on
+`main`; allow squash and merge on `develop` because synchronization needs merge
+commits. GitHub's destination-branch rules cannot distinguish feature from sync
+PRs into `develop`; reviewers must choose the correct method. A PR check cannot
+control a future merge-button selection. Do not require linear history on either
+branch. See the [maintainer rollout checklist](../operations/branch-promotion.md#maintainer-rollout-checklist)
+for exact checks, reviews, workflow ownership, and configuration still required.
 
 Run `node --test scripts/conventions/*.test.mjs` to verify accepted/rejected
 titles, breaking markers, bot titles, metadata isolation, events and branch CI

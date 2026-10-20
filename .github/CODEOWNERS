@@ -1,0 +1,16 @@
+# Require code-owner review in both long-lived branch rulesets.
+/.github/ @frank-mendez
+/scripts/promotion/ @frank-mendez
+/scripts/release/ @frank-mendez
+/scripts/coverage/ @frank-mendez
+/release-please-config.json @frank-mendez
+/.release-please-manifest.json @frank-mendez
+/AGENTS.md @frank-mendez
+/docs/operations/branch-promotion.md @frank-mendez
+/docs/operations/releases.md @frank-mendez
+/docs/development/contributing.md @frank-mendez
+# These dependencies/configuration execute within the trusted release runtime.
+/package.json @frank-mendez
+/pnpm-lock.yaml @frank-mendez
+/pnpm-workspace.yaml @frank-mendez
+/.npmrc @frank-mendez

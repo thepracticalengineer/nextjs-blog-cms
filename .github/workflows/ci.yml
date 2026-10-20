@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/**, feature/**, fix/**, chore/**, codex/**]
+    branches: [main, develop, feat/**, feature/**, fix/**, chore/**, codex/**]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -32,7 +32,7 @@ jobs:
 
       - name: Check documentation
         run: |
-          node --test scripts/conventions/*.test.mjs
+          node --test scripts/conventions/*.test.mjs scripts/promotion/*.test.mjs
           pnpm run docs:test
           pnpm run docs:check
           node --test scripts/coverage/report.test.mjs scripts/coverage/baseline.test.mjs scripts/coverage/comment.test.mjs

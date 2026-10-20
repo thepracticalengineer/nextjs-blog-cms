@@ -2,8 +2,10 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
+import { installAncestryHistory, runRelease } from './run.mjs'
 
 const require = createRequire(import.meta.url)
+const { GitHub } = require('release-please/build/src/github.js')
 const { Manifest } = require('release-please/build/src/manifest.js')
 const { FileNotFoundError, DuplicateReleaseError } = require('release-please/build/src/errors/index.js')
 const { setLogger } = require('release-please/build/src/util/logger.js')
@@ -39,7 +41,28 @@ function fixture(messages = ['fix: repair navigation']) {
     async getFileContentsOnBranch(path) { return contents(path) },
     async *releaseIterator() { yield* state.releases },
     async *tagIterator() { yield* state.releases.map(r => ({ name: r.tagName, sha: r.sha })) },
-    async *mergeCommitIterator() { yield* state.commits },
+    async *mergeCommitIterator(branch, options) {
+      // Exercise the actual upstream GraphQL history parser and iterator, including
+      // pagination and PR associations from both long-lived branches.
+      const history = {
+        repository: this.repository, logger: Object.fromEntries(['debug', 'info', 'warn'].map(key => [key, () => {}])),
+        async graphqlRequest({ cursor }) {
+          const offset = Number(cursor || 0), page = state.commits.slice(offset, offset + 2)
+          return { repository: { ref: { target: { history: {
+            nodes: page.map(c => ({ sha: c.sha, message: c.message, associatedPullRequests: { nodes: [{
+              number: c.pullRequest?.number ?? 1, title: c.message.split('\n')[0],
+              baseRefName: c.pullRequest?.baseBranchName ?? 'develop', headRefName: 'feat/test',
+              body: '', mergeCommit: { oid: c.sha }, labels: { nodes: [] },
+              files: { nodes: c.files.map(path => ({ path })), pageInfo: { hasNextPage: false } },
+            }] } })),
+            pageInfo: { hasNextPage: offset + 2 < state.commits.length, endCursor: String(offset + 2) },
+          } } } } }
+        },
+        getCommitFiles: async sha => state.commits.find(c => c.sha === sha).files,
+        mergeCommitsGraphQL: GitHub.prototype.mergeCommitsGraphQL,
+      }
+      yield* GitHub.prototype.mergeCommitIterator.call(history, branch, options)
+    },
     async *pullRequestIterator(branch, status) {
       assert.equal(branch, 'main')
       yield* state.pulls.filter(pr => pr.status === status)
@@ -84,7 +107,7 @@ function fixture(messages = ['fix: repair navigation']) {
       return target[key]
     },
   })
-  return { state, files, manifest: () => Manifest.fromManifest(github, 'main') }
+  return { state, files, github, manifest: () => Manifest.fromManifest(github, 'main') }
 }
 
 function rendered(pr, path, previous) {
@@ -234,4 +257,66 @@ test('hidden types still include breaking changes; mixed changes take the highes
 
 test('a nonconventional commit alone produces no release', async () => {
   assert.deepEqual(await (await fixture(['Update project documentation']).manifest()).createPullRequests(), [])
+})
+
+test('promotion includes individual develop commits once; release sync metadata never bumps', async () => {
+  const f = fixture(['Merge pull request #10 from org/develop\n\nchore(promotion): promote develop to main', 'feat: add reader bookmarks', 'fix: repair bookmark navigation'])
+  const [candidate] = await (await f.manifest()).buildPullRequests()
+  assert.equal(candidate.version.toString(), '1.1.0')
+  const notes = candidate.body.toString()
+  assert.equal(notes.split('add reader bookmarks').length - 1, 1)
+  assert.equal(notes.split('repair bookmark navigation').length - 1, 1)
+  assert.doesNotMatch(notes, /promote develop/)
+  await mergeRelease(f)
+  await (await f.manifest()).createReleases()
+  f.state.commits.unshift(commit('chore(sync): merge main into develop', '1a'.repeat(20)))
+  f.state.commits.unshift(commit('Merge pull request #11 from org/develop\n\nchore(promotion): promote develop to main', '1b'.repeat(20)))
+  assert.deepEqual(await (await f.manifest()).buildPullRequests(), [])
+  f.state.commits.unshift(commit('fix: repair production bookmark', 'e'.repeat(40)))
+  const [patch] = await (await f.manifest()).buildPullRequests()
+  assert.equal(patch.version.toString(), '1.1.1')
+  assert.match(patch.body.toString(), /repair production bookmark/)
+  assert.doesNotMatch(patch.body.toString(), /add reader bookmarks|repair bookmark navigation|merge main into develop/)
+})
+
+test('ancestry adapter recovers older promoted work after a newer release boundary', async () => {
+  const f = fixture(['fix: already released repair'])
+  const { pr } = await mergeRelease(f)
+  await (await f.manifest()).createReleases()
+  const older = commit('feat: older concurrent develop work', 'ab'.repeat(20))
+  const promotion = commit('chore(promotion): promote develop to main', 'cd'.repeat(20))
+  // Chronological API history puts the newly reachable feature below the last release.
+  f.state.commits.splice(1, 0, older)
+  f.state.commits.unshift(promotion)
+  assert.deepEqual(await (await f.manifest()).buildPullRequests(), []) // upstream bug reproduced
+  await installAncestryHistory(f.github, { bootstrapSha: boundary, runGit: args => {
+    if (args[0] === 'merge-base') { assert.equal(args[2], pr.mergeCommitOid); return '' }
+    assert.deepEqual(args, ['rev-list', '--topo-order', `${pr.mergeCommitOid}..HEAD`])
+    return [promotion.sha, older.sha].join('\n')
+  } })
+  const [candidate] = await (await f.manifest()).buildPullRequests()
+  assert.equal(candidate.version.toString(), '1.1.0')
+  assert.equal(candidate.body.toString().split('older concurrent develop work').length - 1, 1)
+  assert.doesNotMatch(candidate.body.toString(), /already released repair/)
+})
+
+test('release runner refuses stale main before creating release metadata', async () => {
+  const f = fixture()
+  await assert.rejects(runRelease({ github: f.github, config: { 'bootstrap-sha': boundary },
+    assertCurrent: async () => { throw new Error('main advanced') },
+  }), /main advanced/)
+  assert.equal(f.state.creates, 0)
+  assert.equal(f.state.publishAttempts, 0)
+})
+
+test('release runner uses the pinned manifest for publication and then PR generation', async () => {
+  const f = fixture()
+  let checks = 0
+  await runRelease({ github: f.github, config: { 'bootstrap-sha': boundary },
+    assertCurrent: async () => { checks++ },
+    runGit: args => args[0] === 'merge-base' ? '' : f.state.commits.slice(0, f.state.commits.findIndex(c => c.sha === boundary)).map(c => c.sha).join('\n'),
+  })
+  assert.equal(checks, 2)
+  assert.equal(f.state.creates, 1)
+  assert.equal(f.state.pulls[0].title, 'chore(main): release 1.0.1')
 })

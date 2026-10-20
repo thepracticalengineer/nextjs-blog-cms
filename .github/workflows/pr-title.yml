@@ -2,7 +2,7 @@ name: PR title
 
 on:
   pull_request_target:
-    branches: [main]
+    branches: [main, develop]
     types: [opened, edited, reopened, synchronize, ready_for_review]
 
 # Metadata only: never check out, install, or execute contributor code here.
