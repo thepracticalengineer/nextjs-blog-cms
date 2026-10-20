@@ -22,7 +22,8 @@ test('ordinary feature and fork PRs target develop; main only admits reviewed so
   assert.deepEqual(await validate('develop', 'feat/215-work', { fork: true }), [])
   assert.equal((await validate('main', 'feat/215-work')).length, 1)
   assert.equal((await validate('main', 'fix/215-work', { fork: true })).length, 1)
-  assert.deepEqual(await validate('main', 'fix/215-work'), [])
+  assert.equal((await validate('main', 'fix/215-work')).length, 1)
+  assert.deepEqual(await validate('main', 'fix/215-work', { labels: ['production-hotfix'] }), [])
 })
 test('promotion and synchronization require same-repository branches and hidden chore titles', async () => {
   assert.deepEqual(await validate('main', 'develop', { title: 'chore(promotion): promote develop to main' }), [])
@@ -59,3 +60,22 @@ test('sync workflow runs immutable main code with a minimal App token and serial
   assert.equal(steps[1].with['permission-workflows'], undefined)
   assert.equal(steps[2].with['github-token'], '${{ steps.app-token.outputs.token }}')
 })
+
+test('production-hotfix designation requires a same-repository fix branch and fix title', async () => {
+  const labels = ['production-hotfix']
+  for (const [head, options] of [
+    ['fix/215-repair', { fork: true }], ['feat/215-work', {}],
+    ['fix/215-repair', { title: 'chore: ordinary maintenance' }],
+  ]) assert.equal((await validate('main', head, { labels, ...options })).length, 1)
+  assert.deepEqual(await validate('main', 'fix/215-repair', { labels, title: 'fix(auth)!: repair production authentication' }), [])
+  assert.equal((await validate('main', 'fix/215-repair', { labels: [] })).length, 1)
+})
+
+for (const file of ['release-please.yml', 'sync-develop.yml']) {
+  test(`${file} pins every action sharing a job with App credentials`, () => {
+    const privileged = parse(read(`.github/workflows/${file}`))
+    for (const job of Object.values(privileged.jobs)) {
+      for (const step of job.steps.filter(step => step.uses)) assert.match(step.uses, /^[\w-]+\/[\w-]+@[a-f0-9]{40}$/)
+    }
+  })
+}

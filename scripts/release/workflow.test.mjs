@@ -41,3 +41,8 @@ test('release PRs receive normal CI including offline release checks', () => {
   assert.equal(ci.jobs.lint.if, undefined)
   assert.ok(ci.jobs.lint.steps.some(step => step.run === 'pnpm run release:test'))
 })
+
+test('release Git executable cannot be shadowed by PATH entries', () => {
+  const runner = read('scripts/release/run.mjs')
+  assert.match(runner, /execFileSync\('\/usr\/bin\/git',/)
+})

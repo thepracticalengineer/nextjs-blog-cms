@@ -49,6 +49,8 @@ footer in the squash commit body. See [release version selection](../operations/
 
 Squash ordinary PRs into `develop`: the validated PR title becomes the final commit title.
 Promote `develop` into `main` and synchronize `main` into `develop` with **Create a merge commit**; never squash or rebase these PRs.
+Production hotfixes into main require a `fix:` title and an explicit
+`production-hotfix` label; an ordinary fix branch name alone is insufficient.
 See [branch promotion](../operations/branch-promotion.md) for production hotfixes and conflict recovery. Intermediate branch commits need not all be conventional when squash
 merging; do not rewrite useful history merely to satisfy this policy. If using
 another merge method, maintainers must inspect the resulting main commit messages

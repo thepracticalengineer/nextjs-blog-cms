@@ -29,7 +29,7 @@ Existing [Vitest](.agents/skills/vitest/SKILL.md), [Postgres](.agents/skills/sup
 
 ## Branches, commits and pull requests
 
-Create ordinary branches from `develop` and open PRs against `develop`. Promote `develop` to `main` and synchronize `main` back to `develop` with merge commits. Production hotfix branches start from `main`; stable Release Please stays on `main`. Follow [branch promotion](docs/operations/branch-promotion.md) for the source policy, merge-method limitations and rollout checklist.
+Create ordinary branches from `develop` and open PRs against `develop`. Promote `develop` to `main` and synchronize `main` back to `develop` with merge commits. Production hotfix branches start from `main` and require a `fix:` PR title plus a maintainer-applied `production-hotfix` label; stable Release Please stays on `main`. Follow [branch promotion](docs/operations/branch-promotion.md) for the source policy, merge-method limitations and rollout checklist.
 
 Choose the branch name before starting work: `<type>/<issue-number>-<short-kebab-case-description>` (for example `chore/192-contribution-conventions`), or `<type>/<short-kebab-case-description>` without an issue. Use only `feat`, `fix`, or `chore` as the branch type; do not use `codex/` for new branches. Honor explicit user-requested names and preserve existing branches and unrelated work; do not rename them automatically.
 

@@ -13,4 +13,5 @@
 /package.json @frank-mendez
 /pnpm-lock.yaml @frank-mendez
 /pnpm-workspace.yaml @frank-mendez
+# Reserve ownership if a future PR introduces this currently absent configuration.
 /.npmrc @frank-mendez

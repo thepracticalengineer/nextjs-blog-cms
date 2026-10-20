@@ -60,3 +60,29 @@ test('API permission errors propagate rather than claiming synchronization', asy
   f.args.github.rest.pulls.create = async () => { throw Object.assign(new Error('Forbidden'), { status: 403 }) }
   await assert.rejects(synchronize(f.args), /Forbidden/)
 })
+
+test('unknown mergeability is polled sequentially and stops as soon as it becomes known', async () => {
+  const f = fixture({ existing: true })
+  let reads = 0
+  const events = []
+  f.args.github.rest.pulls.get = async () => {
+    events.push('read')
+    return { data: { number: 17, html_url: 'https://example.invalid/pull/17', mergeable: ++reads < 3 ? null : true } }
+  }
+  f.args.wait = async ms => { assert.equal(ms, 2000); events.push('wait') }
+  assert.equal((await synchronize(f.args)).status, 'open')
+  assert.deepEqual(events, ['read', 'wait', 'read', 'wait', 'read'])
+  assert.equal(f.failures.length, 0)
+})
+
+test('unknown mergeability never exceeds three API reads and two waits', async () => {
+  const f = fixture({ existing: true, mergeable: null })
+  let reads = 0, waits = 0
+  const original = f.args.github.rest.pulls.get
+  f.args.github.rest.pulls.get = async () => { reads++; return original() }
+  f.args.wait = async () => { waits++ }
+  assert.equal((await synchronize(f.args)).status, 'attention')
+  assert.equal(reads, 3)
+  assert.equal(waits, 2)
+  assert.equal(f.failures.length, 1)
+})

@@ -37,7 +37,9 @@ One-approval, release-only production deployment is outside this flow.
 ## Production hotfixes
 
 Create a `fix/...` branch from current `main` for an urgent production repair.
-Open a reviewed PR against `main`, use a valid `fix:` title, run all required
+Open a reviewed PR against `main`, use a valid `fix:` title, and have a maintainer
+apply the **production-hotfix** label to explicitly designate the production path.
+An ordinary `fix/...` PR without that label must target develop. Run all required
 checks, and merge with a merge commit. The branch policy rejects ordinary feature,
 chore and fork PRs into `main`. The hotfix push opens or updates the same sync PR;
 merge it back into `develop` with a merge commit. A subsequent patch release uses
@@ -49,7 +51,7 @@ hotfix independently on develop.
 CI, title validation and coverage support both long-lived branches. The
 **PR branch policy** check reads current API metadata from trusted base code;
 it never executes contributor code. It accepts same-repository develop promotions,
-`fix/...` hotfixes, and the installed release App's expected metadata-only release
+`fix/...` hotfixes explicitly labeled `production-hotfix` with a `fix:` title, and the installed release App's expected metadata-only release
 PR into main. The release App identity is `the-practical-engineer-releases[bot]`;
 a replacement App requires updating the policy and tests in a reviewed PR.
 Fork feature contributions remain supported into develop.
@@ -120,6 +122,9 @@ claims that this PR changes hosted settings.
   bootstrap review is manual. Confirm both metadata checks on a subsequent PR.
 - [ ] Promote these workflows/docs to main with a reviewed merge commit. Run full
   CI on that PR; inspect the trusted-base policy's first run after rollout.
+- [ ] Create the repository label **production-hotfix** for intentional urgent
+  main-targeted fixes. Label addition/removal revalidates the branch policy;
+  a fix branch name alone never designates a production repair.
 - [ ] In repository merge settings: enable squash and merge, disable rebase,
   disable automatic head deletion, set squash title **Pull request title** and
   body **Pull request description**. Preserve footers during final review.

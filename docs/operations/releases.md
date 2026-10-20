@@ -235,6 +235,11 @@ and stale main checkouts fail closed; rerun on current main. The final API ref
 check reduces stale-run writes but cannot make GitHub's separate APIs transactional.
 Keep release runs serialized and review the generated PR against current main.
 
+All actions in the release and synchronization jobs are pinned to full commit
+SHAs, including checkout and runtime setup, because earlier steps can persist
+state into the later App-token steps. Git runs through `/usr/bin/git` on the
+Ubuntu runner so a PATH entry cannot shadow it.
+
 Dependency installation runs on trusted main with frozen lockfile and lifecycle
 scripts disabled, before any App token is generated. The token is passed only to
 the release runner step. This workflow must never check out a PR head. Both branch

@@ -39,7 +39,9 @@ jobs:
               core.notice('Promotion: select Create a merge commit. This check cannot enforce a future merge-button choice.');
               return;
             }
-            if (/^fix\/[a-z0-9][a-z0-9-]*$/.test(head)) return;
+            if (/^fix\/[a-z0-9][a-z0-9-]*$/.test(head) &&
+                /^fix(\([^()\s]+\))?!?: /.test(pr.title) &&
+                pr.labels.some(label => label.name === 'production-hotfix')) return;
             if (head === 'release-please--branches--main' &&
                 pr.user.login === 'the-practical-engineer-releases[bot]' &&
                 /^chore\(main\): release \d+\.\d+\.\d+$/.test(pr.title) &&
@@ -48,4 +50,4 @@ jobs:
               const allowed = ['package.json', '.release-please-manifest.json', 'CHANGELOG.md', 'pnpm-lock.yaml'];
               if (files.length > 0 && files.every(file => file.status === 'modified' && allowed.includes(file.filename))) return;
             }
-            core.setFailed('main accepts develop promotions titled chore(promotion): ..., App release metadata PRs, or same-repository fix/... production hotfixes. Ordinary work targets develop.');
+            core.setFailed('main accepts develop promotions titled chore(promotion): ..., App release metadata PRs, or same-repository fix/... production hotfixes with a fix: title and production-hotfix label. Ordinary work targets develop.');

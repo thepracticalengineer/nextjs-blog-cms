@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url)
 const { GitHub } = require('release-please/build/src/github.js')
 const { Manifest } = require('release-please/build/src/manifest.js')
 const { Version } = require('release-please/build/src/version.js')
-const git = args => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+const git = args => execFileSync('/usr/bin/git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
 
 export async function installAncestryHistory(github, { runGit = git, bootstrapSha } = {}) {
   const iterate = github.mergeCommitIterator.bind(github)
@@ -62,5 +62,10 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  main().catch(error => { console.error(error.message); process.exitCode = 1 })
+  try {
+    await main()
+  } catch (error) {
+    console.error(error.message)
+    process.exitCode = 1
+  }
 }
