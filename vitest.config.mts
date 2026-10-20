@@ -82,6 +82,7 @@ export default defineConfig({
         'features/newsletter/actions.ts',
         'features/authors/**/*.{ts,tsx}',
         'app/(public)/authors/[id]/page.tsx',
+        'features/article-reactions/**/*.{ts,tsx}',
         'features/comments/reaction-client.ts',
         'features/comments/reaction-actions.ts',
         'features/comments/reactions.ts',

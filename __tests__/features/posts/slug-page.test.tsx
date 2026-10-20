@@ -1,3 +1,4 @@
+vi.mock('@/features/article-reactions/ArticleReactionSection', () => ({ ArticleReactionSection: () => null }))
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/features/authors/queries', () => ({ getPublicAuthor: vi.fn(), getAuthorLatestPosts: vi.fn() }))
 vi.mock('@/features/posts/queries', () => ({ getPostBySlug: vi.fn(), getPostRedirect: vi.fn() }))
