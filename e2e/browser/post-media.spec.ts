@@ -177,7 +177,7 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     const saved = { data: await readPost(id!) }
     expect(saved.data.slug).toBe(slug)
     expect(saved.data.status).toBe('published')
-    expect(saved.data.image_alt).toBe('A blue circuit board viewed from above')
+    expect(saved.data.cover_image_alt).toBe('A blue circuit board viewed from above')
     expect(saved.data.content).toContain('Test points on a blue board')
     const registered = await db.from('post_media').select('path, retained, owner_id').in('path', paths)
     expect(registered.error).toBeNull()
