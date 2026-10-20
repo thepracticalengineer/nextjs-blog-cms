@@ -116,7 +116,7 @@
     "lint-staged": "17.6.0",
     "monocart-coverage-reports": "2.13.2",
     "postcss": "8.5.30",
-    "release-please": "17.6.0",
+    "release-please": "17.11.2",
     "shadcn": "4.22.0",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
