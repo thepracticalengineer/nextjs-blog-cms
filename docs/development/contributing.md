@@ -16,11 +16,11 @@ Use the pinned Node/pnpm versions, focused branches, and preserve unrelated chan
 Choose the branch name before starting work. Agent branches use
 `<type>/<issue-number>-<short-kebab-case-description>`, for example
 `chore/192-contribution-conventions`; without an issue, use
-`<type>/<short-kebab-case-description>`. Choose a meaningful type such as `feat`,
-`fix`, or `chore`; do not use `codex/` for new branches. Honor an explicit user-requested name and
+`<type>/<short-kebab-case-description>`. Use only `feat`, `fix`, or `chore`
+as the branch type; do not use `codex/` for new branches. Honor an explicit user-requested name and
 preserve existing branches and unrelated work rather than automatically renaming
 them. Other contributors may keep existing branch conventions. CI accepts
-all supported type prefixes listed below, the existing `feature/**` pattern,
+`feat/**`, `fix/**`, and `chore/**`, the existing `feature/**` pattern,
 and legacy `codex/**` branches for compatibility; PR CI targets `main` regardless of
 source branch. There is no branch-name rejection check.
 
