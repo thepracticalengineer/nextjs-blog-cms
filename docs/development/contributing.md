@@ -14,12 +14,14 @@ Use the pinned Node/pnpm versions, focused branches, and preserve unrelated chan
 ## Branch, commit and PR conventions
 
 Choose the branch name before starting work. Agent branches use
-`codex/<issue-number>-<short-kebab-case-description>`, for example
-`codex/192-contribution-conventions`; without an issue, use
-`codex/<short-kebab-case-description>`. Honor an explicit user-requested name and
+`<type>/<issue-number>-<short-kebab-case-description>`, for example
+`chore/192-contribution-conventions`; without an issue, use
+`<type>/<short-kebab-case-description>`. Choose a meaningful type such as `feat`,
+`fix`, or `chore`; do not use `codex/` for new branches. Honor an explicit user-requested name and
 preserve existing branches and unrelated work rather than automatically renaming
 them. Other contributors may keep existing branch conventions. CI accepts
-`codex/**` as well as existing push patterns; PR CI targets `main` regardless of
+all supported type prefixes listed below, the existing `feature/**` pattern,
+and legacy `codex/**` branches for compatibility; PR CI targets `main` regardless of
 source branch. There is no branch-name rejection check.
 
 Commit messages and PR titles use `<type>(optional-scope): <imperative description>`.
