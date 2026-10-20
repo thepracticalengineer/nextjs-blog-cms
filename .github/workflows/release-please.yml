@@ -1,0 +1,47 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# The repository token is unused. The App token below has only release permissions.
+permissions: {}
+
+concurrency:
+  group: release-please-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check release App configuration
+        env:
+          APP_CLIENT_ID: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APP_CLIENT_ID" ] || [ -z "$APP_PRIVATE_KEY" ]; then
+            echo '::error::Set RELEASE_APP_CLIENT_ID and RELEASE_APP_PRIVATE_KEY. See docs/operations/releases.md#initial-setup.'
+            exit 1
+          fi
+
+      - name: Create repository-scoped release token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      # No checkout or execution of PR code in this privileged workflow.
+      - name: Update release PR or publish merged release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

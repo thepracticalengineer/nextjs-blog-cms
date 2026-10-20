@@ -32,7 +32,8 @@
     "prepare": "husky",
     "typecheck": "next typegen && tsc --noEmit --incremental false",
     "docs:check": "node scripts/check-docs.mjs",
-    "docs:test": "node --test scripts/check-docs.test.mjs"
+    "docs:test": "node --test scripts/check-docs.test.mjs",
+    "release:test": "node --test scripts/release/*.test.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
@@ -115,11 +116,13 @@
     "lint-staged": "17.6.0",
     "monocart-coverage-reports": "2.13.2",
     "postcss": "8.5.28",
+    "release-please": "17.6.0",
     "shadcn": "4.21.5",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
     "vite": "8.3.4",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "yaml": "2.9.1"
   },
   "packageManager": "pnpm@10.29.3",
   "engines": {
