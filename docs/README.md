@@ -44,6 +44,8 @@
 
 ## Operations
 
+- [Numbered releases, Release Please setup and recovery](operations/releases.md)
+
 - [Search indexing, canonical metadata and issue #94 verification](operations/search-indexing.md)
 - [Deployment verification](operations/deployment-verification.md)
 - [Production cleanup and October 7, 2026 audit](operations/content-cleanup.md)

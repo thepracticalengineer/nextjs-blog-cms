@@ -350,3 +350,7 @@ See [comment reaction verification](../features/comment-reactions.md#migration-a
 for focused unit, desktop/mobile control, database-policy, concurrency and live
 article action checks. Isolated browser fixtures do not require Auth or database
 access; SQL and real-action E2E tests require the dedicated disposable stack.
+
+## Release automation
+
+Run `pnpm run release:test` for offline Release Please generation, PR reuse, publication planning and retry checks. These tests use the real pinned library with in-memory GitHub responses and cannot publish a production release. See [release verification and hosted limits](../operations/releases.md#safe-verification-and-upgrade-checks).

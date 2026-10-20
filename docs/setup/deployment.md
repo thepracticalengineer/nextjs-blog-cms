@@ -9,3 +9,5 @@
 7. Verify public pages, auth, API, publication/redirects and newsletter queue state with [deployment verification](../operations/deployment-verification.md).
 
 See [dependency upgrade notes](../dependency-upgrade.md) for image-host allowlists, runtime compatibility and audit findings. Preview/test environments must use separate disposable databases and disabled external notification integrations.
+
+Vercel Git integration continues deploying `main` independently of numbered releases. See the [release process](../operations/releases.md) for the human release checkpoint, App setup and migration timing.

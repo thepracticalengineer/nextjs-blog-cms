@@ -11,6 +11,8 @@ For significant changes, open an issue first to discuss the approach.
 
 Use the pinned Node/pnpm versions, focused branches, and preserve unrelated changes. Run checks appropriate to the changed behavior and describe validation in the PR. Update canonical guides with behavior/setup changes. Commit `package.json` and `pnpm-lock.yaml` together; use `pnpm add` rather than generating npm lockfiles. Review dependency scripts in `pnpm-workspace.yaml`; do not bypass strict peers. See [dependency management](../dependency-upgrade.md) and [agent instructions](../../AGENTS.md).
 
+For numbered releases, use the [release commit policy and maintainer process](../operations/releases.md). Review the final main commit message when squash merging; convention enforcement is tracked in issue #192.
+
 # Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating, you agree to uphold a respectful and inclusive environment. Report unacceptable behavior to the project maintainer.
