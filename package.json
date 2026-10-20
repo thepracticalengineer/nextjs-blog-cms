@@ -1,6 +1,6 @@
 {
   "name": "nextjs-blog-cms",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A modern blog CMS built with Next.js, Supabase, and TailwindCSS",
   "keywords": [
     "cms",
