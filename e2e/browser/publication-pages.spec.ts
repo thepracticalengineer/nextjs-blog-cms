@@ -33,6 +33,7 @@ test('Editor publication refreshes warmed home, article, taxonomy, author and si
     const newSlug = `${key}-new`
     await page.getByLabel('Post title').fill(title)
     await changePublishedSlug(page, newSlug)
+    await page.getByRole('form', { name: 'Post editor' }).locator('summary').filter({ hasText: /^Settings$/ }).click()
     await page.getByLabel('Category', { exact: true }).selectOption(categories.data!.find(row => row.slug === newSlug)!.id)
     await page.getByRole('button', { name: `Remove tag ${key}`, exact: true }).click()
     await page.getByLabel('Search tags').fill(newSlug)

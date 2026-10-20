@@ -58,8 +58,12 @@ test('preserves custom slugs and redirects deliberate published URL changes', as
     // Exercise the editor's reserved-alias validation in a separate writing tab.
     const conflictPage = await page.context().newPage()
     await conflictPage.goto('/dashboard/posts/new')
+    await expect(conflictPage.locator('.ProseMirror')).toBeVisible()
     await conflictPage.getByLabel('Post title').fill('Another draft')
+    await conflictPage.getByLabel('Post title').blur()
+    await expect(conflictPage.getByLabel('Slug', { exact: true })).toHaveValue('another-draft')
     await conflictPage.getByLabel('Slug', { exact: true }).fill(slug)
+    await expect(conflictPage.getByLabel('Slug', { exact: true })).toHaveValue(slug)
     await conflictPage.getByRole('button', { name: 'Save Draft', exact: true }).click()
     await expect(conflictPage.locator('#slug-error')).toContainText('Choose another')
     await conflictPage.close()

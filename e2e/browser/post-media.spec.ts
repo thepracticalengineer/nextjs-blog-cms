@@ -44,7 +44,7 @@ test('mixed clipboard keeps rich text and dropped files open the image workflow'
   await page.getByRole('button', { name: 'Discard changes' }).click()
   await expect(dialog).not.toBeVisible()
   await expect(article).toHaveJSProperty('innerHTML', content)
-  await page.getByText('Settings', { exact: true }).click()
+  await page.getByRole('form', { name: 'Post editor' }).locator('summary').filter({ hasText: /^Settings$/ }).click()
   const cover = page.getByLabel('Cover image', { exact: true })
   const defaultPasteAllowed = await cover.evaluate(element => {
     const data = new DataTransfer()
@@ -85,7 +85,7 @@ test('cover picker and inline paste upload owned images with descriptions, previ
     await page.getByLabel('Slug', { exact: true }).fill(slug)
     await page.getByLabel('Excerpt', { exact: true }).fill(readyArticle.excerpt)
     await page.locator('.ProseMirror').fill(readyArticle.content.replace(/<[^>]+>/g, ' '))
-    await page.getByText('Settings', { exact: true }).click()
+    await page.getByRole('form', { name: 'Post editor' }).locator('summary').filter({ hasText: /^Settings$/ }).click()
     await page.getByRole('button', { name: 'Choose cover image' }).click()
     const coverDialog = page.getByRole('dialog', { name: 'Cover image', exact: true })
     await coverDialog.getByLabel('Image file', { exact: true }).setInputFiles({ name: 'circuit.png', mimeType: 'image/png', buffer: bytes })
