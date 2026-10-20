@@ -32,11 +32,12 @@ Before merging the automation, a repository administrator must:
    to approve/merge its own PR. Apply any tag rules so the App can create `v*`
    tags, while protecting existing tags from changes/deletion. If enabling signed
    commits, verify the App's generated commits satisfy the rule before rollout.
-5. Coordinate the Conventional Commit/PR title enforcement and squash defaults in
-   [issue #192](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/192).
-   Prefer squash merging and set the squash commit title to the PR title. Retain
-   breaking-change footers in the resulting main commit. Until enforcement lands,
-   maintainers must check the final main commit message themselves.
+5. Apply the [contribution conventions and maintainer settings](../development/contributing.md#branch-commit-and-pr-conventions):
+   require **PR title** in the active `main` ruleset, prefer squash merging, and
+   set its default title to **Pull request title** and body to **Pull request
+   description**. Inspect the final commit body to retain breaking-change footers
+   and migration guidance. Intermediate branch commits need not all be conventional
+   when squash merging.
 
 At investigation time, classic branch protection was absent and the existing
 repository ruleset was disabled. This PR does not change hosted repository rules,

@@ -1,0 +1,37 @@
+name: PR title
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+# Metadata only: never check out, install, or execute contributor code here.
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate current PR title
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            // Fetch current metadata so reruns do not validate an obsolete event title.
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo, pull_number: context.issue.number,
+            });
+            const pattern = /^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\([^()\s]+\))?!?: \S[^\r\n]*$/;
+            if (!pattern.test(pr.title)) {
+              core.setFailed(
+                'Use <type>(optional-scope): <imperative description>, for example ' +
+                'feat(comments): add single-level replies. Supported types: feat, fix, docs, ' +
+                'refactor, perf, test, build, ci, chore, revert. Add ! before : for breaking changes. ' +
+                'Edit the PR title to rerun this check. See docs/development/contributing.md#branch-commit-and-pr-conventions.'
+              );
+            }
