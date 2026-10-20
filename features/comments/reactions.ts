@@ -19,5 +19,5 @@ export type ReactionSnapshots = Record<string, ReactionSnapshot>
 export const emptySnapshot: ReactionSnapshot = {
   counts: { like: 0, love: 0, celebrate: 0, insightful: 0 }, selection: null,
 }
-export type ReactionResult = { data: ReactionSnapshot; error?: never } | { error: string; data?: never }
+export type ReactionResult = { data: ReactionSnapshot; error?: never } | { error: string; data?: never; retryable?: boolean }
 export type ReactionReadResult = { data: ReactionSnapshots; viewerId: string | null; error?: never } | { error: string; data?: never; viewerId?: never }

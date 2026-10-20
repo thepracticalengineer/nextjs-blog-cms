@@ -1,5 +1,4 @@
 // features/comments/components/CommentSection.tsx
-import { AuthProvider } from '@/features/auth/context/AuthProvider'
 import { CommentReactionProvider } from './CommentReactionProvider'
 import { readCommentReactions } from '../reaction-actions'
 import { createClient } from '@/lib/supabase/server'
@@ -30,7 +29,7 @@ export async function CommentSection({ postId, postSlug }: CommentSectionProps) 
   const [comments, reactions] = await Promise.all([getCommentsByPost(postId), readCommentReactions(postId)])
 
   return (
-    <section className="mt-12 pt-8 border-t border-border space-y-8">
+    <section id="comments" className="mt-12 pt-8 border-t border-border space-y-8">
       <div>
         <h2 className="text-lg font-semibold mb-4">💬 Leave a Comment</h2>
         <CommentForm
@@ -39,16 +38,14 @@ export async function CommentSection({ postId, postSlug }: CommentSectionProps) 
           authorName={currentProfile?.full_name ?? null}
         />
       </div>
-      <AuthProvider>
-        <CommentReactionProvider postId={postId} initialData={reactions.data ?? null} initialViewerId={reactions.viewerId ?? null}>
-          <CommentList
-            comments={comments}
-            currentProfileId={currentProfile?.id ?? null}
-            currentProfileRole={(currentProfile?.role as Role) ?? null}
-            postSlug={postSlug}
-          />
-        </CommentReactionProvider>
-      </AuthProvider>
+      <CommentReactionProvider postId={postId} initialData={reactions.data ?? null} initialViewerId={reactions.viewerId ?? null} returnPath={`/blog/${encodeURIComponent(postSlug)}#comments`}>
+        <CommentList
+          comments={comments}
+          currentProfileId={currentProfile?.id ?? null}
+          currentProfileRole={(currentProfile?.role as Role) ?? null}
+          postSlug={postSlug}
+        />
+      </CommentReactionProvider>
     </section>
   )
 }

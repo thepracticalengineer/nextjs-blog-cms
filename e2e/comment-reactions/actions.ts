@@ -14,3 +14,8 @@ export async function setCommentReaction(id: string, desired: Reaction | null): 
  if (!response.ok) return { error:'Connection lost. Refresh and retry.' }
  return response.json()
 }
+
+export function useReactionSession() {
+ const viewer=new URLSearchParams(location.search).get('viewer')??'reader'
+ return {viewerId:viewer==='guest'?null:viewer,loading:false}
+}

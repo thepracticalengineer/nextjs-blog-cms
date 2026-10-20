@@ -6,6 +6,7 @@ import type { Reaction, ReactionResult, ReactionSnapshots } from '../reactions'
 type ContextValue = {
   data: ReactionSnapshots
   viewerId: string | null
+  signInHref: string
   loading: boolean
   error: string | null
   refresh: () => Promise<void>

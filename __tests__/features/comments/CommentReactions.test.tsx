@@ -3,14 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CommentReactionProvider } from '@/features/comments/components/CommentReactionProvider'
 import { CommentReactions } from '@/features/comments/components/CommentReactions'
 import { AuthContext, type AuthContextType } from '@/features/auth/context/AuthContext'
-import { readCommentReactions, setCommentReaction } from '@/features/comments/reaction-actions'
-vi.mock('@/features/comments/reaction-actions', () => ({ readCommentReactions: vi.fn(), setCommentReaction: vi.fn() }))
+import { setCommentReaction } from '@/features/comments/reaction-actions'
+import { readCommentReactions } from '@/features/comments/reaction-client'
+vi.mock('@/features/comments/reaction-actions', () => ({ setCommentReaction: vi.fn() }))
+vi.mock('@/features/comments/reaction-client', async () => {
+ const {useAuth}=await import('@/features/auth/context/AuthContext')
+ return {readCommentReactions:vi.fn(),useReactionSession:()=>{
+  const {user,loading}=useAuth()
+  return {viewerId:user?.id??null,loading}
+ }}
+})
 const id = '15900000-0000-4000-8000-000000000020'
 const zero = { counts: { like: 0, love: 0, celebrate: 0, insightful: 0 }, selection: null }
 const liked = { counts: { like: 1, love: 0, celebrate: 0, insightful: 0 }, selection: 'like' as const }
 function ui(viewer: string | null = 'reader', loading = false) {
  return <AuthContext.Provider value={{ user: viewer ? { id: viewer } : null, loading } as AuthContextType}>
-  <CommentReactionProvider postId={id} initialData={{ [id]: zero }} initialViewerId="reader">
+  <CommentReactionProvider postId={id} initialData={{ [id]: zero }} initialViewerId="reader" returnPath="/blog/example#comments">
    <CommentReactions commentId={id} />
   </CommentReactionProvider>
  </AuthContext.Provider>
@@ -80,7 +88,7 @@ describe('comment reaction controls', () => {
  it('shows controls immediately for a comment added by a server refresh', async () => {
   const added = '15900000-0000-4000-8000-000000000021'
   const renderComments = (include: boolean) => <AuthContext.Provider value={{ user: { id: 'reader' }, loading: false } as AuthContextType}>
-   <CommentReactionProvider postId={id} initialData={include ? { [id]: zero, [added]: zero } : { [id]: zero }} initialViewerId="reader">
+   <CommentReactionProvider postId={id} initialData={include ? { [id]: zero, [added]: zero } : { [id]: zero }} initialViewerId="reader" returnPath="/blog/example#comments">
     <CommentReactions commentId={id} />{include && <CommentReactions commentId={added} />}
    </CommentReactionProvider>
   </AuthContext.Provider>
@@ -96,7 +104,7 @@ describe('comment reaction controls', () => {
   const oldInitial = { [id]: zero }
   const laterInitial = { ...oldInitial, [added]: zero }
   const renderComments = (initial: typeof oldInitial) => <AuthContext.Provider value={{ user: { id: 'reader' }, loading: false } as AuthContextType}>
-   <CommentReactionProvider postId={id} initialData={initial} initialViewerId="reader"><CommentReactions commentId={added} /></CommentReactionProvider>
+   <CommentReactionProvider postId={id} initialData={initial} initialViewerId="reader" returnPath="/blog/example#comments"><CommentReactions commentId={added} /></CommentReactionProvider>
   </AuthContext.Provider>
   vi.mocked(readCommentReactions).mockResolvedValue({data:{[id]:zero,[added]:zero},viewerId:'reader'})
   const {rerender}=render(renderComments(oldInitial))
@@ -116,6 +124,29 @@ describe('comment reaction controls', () => {
   expect(screen.getByRole('button', { name: 'Retry reaction' })).toBeEnabled()
   await act(async () => { finish({ data: liked }) })
   expect(screen.getByRole('button', { name: 'Like: 0 reactions' })).toHaveAttribute('aria-pressed', 'false')
+ })
+ it('does not offer retries for a permanently unavailable comment', async () => {
+  vi.mocked(setCommentReaction).mockResolvedValue({error:'Comment unavailable',retryable:false})
+  render(ui())
+  fireEvent.click(screen.getByRole('button',{name:'Like: 0 reactions'}))
+  await screen.findByText('Comment unavailable')
+  expect(screen.queryByRole('button',{name:'Retry reaction'})).not.toBeInTheDocument()
+ })
+ it('coalesces focus and visibility reads and leaves the write independent', async () => {
+  render(ui())
+  await act(async()=>{})
+  vi.mocked(readCommentReactions).mockClear()
+  vi.mocked(readCommentReactions).mockReturnValue(new Promise(()=>{}))
+  fireEvent(window,new Event('focus'))
+  fireEvent(document,new Event('visibilitychange'))
+  await waitFor(()=>expect(readCommentReactions).toHaveBeenCalledTimes(1))
+  fireEvent.click(screen.getByRole('button',{name:'Like: 0 reactions'}))
+  expect(await screen.findByRole('button',{name:'Like: 1 reaction'})).toHaveAttribute('aria-pressed','true')
+ })
+ it('returns guests to the comment section after sign-in',()=>{
+  render(ui(null))
+  fireEvent.click(screen.getByRole('button',{name:'Like: 0 reactions'}))
+  expect(screen.getByRole('link',{name:'Sign in to react'})).toHaveAttribute('href','/login?next=%2Fblog%2Fexample%23comments')
  })
  it('keeps failed reads visible and offers a refresh', async () => {
   vi.mocked(readCommentReactions).mockResolvedValue({error:'Could not refresh reactions. Try again.'})

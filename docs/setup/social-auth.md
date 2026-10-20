@@ -125,7 +125,8 @@ queries, authorization codes, cookies, or token responses.
   access tokens can remain valid until expiry. Neither action signs the user out
   of Google/GitHub, revokes provider consent, or clears the provider's own cookies.
 
-Internal return navigation accepts dashboard paths and rejects external,
+Internal return navigation accepts dashboard and public `/blog` paths (including
+article comment fragments) and rejects external,
 protocol-relative, malformed, auth, and API destinations. Signup confirmation and
 password recovery keep their separate callback handling; OAuth never mints a
 recovery grant. Callback errors use fixed, actionable messages without reflecting

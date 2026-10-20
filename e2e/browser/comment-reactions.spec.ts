@@ -20,10 +20,17 @@ test('public article reactions persist through real actions, reload and guest re
   await page.getByRole('button',{name:'Sign in',exact:true}).click()
   await expect(page).toHaveURL(/\/dashboard$/)
   const article=`/blog/${post!.slug}`
+  // Hold a browser aggregate request open: the write must not wait behind it
+  // in Next's action queue, and its late stale snapshot must not undo the save.
+  let heldRead: import('@playwright/test').Route | undefined
+  await page.route('**/rest/v1/rpc/get_comment_reactions', route => { heldRead=route })
   await page.goto(article)
+  await expect.poll(()=>heldRead!==undefined).toBe(true)
   const card=page.getByText(`Reaction verification ${comment}`,{exact:true}).locator('..')
   await card.getByRole('button',{name:'Like: 0 reactions'}).click()
   await expect(card.getByRole('button',{name:'Like: 1 reaction'})).toHaveAttribute('aria-pressed','true')
+  await heldRead!.fulfill({json:[{comment_id:comment,counts:{like:0,love:0,celebrate:0,insightful:0},selection:null}]})
+  await page.unroute('**/rest/v1/rpc/get_comment_reactions')
   await card.screenshot({path:'test-results/comment-reactions-public.png'})
   await page.reload()
   await expect(card.getByRole('button',{name:'Like: 1 reaction'})).toHaveAttribute('aria-pressed','true')
@@ -36,7 +43,13 @@ test('public article reactions persist through real actions, reload and guest re
    const guestCard=guestPage.getByText(`Reaction verification ${comment}`,{exact:true}).locator('..')
    await expect(guestCard.getByRole('button',{name:'Love: 1 reaction'})).toHaveAttribute('aria-pressed','false')
    await guestCard.getByRole('button',{name:'Love: 1 reaction'}).click()
-   await expect(guestCard.getByRole('link',{name:'Sign in to react'})).toBeVisible()
+   const signIn=guestCard.getByRole('link',{name:'Sign in to react'})
+   await expect(signIn).toHaveAttribute('href',`/login?next=${encodeURIComponent(`${article}#comments`)}`)
+   await signIn.click()
+   await guestPage.getByLabel('Email address',{exact:true}).fill(process.env.E2E_TEST_EMAIL??'e2e-test@playwright.local')
+   await guestPage.getByLabel('Password',{exact:true}).fill(process.env.E2E_TEST_PASSWORD??'E2eTestPassword123!')
+   await guestPage.getByRole('button',{name:'Sign in',exact:true}).click()
+   await expect(guestPage).toHaveURL(new URL(`${article}#comments`,page.url()).href)
   }finally{await guest.close()}
   await card.getByRole('button',{name:'Love: 1 reaction'}).click()
   await expect(card.getByRole('button',{name:'Love: 0 reactions'})).toHaveAttribute('aria-pressed','false')

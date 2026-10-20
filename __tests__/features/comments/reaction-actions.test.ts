@@ -25,7 +25,7 @@ describe('comment reaction actions', () => {
  })
  it.each(['UNAUTHENTICATED','MFA_REQUIRED','AUTH_UNAVAILABLE','FORBIDDEN'])('denies %s before database writes', async code => {
   vi.mocked(authorizeSession).mockResolvedValue({ profile: null, failure: { code, error: 'Denied', status: 403 } } as never)
-  expect(await setCommentReaction(id,'like')).toEqual({ error: 'Denied' })
+  expect(await setCommentReaction(id,'like')).toEqual({ error: 'Denied', retryable: code === 'AUTH_UNAVAILABLE' })
   expect(rpc).not.toHaveBeenCalled()
  })
  it.each([
@@ -34,7 +34,7 @@ describe('comment reaction actions', () => {
   ['internal secret','Could not save your reaction. Refresh and try again.'],
  ])('maps database error %s to safe feedback', async (message, error) => {
   rpc.mockResolvedValue({ error: { message }, data: null })
-  expect(await setCommentReaction(id,'like')).toEqual({ error })
+  expect(await setCommentReaction(id,'like')).toEqual({ error, ...(message === 'REACTION_UNAVAILABLE' ? {retryable:false} : {}) })
  })
  it('handles a lost mutation response without claiming success', async () => {
   rpc.mockRejectedValue(new Error('network'))

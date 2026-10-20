@@ -10,7 +10,7 @@ export function CommentReactions({ commentId }: { commentId: string }) {
   const [pending, setPending] = useState(false)
   const busy = useRef(false)
   const [feedback, setFeedback] = useState('')
-  const [failed, setFailed] = useState<{ desired: Reaction | null; error: string } | null>(null)
+  const [failed, setFailed] = useState<{ desired: Reaction | null; error: string; retryable: boolean } | null>(null)
   const [guest, setGuest] = useState(false)
   if (!context) return null
   const snapshot = context.data[commentId]
@@ -25,7 +25,7 @@ export function CommentReactions({ commentId }: { commentId: string }) {
     try {
       const result = await context.save(commentId, desired)
       if (result.error !== undefined) {
-        setFailed({ desired, error: result.error })
+        setFailed({ desired, error: result.error, retryable: result.retryable !== false })
         setFeedback('Reaction could not be confirmed. Counts have been refreshed where possible.')
       } else {
         setFeedback(desired ? `${reactions.find(item => item.type === desired)!.label} reaction saved.` : 'Reaction removed.')
@@ -54,10 +54,10 @@ export function CommentReactions({ commentId }: { commentId: string }) {
       })}
     </div>
     {guest && <p className="text-xs text-muted-foreground">
-      <a className="underline underline-offset-4" href="/login">Sign in to react</a> to choose a reaction.
+      <a className="underline underline-offset-4" href={context.signInHref}>Sign in to react</a> to choose a reaction.
     </p>}
     {failed && <div className="flex flex-wrap items-center gap-2 text-xs" role="alert">
-      <span>{failed.error}</span><Button variant="link" size="sm" onClick={() => void save(failed.desired)}>Retry reaction</Button>
+      <span>{failed.error}</span>{failed.retryable && <Button variant="link" size="sm" onClick={() => void save(failed.desired)}>Retry reaction</Button>}
     </div>}
     <span className="sr-only" role="status" aria-live="polite">{feedback}</span>
   </div>

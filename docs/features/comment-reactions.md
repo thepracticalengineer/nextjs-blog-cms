@@ -3,7 +3,8 @@
 Signed-in participants can choose **👍 Like**, **❤️ Love**, **🎉 Celebrate**, or
 **💡 Insightful** on a comment. Each person has one selection per comment. Choosing
 another replaces it; choosing the selected control removes it. Guests see counts
-and receive a sign-in link when choosing a reaction. Controls support keyboard,
+and receive a sign-in link when choosing a reaction. Signing in returns to the
+article’s comments section. Controls support keyboard,
 screen-reader feedback and touch targets of at least 44 pixels.
 
 ## Authorization and privacy
@@ -48,9 +49,18 @@ not consume budget. Budget rows contain only an account ID, window and count and
 cascade on account deletion. Publication/comment share locks serialize mutations
 with unpublication and deletion. The primary key enforces one row per comment/user.
 
+Recurring reads call the aggregate RPC directly from the browser, outside Next's
+serialized server-action queue. A session-only listener preserves the server's
+initial viewer/selection until Auth reports a different identity; it does not
+load private profiles. Local session data is only a UI hint: database RPCs still
+verify the signed JWT and MFA. Overlapping reads share one request, and focus plus
+visibility events are coalesced into one refresh.
+
 The UI keeps authoritative counts while saving, prevents duplicate activation, and
 uses the returned snapshot on success. After a failed or uncertain write it reads
-current state and offers a retry of the original desired selection. Client waits
+current state and offers a retry of the original desired selection for retryable failures.
+Permanent invalid/unavailable requests and authorization failures require changed
+input or authentication, so their errors do not offer a Retry button. Client waits
 expire after 15 seconds; late responses cannot overwrite reconciled state. Identity
 changes discard old pending UI and private selections. Counts refresh on focus,
 visibility changes and every 30 seconds while visible. Concurrent updates are
@@ -85,7 +95,8 @@ Keep the public author projection unchanged.
   connections to the designated local `supabase_db_nextjs-blog-cms` container for
   duplicate retries, competing selections, 12-reader totals, removals and
   concurrent unpublication, then removes its fixtures.
-- `pnpm exec playwright test e2e/browser/comment-reactions.spec.ts --project=browser`
-  covers the public article, real server actions, persistence and guest counts
+- `NEXT_DIST_DIR=.next-reactions-ui pnpm exec playwright test e2e/browser/comment-reactions.spec.ts --project=browser`
+  covers the public article, real server actions/browser RPC reads, persistence,
+  guest counts and sign-in return navigation
   using the dedicated migrated E2E stack. Follow the [testing setup](../development/testing.md)
   and disable external mail/webhooks. Never use production.
