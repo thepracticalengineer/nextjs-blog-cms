@@ -225,9 +225,11 @@ jobs:
       - name: Verify newsletter queue retry and cancellation contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
 
+      - name: Generate disposable provider encryption key
+        run: |
+          node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { randomBytes } from "node:crypto"; appendFileSync(process.env.GITHUB_ENV, "LLM_KEY_ENCRYPTION_SECRET=" + randomBytes(16).toString("hex") + "\n")'
+
       - name: Run API and browser tests
-        env:
-          LLM_KEY_ENCRYPTION_SECRET: a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
         run: pnpm run test:e2e
 
       - name: Verify publication of URLs created after a production build

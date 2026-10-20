@@ -2,10 +2,13 @@
 // the migration replay share one transaction; errors/disconnection roll it back.
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { accessSync, constants, readFileSync } from 'node:fs'
 
+// Ubuntu CI and the designated Linux development host use this trusted binary.
+const dockerExecutable = '/usr/bin/docker'
+accessSync(dockerExecutable, constants.X_OK)
 const container = 'supabase_db_nextjs-blog-cms'
-const labels = JSON.parse(execFileSync('docker', ['inspect', container, '--format', '{{json .Config.Labels}}'], { encoding: 'utf8' }))
+const labels = JSON.parse(execFileSync(dockerExecutable, ['inspect', container, '--format', '{{json .Config.Labels}}'], { encoding: 'utf8' }))
 assert.equal(labels['com.supabase.cli.project'], 'nextjs-blog-cms', 'Refusing to use an unrelated database')
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 const migration = read('supabase/migrations/20261020134445_retire_legacy_ai_api.sql')
@@ -37,10 +40,13 @@ sql += 'ALTER TABLE public.api_keys ALTER COLUMN is_active SET DEFAULT true;\n'
 sql += `GRANT ALL ON public.api_keys, public.llm_provider_keys, public.ai_books,
  public.ai_chats, public.ai_messages, public.ai_generated_posts TO anon, authenticated;\n`
 // Reuse the same populated fixtures as the ownership suite, before its helpers.
-const fixture = read('database/tests/legacy_ai_retirement.sql').split('CREATE FUNCTION pg_temp.check_provider_ownership')[0]
+const fixtureSections = read('database/tests/legacy_ai_retirement.sql').split('-- END RETIREMENT FIXTURES')
+assert.equal(fixtureSections.length, 2, 'Expected exactly one retirement fixture boundary')
+const [fixture] = fixtureSections
 assert.ok(fixture.includes('INSERT INTO public.llm_provider_keys'))
+assert.doesNotMatch(fixture, /^\s*(?:COMMIT|ROLLBACK);/im, 'Fixtures must stay inside the replay transaction')
 sql += fixture.slice(fixture.indexOf('BEGIN;') + 'BEGIN;'.length)
-sql += `UPDATE public.api_keys SET is_active = true WHERE key_hash = 'retirement-hash';
+sql += `UPDATE public.api_keys SET is_active = true WHERE key_hash = (SELECT key_hash FROM pg_temp.retirement_fixture());
 CREATE TEMP TABLE preservation_snapshot (relation_name text, rows jsonb);
 CREATE TEMP TABLE api_key_snapshot AS SELECT to_jsonb(k) - 'is_active' AS row FROM public.api_keys k;
 `
@@ -58,12 +64,12 @@ sql += `DO $$ DECLARE r record; current_rows jsonb; BEGIN
   UNION ALL
   (SELECT to_jsonb(k) - 'is_active' FROM public.api_keys k EXCEPT SELECT row FROM api_key_snapshot)
  ), 'Migration changed API key history';
- ASSERT (SELECT is_active FROM public.api_keys WHERE key_hash = 'retirement-hash') IS FALSE, 'Migration failed to revoke active fixture';
+ ASSERT (SELECT is_active FROM public.api_keys WHERE key_hash = (SELECT key_hash FROM pg_temp.retirement_fixture())) IS FALSE, 'Migration failed to revoke active fixture';
  ASSERT NOT EXISTS(SELECT 1 FROM public.api_keys WHERE is_active IS DISTINCT FROM false), 'Active keys remain after upgrade';
 END $$;
 ROLLBACK;
 `
-const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-q', '-v', 'ON_ERROR_STOP=1'], {
+const result = spawnSync(dockerExecutable, ['exec', '-i', container, 'psql', '-U', 'postgres', '-d', 'postgres', '-q', '-v', 'ON_ERROR_STOP=1'], {
   input: sql, encoding: 'utf8', maxBuffer: 10 * 1024 * 1024,
 })
 if (result.error) throw result.error

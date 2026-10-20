@@ -63,8 +63,9 @@ test('direct cookie APIs, database and storage require MFA only after verified e
       expect(response.status(), endpoint).toBe(403)
       expect(await response.json()).toMatchObject({ code: 'MFA_REQUIRED' })
     }
-    const mutation = await request.post('/api/settings/ai-providers', { headers: second.headers(), data: { provider: 'openai', api_key: 'Must not be created' } })
+    const mutation = await request.post('/api/settings/ai-providers', { headers: { ...second.headers(), Origin: new URL(process.env.E2E_BASE_URL ?? 'http://localhost:3000').origin }, data: { provider: 'openai', api_key: 'Must not be created' } })
     expect(mutation.status()).toBe(403)
+    expect(await mutation.json()).toMatchObject({ code: 'MFA_REQUIRED' })
     const layout = await request.get('/dashboard/settings/ai-providers', { headers: second.headers(), maxRedirects: 0 })
     expect(layout.status()).toBe(307)
     expect(layout.headers().location).toContain('/mfa?next=')

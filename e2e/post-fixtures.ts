@@ -13,8 +13,8 @@ export function fixtureDatabase() {
 }
 export async function seedPost(data: Record<string, unknown>) {
   const { userId } = JSON.parse(readFileSync('.e2e-state.json', 'utf8')) as { userId: string }
-  const { meta_title, meta_description, editorial_reviewed, ...fields } = data
-  void editorial_reviewed
+  const { meta_title, meta_description, ...fields } = data
+  delete fields.editorial_reviewed
   const result = await fixtureDatabase().from('posts').insert({ author_id: userId, status: 'draft', seo_title: meta_title, seo_description: meta_description, ...fields }).select('*').single()
   if (result.error) throw result.error
   return result.data

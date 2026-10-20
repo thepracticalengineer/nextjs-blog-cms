@@ -18,13 +18,20 @@ export async function verifyProviderKey(provider: LLMProvider, apiKey: string): 
     return 'verified'
   } catch (error) {
     // Never return/log SDK errors: provider responses may contain credential details.
-    const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined
-    if (provider === 'gemini' && status === 400 && error instanceof Object && 'message' in error && typeof error.message === 'string') {
-      try {
-        const payload = JSON.parse(error.message) as { error?: { details?: { reason?: string }[] } }
-        if (payload.error?.details?.some(detail => detail.reason === 'API_KEY_INVALID')) return 'invalid'
-      } catch { /* Non-JSON errors are unavailable, never exposed to the client. */ }
-    }
-    return status === 401 || status === 403 ? 'invalid' : 'unavailable' 
+    return classifyVerificationFailure(provider, error)
   }
+}
+
+function isInvalidGeminiKey(error: unknown): boolean {
+  if (!(error instanceof Object) || !('message' in error) || typeof error.message !== 'string') return false
+  try {
+    const payload = JSON.parse(error.message) as { error?: { details?: { reason?: string }[] } }
+    return payload.error?.details?.some(detail => detail.reason === 'API_KEY_INVALID') ?? false
+  } catch { return false }
+}
+
+function classifyVerificationFailure(provider: LLMProvider, error: unknown): VerificationStatus {
+  const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined
+  if (provider === 'gemini' && status === 400 && isInvalidGeminiKey(error)) return 'invalid'
+  return status === 401 || status === 403 ? 'invalid' : 'unavailable'
 }

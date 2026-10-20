@@ -9,8 +9,30 @@ import { Badge } from '@/components/ui/badge'
 import { useSession } from '@/features/auth/hooks/useSession'
 import { PROVIDERS, type ProviderKeyRecord, type LLMProvider } from '../types'
 
+type ProviderAction = 'save' | 'verify' | 'delete'
+
+function mutationBody(provider: LLMProvider, ownerId: string, action: ProviderAction, apiKey: string | undefined) {
+  const body: { provider: LLMProvider; owner_id: string; api_key?: string; action?: 'verify' } = { provider, owner_id: ownerId }
+  if (action === 'save') body.api_key = apiKey ?? ''
+  if (action === 'verify') body.action = 'verify'
+  return JSON.stringify(body)
+}
+
+function mutationNotice(action: ProviderAction, isValid: boolean | null) {
+  if (action === 'save') return 'Key saved. Verify it when you are ready.'
+  if (action === 'delete') return 'Key removed.'
+  if (isValid) return 'Key verified. Model access depends on your provider account.'
+  return 'Provider rejected this key. Check its permissions or replace it.'
+}
+
+function keyStatus(key: ProviderKeyRecord | undefined) {
+  if (!key) return 'Not configured'
+  if (key.is_valid === null) return 'Saved, unverified'
+  return key.is_valid ? 'Verified' : 'Invalid'
+}
+
 const endpoint = '/api/settings/ai-providers'
-export function AIProvidersManager({ ownerId }: { ownerId: string }) {
+export function AIProvidersManager({ ownerId }: Readonly<{ ownerId: string }>) {
   const { user, loading: sessionLoading } = useSession()
   const [keys, setKeys] = useState<ProviderKeyRecord[]>([])
   const [inputs, setInputs] = useState<Partial<Record<LLMProvider, string>>>({})
@@ -47,14 +69,14 @@ export function AIProvidersManager({ ownerId }: { ownerId: string }) {
     return () => { current = false; controller.abort() }
   }, [activeOwner, revision])
 
-  async function mutate(provider: LLMProvider, action: 'save' | 'verify' | 'delete') {
+  async function mutate(provider: LLMProvider, action: ProviderAction) {
     if (pending.current || !activeOwner) return
     pending.current = true; setBusy(true); setError(null); setNotice('')
     try {
       const response = await fetch(endpoint, {
         method: action === 'delete' ? 'DELETE' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, owner_id: ownerId, ...(action === 'save' ? { api_key: inputs[provider] ?? '' } : action === 'verify' ? { action: 'verify' } : {}) }),
+        body: mutationBody(provider, ownerId, action, inputs[provider]),
         signal: AbortSignal.timeout(20_000),
       })
       const data = await response.json()
@@ -62,7 +84,7 @@ export function AIProvidersManager({ ownerId }: { ownerId: string }) {
       if (!mounted.current || !active.current) return
       setKeys(previous => [...previous.filter(key => key.provider !== provider), ...(action === 'delete' ? [] : [data as ProviderKeyRecord])])
       setInputs(previous => ({ ...previous, [provider]: '' })); setRemoving(null)
-      setNotice(action === 'save' ? 'Key saved. Verify it when you are ready.' : action === 'delete' ? 'Key removed.' : data.is_valid ? 'Key verified. Model access depends on your provider account.' : 'Provider rejected this key. Check its permissions or replace it.')
+      setNotice(mutationNotice(action, data.is_valid))
     } catch (cause) {
       if (mounted.current && active.current) setError(cause instanceof Error ? cause.message : 'Provider settings could not be updated.')
     } finally {
@@ -70,20 +92,22 @@ export function AIProvidersManager({ ownerId }: { ownerId: string }) {
       if (mounted.current) setBusy(false)
     }
   }
-  if (sessionLoading) return <p role="status">Checking your session…</p>
+  if (sessionLoading) return <output>Checking your session…</output>
   if (!activeOwner) return <p role="alert">Your signed-in account changed. Reload Settings before managing provider keys.</p>
   return (
     <div className="flex flex-col gap-5 max-w-2xl">
       <p className="text-sm text-muted-foreground">Configure only the providers you choose to use. Keys belong to your account. Editor assistance is planned separately; saving a key does not generate or publish articles.</p>
       {error && <div role="alert" className="text-sm text-destructive">{error}</div>}
-      {notice && <p role="status" className="text-sm">{notice}</p>}
-      {loading ? <p role="status">Loading providers…</p> : !loaded ? <Button onClick={() => { setLoading(true); setError(null); setRevision(value => value + 1) }}>Retry loading providers</Button> : PROVIDERS.map(({ id, label }) => {
+      {notice && <output className="text-sm">{notice}</output>}
+      {loading && <output>Loading providers…</output>}
+      {!loading && !loaded && <Button onClick={() => { setLoading(true); setError(null); setRevision(value => value + 1) }}>Retry loading providers</Button>}
+      {!loading && loaded && PROVIDERS.map(({ id, label }) => {
         const key = keys.find(record => record.provider === id)
         return (
           <Card key={id} className="p-5 flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold">{label}</h2>
-              <Badge variant={key?.is_valid === false ? 'destructive' : 'secondary'}>{!key ? 'Not configured' : key.is_valid === null ? 'Saved, unverified' : key.is_valid ? 'Verified' : 'Invalid'}</Badge>
+              <Badge variant={key?.is_valid === false ? 'destructive' : 'secondary'}>{keyStatus(key)}</Badge>
             </div>
             {key && <p className="text-sm text-muted-foreground">{key.key_preview} · Your provider account</p>}
             <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void mutate(id, 'save') }}>
