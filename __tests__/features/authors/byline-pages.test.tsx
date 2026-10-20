@@ -1,3 +1,4 @@
+vi.mock('@/features/article-reactions/ArticleReactionSection', () => ({ ArticleReactionSection: () => null }))
 import { beforeEach, expect, it, vi } from 'vitest'
 import { redirect } from 'next/navigation'
 import { render, screen } from '@testing-library/react'

@@ -106,6 +106,15 @@ export type Database = {
         }
         Relationships: []
       }
+      article_reactions: {
+        Row: { post_id: string; user_id: string; reaction: string }
+        Insert: { post_id: string; user_id: string; reaction: string }
+        Update: { post_id?: string; user_id?: string; reaction?: string }
+        Relationships: [
+          { foreignKeyName: "article_reactions_post_id_fkey"; columns: ["post_id"]; isOneToOne: false; referencedRelation: "posts"; referencedColumns: ["id"] },
+          { foreignKeyName: "article_reactions_user_id_fkey"; columns: ["user_id"]; isOneToOne: false; referencedRelation: "profiles"; referencedColumns: ["id"] },
+        ]
+      }
       comment_reactions: {
         Row: { comment_id: string; user_id: string; reaction: string }
         Insert: { comment_id: string; user_id: string; reaction: string }
@@ -364,6 +373,11 @@ export type Database = {
       }
     }
     Functions: {
+      get_article_reactions: { Args: { p_post_id: string }; Returns: Json }
+      set_article_reaction: {
+        Args: { p_post_id: string; p_reaction: string; p_selected: boolean }
+        Returns: Json
+      }
       get_comment_reactions: {
         Args: { p_post_id: string; p_comment_id?: string | null }
         Returns: { comment_id: string; counts: Json; selection: string | null }[]
