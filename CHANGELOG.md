@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v1.1.0...v2.0.0) (2026-10-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* **promotion:** External CMS and legacy AI endpoints now return 410 API_RETIRED. Stop consumers and apply the forward retirement migration before deploying. Revoked CMS keys do not reactivate on application rollback.
+
+### Miscellaneous
+
+* **promotion:** promote release workflows and legacy API retirement to main ([#220](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/220)) ([eb44b22](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/eb44b22ba7c8e5c42e85a90967122c674639f0cc))
+
 ## [1.1.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v1.0.0...v1.1.0) (2026-10-20)
 
 
