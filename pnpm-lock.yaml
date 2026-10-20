@@ -15,8 +15,8 @@ importers:
         specifier: 1.8.0
         version: 1.8.0(@types/react@19.3.0)(date-fns@4.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@google/genai':
-        specifier: 2.28.0
-        version: 2.28.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.7))
+        specifier: 2.30.0
+        version: 2.30.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.7))
       '@hookform/resolvers':
         specifier: 5.9.1
         version: 5.9.1(@standard-schema/spec@1.1.0)(ajv-formats@2.1.1(ajv@8.20.0))(ajv@8.20.0)(react-hook-form@7.89.0(@types/react@19.3.0)(react@19.3.1))(zod@4.6.7)
@@ -575,8 +575,8 @@ packages:
     resolution: {integrity: sha512-LYOjAnGu/xtEkYYh6W3/1RmeK9HB/fV+xMe7nHc+WiDYrnxAJWBfcyUucoJtYS8XAhVUzNWrQvYDPRbxe67DNQ==}
     engines: {node: '>= 22'}
 
-  '@google/genai@2.28.0':
-    resolution: {integrity: sha512-hyNAJj+ywu3L46qlZod6KO/JvcT3QONz6VCiPevC/FWOjAD+LQb7DMLUoV8vzoLpt61Q0ruQX99iqbxEjPJWmw==}
+  '@google/genai@2.30.0':
+    resolution: {integrity: sha512-Gkv1ix8iZey/V3WF4lHaRS8C71P533jenDT/lA+fdPTCfXYfmCVHvo+0H5jTgzonqsmROQG7QpzLJkpoP/x7bg==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
       '@modelcontextprotocol/sdk': ^1.25.2
@@ -5880,7 +5880,7 @@ snapshots:
       '@octokit/rest': 20.1.2
       minimatch: 10.2.6
 
-  '@google/genai@2.28.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.7))':
+  '@google/genai@2.30.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.7))':
     dependencies:
       google-auth-library: 10.9.1
       p-retry: 4.6.2
