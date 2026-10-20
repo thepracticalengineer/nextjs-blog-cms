@@ -17,6 +17,7 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261016080047_auth_abuse_controls.sql` | Shared service-only auth counters; configure HMAC key and trusted ingress before deploying auth actions |
 | `20261016090958_auth_abuse_review_fixes.sql` | Failure-only login accounting and recoverable public account challenges; deploy before updated guards |
 | `20261019051428_post_media_content_reuse.sql` | Owner-scoped content hashes and service-only atomic media reservations; pause uploads, migrate, run the [media backfill](../features/post-images.md#validation-and-storage), then deploy and resume uploads |
+| `20261019140000_comment_reactions.sql` | Private reaction rows, MFA/eligibility RPCs and shared change budgets; migrate before deploying [comment reactions](../features/comment-reactions.md) |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 

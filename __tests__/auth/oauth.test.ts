@@ -42,6 +42,10 @@ describe('safe authentication navigation', () => {
   it.each(['https://evil.invalid', '//evil.invalid', '/\\evil.invalid', '/%2f%2fevil.invalid', '/dashboard/../../auth/signout', '/dashboard/%5cevil', '/dashboard/%252f', '/dashboard\n', '/auth/callback', '/api/posts', '/reset-password', '/dashboard/%zz'])('rejects %s', path => {
     expect(safeReturnPath(path)).toBe('/dashboard')
   })
+  it('returns readers to public article comments after authentication', () => {
+    expect(safeReturnPath('/blog/reaction-example#comments')).toBe('/blog/reaction-example#comments')
+    expect(safeReturnPath('/blog/../../api/posts')).toBe('/dashboard')
+  })
   it('keeps internal paths, query and fragment', () => {
     expect(safeReturnPath('/dashboard/posts?tab=drafts#new')).toBe('/dashboard/posts?tab=drafts#new')
   })

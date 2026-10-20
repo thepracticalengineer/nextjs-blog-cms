@@ -7,7 +7,7 @@ export function safeReturnPath(value: unknown): string {
     // Reject encoded separators/control characters and auth/API endpoints (loops or side effects).
     const path = decodeURIComponent(url.pathname)
     if (url.origin !== 'https://internal.invalid' || /[\\%\x00-\x20\x7f]/.test(path) || path.startsWith('//')) return '/dashboard'
-    if (!['/dashboard'].some(root => path === root || path.startsWith(`${root}/`))) return '/dashboard'
+    if (!['/dashboard', '/blog'].some(root => path === root || path.startsWith(`${root}/`))) return '/dashboard'
     return `${url.pathname}${url.search}${url.hash}`
   } catch {
     return '/dashboard'
