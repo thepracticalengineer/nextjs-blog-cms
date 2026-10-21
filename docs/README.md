@@ -15,6 +15,7 @@
 
 - [Agent skills, installation, maintenance and Next.js references](development/agent-skills.md)
 - [AI and MCP workflows](development/ai-workflows.md)
+- [CI event matrix, timing evidence and hosted rollout](development/ci.md)
 - [Unit, database and E2E testing](development/testing.md)
 - [Dependency management and upgrade evidence](dependency-upgrade.md)
 - [Contribution workflow and code of conduct](development/contributing.md)

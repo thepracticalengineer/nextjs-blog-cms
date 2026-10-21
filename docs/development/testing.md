@@ -110,6 +110,13 @@ containers on a loopback Auth URL are accepted. User fixtures are deleted after
 each case. Hosted Auth/SMTP configuration and email-client presentation still
 require the [deployment checks](../features/signup-confirmation.md).
 
+## CI validation paths
+
+See the [CI event matrix and rollout](ci.md) for full/lightweight classification,
+parallel database/browser jobs, PR-scoped cancellation, the required **CI gate**,
+and timing measurements. Standalone feature pushes no longer start duplicate CI;
+open a PR or manually dispatch full CI on the branch.
+
 ## Pull request coverage reports
 
 The **Coverage report** Actions job publishes a summary on CI runs, including failures (cancelled runs skip reporting). Coverage also appears
@@ -164,7 +171,7 @@ This is **limited client coverage**, not coverage of the entire application:
 - Zero-denominator metrics and missing source maps are unavailable, not 100%.
 
 The summary compares each metric with a retained compatible artifact from a
-successful `main` push CI run for the **first parent of the tested PR merge commit** (the previous SHA on
+successful `main` or `develop` push CI run for the **first parent of the tested PR merge commit** (the previous SHA on
 main push runs). The reporting checkout fetches that parent explicitly, avoiding
 stale base SHAs from the event payload. No code from that baseline is executed. First rollout, missing or
 expired artifacts, read permission failures and incompatible report formats show
@@ -176,7 +183,7 @@ external mail/webhooks. Build validation uses placeholder credentials. Reporting
 uses `actions: read` only to retrieve baselines. A separate **Coverage PR comment**
 workflow runs after CI completes and has `pull-requests: write` only to create or
 update the comment. It performs no checkout or dependency install. It loads only the reporter files
-from an immutable commit on this repository's `main` branch through GitHub's API,
+from an immutable commit on this repository's trusted default (`develop`) branch through GitHub's API,
 downloads artifacts into a separate temporary data directory, and never executes
 PR or artifact code.
 It works for fork PRs without granting their test jobs write permission, uses no
@@ -186,7 +193,7 @@ The publisher validates the current PR head and tested merge commit, refuses
 cancelled/stale runs, and preserves a newer run/attempt's report. Serialized
 publishers and a bot-owned marker prevent duplicate comments. Artifact strings
 are escaped before rendering Markdown; missing artifacts remain unavailable.
-The automatic publisher activates once its workflow and scripts land on `main`.
+The publisher upgrade activates once its workflow and scripts land on the trusted default branch.
 Fork workflow execution may still require maintainer approval, and artifact access
 requires GitHub access to the run.
 
@@ -209,7 +216,7 @@ Run unit coverage before E2E when retaining both locally: Vitest cleans its own
 `e2e/reporting.ts` resolves report paths from the repository location, independent
 of the calling directory; `e2e/coverage/options.ts` controls source
 filtering; `scripts/coverage/report.mjs` renders the CI summary. Coverage collection
-is opt-in locally and enabled in the CI E2E job. No external coverage service or
+is opt-in locally and enabled in the full-stack and isolated browser CI jobs. No external coverage service or
 additional repository secret is required.
 
 ## Logout verification
@@ -250,7 +257,7 @@ on desktop/mobile with a loopback synthetic Auth service. It tests retry without
 navigation, fresh challenges after expiry, rapid Enter, factor selection, actionable
 help, sign-out and an SDK-issued synthetic AAL2 session accepted by the server proxy
 after navigation and reload. It uses `.next-mfa-ui`, no database or seeding, and
-disables mail, webhooks and analytics. CI runs it after OAuth controls; its failures
+disables mail, webhooks and analytics. CI runs it in the isolated auth group; its failures
 and traces appear in the E2E job and `test-results/mfa` artifacts. It does not collect
 code coverage or contribute to the four existing E2E coverage-summary suites.
 

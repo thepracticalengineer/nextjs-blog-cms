@@ -8,7 +8,7 @@ async function testedCommit(github, owner, repo, headSha, root) {
   if (!/^[a-f0-9]{40}$/.test(snapshot?.sha ?? '')) return { sha: 'unavailable' }
   try {
     const { data: commit } = await github.rest.repos.getCommit({ owner, repo, ref: snapshot.sha })
-    if (commit.parents?.[1]?.sha === headSha) return { sha: snapshot.sha, baseSha: commit.parents[0].sha }
+    if (commit.parents?.[1]?.sha === headSha) return { sha: snapshot.sha, baseSha: commit.parents[0].sha, validationMode: snapshot.validationMode }
   } catch { /* Missing or fabricated identity remains unavailable. */ }
   return { sha: 'unavailable' }
 }
@@ -26,12 +26,12 @@ export async function publishCoverageComment({ github, owner, repo, runId, prNum
   const oldRun = previous?.body.match(/<!-- coverage-run:(\d+):(\d+) -->/)
   if (oldRun && (Number(oldRun[1]) > runId || (Number(oldRun[1]) === runId && Number(oldRun[2]) > run.run_attempt))) return
 
-  const { sha: testedSha, baseSha } = await testedCommit(github, owner, repo, run.head_sha, root)
+  const { sha: testedSha, baseSha, validationMode } = await testedCommit(github, owner, repo, run.head_sha, root)
   const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { owner, repo, run_id: runId, per_page: 100 })
   const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { owner, repo, run_id: runId, per_page: 100 })
   const artifact = name => artifacts.find(item => item.name === name && !item.expired)?.id
   const identity = {
-    sha: testedSha, head: run.head_sha, baseSha, run: runId, attempt: run.run_attempt,
+    validationMode, sha: testedSha, head: run.head_sha, baseSha, run: runId, attempt: run.run_attempt,
     unitStatus: jobs.find(job => job.name === 'Unit Tests')?.conclusion ?? 'unavailable',
     url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`,
   }

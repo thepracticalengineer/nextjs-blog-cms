@@ -1,5 +1,6 @@
 # Require code-owner review in both long-lived branch rulesets.
 /.github/ @frank-mendez
+/scripts/ci/ @frank-mendez
 /scripts/promotion/ @frank-mendez
 /scripts/release/ @frank-mendez
 /scripts/coverage/ @frank-mendez

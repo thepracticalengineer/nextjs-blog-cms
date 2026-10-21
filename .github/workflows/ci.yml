@@ -1,15 +1,36 @@
 name: CI
-
 on:
   push:
-    branches: [main, develop, feat/**, feature/**, fix/**, chore/**, codex/**]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: [main, develop]
-
+    branches:
+      - main
+      - develop
+  workflow_dispatch: null
 permissions:
   contents: read
-
 jobs:
+  classify:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.classify.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Classify tested merge content
+        id: classify
+        env:
+          PR_BASE_REF: ${{ github.base_ref }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+        run: node scripts/ci/classify.mjs
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -17,35 +38,25 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - uses: ./.github/actions/setup-project
       - name: Check documentation
-        run: |
+        run: |-
           node --test scripts/conventions/*.test.mjs scripts/promotion/*.test.mjs
           pnpm run docs:test
           pnpm run docs:check
           node --test scripts/coverage/report.test.mjs scripts/coverage/baseline.test.mjs scripts/coverage/comment.test.mjs
 
+          node --test scripts/ci/*.test.mjs
       - name: Verify release generation and recovery offline
         run: pnpm run release:test
-
       - name: Type check
         run: pnpm run typecheck
-
+        if: needs.classify.outputs.mode == 'full'
       - name: Run ESLint
         run: pnpm run lint
-
+        if: needs.classify.outputs.mode == 'full'
+    needs:
+      - classify
   test:
     name: Unit Tests
     outputs:
@@ -55,25 +66,11 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - uses: ./.github/actions/setup-project
       - name: Verify resumable legacy image indexing
         run: node --test scripts/backfill-post-media.test.mjs
-
       - name: Run tests with coverage
         run: pnpm run test:coverage
-
       - name: Upload coverage report
         id: coverage
         uses: actions/upload-artifact@v7
@@ -83,11 +80,14 @@ jobs:
           path: coverage/
           retention-days: 7
           overwrite: true
-
+    needs:
+      - classify
+    if: needs.classify.outputs.mode == 'full'
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs:
+      - classify
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
       NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
@@ -96,24 +96,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
+      - uses: ./.github/actions/setup-project
       - name: Build
         run: pnpm run build
-
+    if: needs.classify.outputs.mode == 'full'
   e2e:
-    name: API and Browser Tests
+    name: Full-stack API and publication
+    needs:
+      - classify
+    if: needs.classify.outputs.mode == 'full'
     outputs:
       artifact-id: ${{ steps.e2e-reports.outputs.artifact-id }}
     env:
@@ -124,171 +115,42 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: '.nvmrc'
-          cache: pnpm
-
-      - name: Install dependencies and browser
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm exec playwright install --with-deps chromium
-
-      - name: Verify coverage collection and failure reporting
-        run: node --test scripts/coverage/collection.test.mjs
-
-      - name: Verify analytics collection with external requests blocked
-        run: pnpm exec playwright test --config=e2e/analytics.config.ts
-
-      - name: Start disposable Supabase
-        run: |
-          node --test scripts/prepare-e2e-supabase.test.mjs
-          node scripts/prepare-e2e-supabase.mjs
-          pnpm dlx supabase@2.119.0 start --exclude studio,imgproxy,vector,logflare,edge-runtime > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
-          pnpm dlx supabase@2.119.0 status -o json > /tmp/supabase-status.json
-          python3 - <<'PY'
-          import json, os
-          status = json.load(open('/tmp/supabase-status.json'))
-          values = {
-              'NEXT_PUBLIC_SUPABASE_URL': status['API_URL'],
-              'NEXT_PUBLIC_SUPABASE_ANON_KEY': status['ANON_KEY'],
-              'SUPABASE_SERVICE_ROLE_KEY': status['SERVICE_ROLE_KEY'],
-              'NEXT_PUBLIC_SITE_URL': 'http://localhost:3000',
-              'AUTH_ABUSE_HMAC_KEY': 'isolated-ci-auth-budget-key-at-least-32-characters',
-              'AUTH_TRUSTED_IP_HEADER': 'x-forwarded-for',
-              'NEXT_PUBLIC_TURNSTILE_SITE_KEY': '',
-              'TURNSTILE_SECRET_KEY': '',
-              'E2E_MAILPIT_URL': status['MAILPIT_URL'],
-              'RESEND_API_KEY': '',
-              'SLACK_WEBHOOK_URL': '',
-              'WEBHOOK_SECRET': 'isolated-local-newsletter-test',
-              'CRON_SECRET': 'isolated-local-newsletter-cron-test',
-          }
-          with open(os.environ['GITHUB_ENV'], 'a') as output:
-              for key, value in values.items():
-                  output.write(f'{key}={value}\n')
-          PY
-
-      - name: Verify shared authentication budgets
-        run: |
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse.sql
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse_review.sql
-          node database/tests/auth-abuse-concurrency.mjs
-
-      - name: Verify legacy AI retirement and credential ownership
-        run: |
-          node database/tests/legacy-ai-upgrade.mjs
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/legacy_ai_retirement.sql
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/bulk_post_retention.sql
-
-      - name: Verify MFA database and storage boundaries
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
-
-      - name: Verify author profile database privacy
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/public_author_profiles.sql
-
-      - name: Verify private draft recovery permissions
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_working_copies.sql
-
-      - name: Verify URL reservation constraints and privacy
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_slug_routes.sql
-
-      - name: Verify post summaries, pagination and dashboard permissions
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_lists.sql
-
-      - name: Verify atomic post rollback and retry contracts
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/atomic_posts.sql
-
-      - name: Verify taxonomy merges and aliases
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/tag_taxonomy.sql
-
-      - name: Verify image retention and cleanup permissions
-        run: |
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media.sql
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media_dedup.sql
-          node database/tests/post-media-concurrency.mjs
-
-      - name: Verify comment reaction eligibility, privacy and concurrency
-        run: |
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/comment_reactions.sql
-          node database/tests/comment-reactions-concurrency.mjs
-
-      - name: Verify article reaction eligibility, privacy and concurrency
-        run: |
-          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/article_reactions.sql
-          node database/tests/article-reactions-concurrency.mjs
-
-      - name: Verify newsletter queue retry and cancellation contracts
-        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
-
+      - uses: ./.github/actions/setup-project
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - uses: ./.github/actions/setup-supabase
       - name: Generate disposable provider encryption key
         run: |
           node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { randomBytes } from "node:crypto"; appendFileSync(process.env.GITHUB_ENV, "LLM_KEY_ENCRYPTION_SECRET=" + randomBytes(16).toString("hex") + "\n")'
-
       - name: Run API and browser tests
         run: pnpm run test:e2e
-
       - name: Verify publication of URLs created after a production build
         run: |
           pnpm run build
           E2E_PRODUCTION=1 pnpm exec playwright test e2e/browser/publication-pages.spec.ts --project=browser
-
-      - name: Verify provider settings with isolated Auth and Data API responses
-        run: pnpm exec playwright test --config=e2e/ai-settings.config.ts
-
-      - name: Verify bulk post controls on desktop and mobile
-        run: pnpm exec playwright test --config=e2e/bulk-posts.config.ts
-
-      - name: Verify OAuth controls with isolated provider navigation
-        run: pnpm exec playwright test --config=e2e/oauth-ui.config.ts
-
-      - name: Verify authentication cooldowns with isolated Auth responses
-        run: pnpm exec playwright test --config=e2e/auth-abuse.config.ts
-
-      - name: Verify MFA recovery controls with isolated Auth responses
-        run: pnpm exec playwright test --config=e2e/mfa.config.ts
-
-      - name: Verify image dialog layout, dismissal and upload retries
-        run: pnpm exec playwright test --config=e2e/image-dialog.config.ts
-
-      - name: Verify comment reaction controls on desktop and mobile
-        run: pnpm exec playwright test --config=e2e/comment-reactions.config.ts
-
-      - name: Verify article reaction picker and login modal on desktop and mobile
-        run: pnpm exec playwright test --config=e2e/article-reactions.config.ts
-
-      - name: Verify homepage reader navigation and responsive controls
-        run: pnpm exec playwright test --config=e2e/homepage.config.ts
-
-      - name: Verify public canonical metadata and sitemap discovery
-        run: pnpm exec playwright test --config=e2e/seo.config.ts
-
-      - name: Upload E2E reports and failure artifacts
+      - name: Upload reports and failure artifacts
         id: e2e-reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: e2e-reports
-          path: |
+          name: e2e-reports-fullstack
+          path: |-
             test-results/
             playwright-report/
             coverage/e2e/
           retention-days: 7
           overwrite: true
-
       - name: Stop disposable Supabase
         if: always()
         run: pnpm dlx supabase@2.119.0 stop --no-backup
-
   coverage:
     name: Coverage report
     if: ${{ !cancelled() }}
-    needs: [test, e2e]
+    needs:
+      - classify
+      - test
+      - e2e
+      - browsers
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -298,25 +160,34 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 2
-
       - uses: actions/setup-node@v7
         with:
-          node-version-file: '.nvmrc'
-
+          node-version-file: .nvmrc
       - name: Download unit coverage
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
           name: coverage-report
           path: artifacts/unit
-
+        if: needs.classify.outputs.mode == 'full'
       - name: Download E2E reports
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: e2e-reports
           path: artifacts/e2e
-
+          pattern: e2e-reports-*
+          merge-multiple: true
+        if: needs.classify.outputs.mode == 'full'
+      - name: Aggregate split E2E artifacts
+        id: aggregate
+        if: needs.classify.outputs.mode == 'full'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-reports
+          path: artifacts/e2e/
+          retention-days: 7
+          overwrite: true
+          if-no-files-found: error
       - name: Determine tested base commit
         id: comparison
         env:
@@ -329,13 +200,12 @@ jobs:
             comparison_sha="$PREVIOUS_SHA"
           fi
           printf 'sha=%s\n' "$comparison_sha" >> "$GITHUB_OUTPUT"
-
       - name: Find exact base-commit baseline
         env:
           GH_TOKEN: ${{ github.token }}
           BASELINE_SHA: ${{ steps.comparison.outputs.sha }}
         run: node scripts/coverage/baseline.mjs
-
+        if: needs.classify.outputs.mode == 'full'
       - name: Publish coverage summary
         if: always()
         env:
@@ -343,9 +213,9 @@ jobs:
           BASELINE_SHA: ${{ steps.comparison.outputs.sha }}
           UNIT_STATUS: ${{ needs.test.result }}
           UNIT_ARTIFACT_ID: ${{ needs.test.outputs.artifact-id }}
-          E2E_ARTIFACT_ID: ${{ needs.e2e.outputs.artifact-id }}
+          E2E_ARTIFACT_ID: ${{ steps.aggregate.outputs.artifact-id }}
+          VALIDATION_MODE: ${{ needs.classify.outputs.mode }}
         run: node scripts/coverage/report.mjs
-
       - name: Save coverage baseline and summary
         if: always()
         uses: actions/upload-artifact@v7
@@ -354,3 +224,135 @@ jobs:
           path: coverage-report/
           retention-days: 7
           overwrite: true
+      - name: Verify split artifact inventory
+        if: ${{ always() && needs.classify.outputs.mode == 'full' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, { ...context.repo, run_id: context.runId, per_page: 100 });
+            const names = new Set(artifacts.filter(artifact => !artifact.expired).map(artifact => artifact.name));
+            const expected = ['e2e-reports-fullstack', 'e2e-reports-isolated-harness', 'e2e-reports-isolated-auth', 'e2e-reports-isolated-content'];
+            const missing = expected.filter(name => !names.has(name));
+            if (missing.length) throw new Error('Missing split report artifacts: ' + missing.join(', '));
+  database:
+    name: Database integration and security
+    needs:
+      - classify
+    if: needs.classify.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - uses: ./.github/actions/setup-supabase
+      - name: Verify shared authentication budgets
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/auth_abuse_review.sql
+          node database/tests/auth-abuse-concurrency.mjs
+      - name: Verify legacy AI retirement and credential ownership
+        run: |
+          node database/tests/legacy-ai-upgrade.mjs
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/legacy_ai_retirement.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/bulk_post_retention.sql
+      - name: Verify MFA database and storage boundaries
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
+      - name: Verify author profile database privacy
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/public_author_profiles.sql
+      - name: Verify private draft recovery permissions
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_working_copies.sql
+      - name: Verify URL reservation constraints and privacy
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_slug_routes.sql
+      - name: Verify post summaries, pagination and dashboard permissions
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_lists.sql
+      - name: Verify atomic post rollback and retry contracts
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/atomic_posts.sql
+      - name: Verify taxonomy merges and aliases
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/tag_taxonomy.sql
+      - name: Verify image retention and cleanup permissions
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_media_dedup.sql
+          node database/tests/post-media-concurrency.mjs
+      - name: Verify comment reaction eligibility, privacy and concurrency
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/comment_reactions.sql
+          node database/tests/comment-reactions-concurrency.mjs
+      - name: Verify article reaction eligibility, privacy and concurrency
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/article_reactions.sql
+          node database/tests/article-reactions-concurrency.mjs
+      - name: Verify newsletter queue retry and cancellation contracts
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/newsletter_queue.sql
+      - name: Stop disposable Supabase
+        if: always()
+        run: pnpm dlx supabase@2.119.0 stop --no-backup
+  browsers:
+    name: Isolated browsers (${{ matrix.group }})
+    needs:
+      - classify
+    if: needs.classify.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      E2E_COVERAGE: 1
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - harness
+          - auth
+          - content
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-project
+      - name: Install browser
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Verify coverage collection and failure reporting
+        run: node --test scripts/coverage/collection.test.mjs
+        if: matrix.group == 'harness'
+      - name: Run all isolated suites in this group
+        run: node scripts/ci/browser.mjs "${{ matrix.group }}"
+      - name: Upload reports and failure artifacts
+        id: e2e-reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-reports-isolated-${{ matrix.group }}
+          path: |-
+            test-results/
+            playwright-report/
+            coverage/e2e/
+          retention-days: 7
+          overwrite: true
+  gate:
+    name: CI gate
+    if: ${{ always() }}
+    needs:
+      - classify
+      - lint
+      - test
+      - build
+      - database
+      - e2e
+      - browsers
+      - coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Require every applicable validation
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node scripts/ci/gate.mjs
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}

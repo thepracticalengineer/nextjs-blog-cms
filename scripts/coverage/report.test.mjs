@@ -52,3 +52,13 @@ test('invalid summaries cannot fabricate percentages or inject Markdown tables',
   const { markdown } = createReport({ root: f.root, identity, artifacts: { unit: 'javascript:bad' } })
   assert.doesNotMatch(markdown, /<script>|javascript:bad|100% \| injected|@everyone|\[click\]/)
 })
+for (const mode of ['docs', 'metadata']) test(`${mode} omission is explicit and cannot fabricate coverage or a baseline`, t => {
+  const f = fixture(t)
+  f.write('unit/coverage-summary.json', summary(99))
+  const { markdown, snapshot } = createReport({ root: f.root, identity: { ...identity, validationMode: mode } })
+  assert.match(markdown, /intentionally omitted/)
+  assert.doesNotMatch(markdown, /99.00%/)
+  assert.equal(snapshot.validationMode, mode)
+  assert.equal(snapshot.unit.lines, null)
+  assert.equal(snapshot.e2e.main.lines, null)
+})
