@@ -84,3 +84,11 @@ for (const branch of ['develop', 'main', 'feat/untrusted']) {
     assert.equal(f.calls.length, branch === 'feat/untrusted' ? 0 : 1)
   })
 }
+
+test('verified lightweight snapshots publish intentional omission rather than missing coverage', async t => {
+  const f = fixture(t)
+  writeFileSync(join(f.root, 'source/baseline.json'), JSON.stringify({ sha: merge, validationMode: 'metadata' }))
+  await publishCoverageComment(f.args)
+  assert.match(f.calls[0][1].body, /intentionally omitted/)
+  assert.doesNotMatch(f.calls[0][1].body, /suite did not produce a report/)
+})

@@ -53,7 +53,14 @@ CI, title validation and coverage support both long-lived branches. The
 it never executes contributor code. It accepts same-repository develop promotions,
 `fix/...` hotfixes explicitly labeled `production-hotfix` with a `fix:` title, and the installed release App's expected metadata-only release
 PR into main. The release App identity is `the-practical-engineer-releases[bot]`;
-a replacement App requires updating the policy and tests in a reviewed PR.
+its REST numeric ID is `345175842` and its type is `Bot`. The exact release head
+is `release-please--branches--main--components--nextjs-blog-cms`; the legacy
+component-free head is no longer accepted. A replacement App requires updating
+the policy and tests in a reviewed PR. See [the release branch contract and
+recovery procedure](releases.md#root-release-branch-contract-and-issue-231-recovery).
+Promotion/sync titles and bodies must not contain breaking declarations; the
+trusted policy rejects them and the release runner refuses contaminated
+unreleased promotion/sync history before writing release metadata.
 Fork feature contributions remain supported into develop.
 
 Promotion automation runs on every develop push and manual dispatch on develop.
@@ -147,8 +154,7 @@ claims that this PR changes hosted settings.
   and deletion, and require code-owner review. Do not require linear history or
   branch-up-to-date updates to the shared sync head. Restrict main to merge
   commits; develop allows squash and merge with the reviewer policy above.
-- [ ] Require exact check names **Lint**, **Unit Tests**, **Build**,
-  **API and Browser Tests**, **Coverage report**, **PR title**, and
+- [ ] Require exact check names **CI gate**, **PR title**, and
   **PR branch policy**, after observing them on real PRs. Bind checks to the
   GitHub Actions App where supported. Retain any separately agreed Sonar/Vercel
   checks. Do not add broad App/admin bypasses or let bots approve their own PRs.
@@ -191,3 +197,38 @@ hosted event delivery, rules or Vercel isolation. The release ancestry adapter
 additionally reproduces the upstream chronological-cutoff bug using both synthetic
 API history and real disposable Git commits dated before the last release. Validate those
 in the disposable hosted rehearsal before enabling the complete process.
+
+## Merge audit and required validation
+
+Follow the [CI rollout checklist](../development/ci.md#hosted-rollout) for exact
+required checks and branch merge-method settings. **CI gate** replaces individual
+expensive-job requirements and propagates failures/cancellations. Application
+promotions and production hotfixes always receive full integration/browser
+validation; synchronization is classified by its actual tested changes.
+
+The trusted, read-only **Merge ancestry audit** runs on merged PRs. Promotions,
+main-target release/hotfix PRs, main-to-develop syncs and same-repository
+`chore/*sync-recovery` PRs titled `chore(sync): ...` must retain the original PR
+head as the second parent. Ordinary develop PRs must produce a single-parent
+commit. The latter detects accidental merge commits but cannot distinguish squash
+from every rebase operation. This post-merge audit detects mistakes; it cannot
+undo a merge or prevent a release workflow already triggered by that push. It
+has no checkout, App token, ref writes, automatic recovery or release control.
+
+## Incorrect merge recovery
+
+If a promotion or sync was squashed/rebased, preserve all published/shared
+history. Pause further human promotion/release merges, inspect both tips and the
+merge base, and use the reviewed conflict-recovery procedure above to merge main
+into a recovery branch from develop. Merge that recovery PR with **Create a merge
+commit**, retaining both histories and deliberate conflict resolutions. Re-review
+release notes and unreleased commits before continuing; the audit cannot roll
+back a release or deployment automatically.
+
+Issue #225 produced single-parent `49e8a93`; #227 also produced single-parent
+`b6ad1bb`. Immediately after #225, the two tips had identical trees but the
+merge-base comparison still showed 22 changed files. Tree equality therefore
+cannot justify silently skipping ancestry repair. Sync automation deliberately
+keeps its existing merge-base comparison and PR reuse behavior. The disposable
+Git regression covers the squash case, real main-only release metadata, reviewed
+merge recovery and subsequent no-op; no new tree-equality skip hides hotfixes.

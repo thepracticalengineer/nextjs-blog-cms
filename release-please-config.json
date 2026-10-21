@@ -4,6 +4,7 @@
   "packages": {
     ".": {
       "release-type": "node",
+      "component": "nextjs-blog-cms",
       "include-component-in-tag": false,
       "include-v-in-tag": true,
       "include-v-in-release-name": true,

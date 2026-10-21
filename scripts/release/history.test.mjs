@@ -59,3 +59,20 @@ test('real Git ancestry includes pre-release develop work after release synchron
   assert.equal(ordered.filter(sha => sha === feature).length, 1)
   assert.deepEqual(new Set(ordered), new Set([...git(['rev-list', `${released}..HEAD`]).split('\n'), released]))
 })
+
+for (const title of ['chore(promotion): promote develop to main', 'chore(sync): merge main into develop', 'Merge pull request #225 from org/develop\n\nchore(promotion): promote develop to main']) {
+  test(`copied breaking footer fails closed on ${title.split('\n')[0]}`, async () => {
+    const iterate = async function* () {
+      yield { sha: promotion, message: `${title}\n\nBREAKING-CHANGE: already released API retirement` }
+      yield { sha: boundary }
+    }
+    await assert.rejects(orderedHistory({ iterate, shas: [promotion, boundary], options: {} }), /Breaking release metadata/)
+  })
+}
+
+test('real breaking feature declarations survive; already published contaminated boundaries are excluded', async () => {
+  const feature = { sha: olderFeature, message: 'feat!: new breaking change\n\nBREAKING CHANGE: new API migration' }
+  const released = { sha: boundary, message: 'chore(promotion): old promotion\n\nBREAKING CHANGE: already published' }
+  const iterate = async function* () { yield feature; yield released }
+  assert.deepEqual(await orderedHistory({ iterate, shas: [olderFeature, boundary], options: {} }), [feature, released])
+})

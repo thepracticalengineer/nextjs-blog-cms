@@ -1,0 +1,34 @@
+name: Start disposable Supabase
+description: Prepare the isolated CI database with external integrations disabled
+runs:
+  using: composite
+  steps:
+    - name: Start disposable Supabase
+      run: |
+        node --test scripts/prepare-e2e-supabase.test.mjs
+        node scripts/prepare-e2e-supabase.mjs
+        pnpm dlx supabase@2.119.0 start --exclude studio,imgproxy,vector,logflare,edge-runtime > /tmp/supabase-start.log 2>&1 || { cat /tmp/supabase-start.log; exit 1; }
+        pnpm dlx supabase@2.119.0 status -o json > /tmp/supabase-status.json
+        python3 - <<'PY'
+        import json, os
+        status = json.load(open('/tmp/supabase-status.json'))
+        values = {
+            'NEXT_PUBLIC_SUPABASE_URL': status['API_URL'],
+            'NEXT_PUBLIC_SUPABASE_ANON_KEY': status['ANON_KEY'],
+            'SUPABASE_SERVICE_ROLE_KEY': status['SERVICE_ROLE_KEY'],
+            'NEXT_PUBLIC_SITE_URL': 'http://localhost:3000',
+            'AUTH_ABUSE_HMAC_KEY': 'isolated-ci-auth-budget-key-at-least-32-characters',
+            'AUTH_TRUSTED_IP_HEADER': 'x-forwarded-for',
+            'NEXT_PUBLIC_TURNSTILE_SITE_KEY': '',
+            'TURNSTILE_SECRET_KEY': '',
+            'E2E_MAILPIT_URL': status['MAILPIT_URL'],
+            'RESEND_API_KEY': '',
+            'SLACK_WEBHOOK_URL': '',
+            'WEBHOOK_SECRET': 'isolated-local-newsletter-test',
+            'CRON_SECRET': 'isolated-local-newsletter-cron-test',
+        }
+        with open(os.environ['GITHUB_ENV'], 'a') as output:
+            for key, value in values.items():
+                output.write(f'{key}={value}\n')
+        PY
+      shell: bash

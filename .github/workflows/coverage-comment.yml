@@ -35,7 +35,7 @@ jobs:
             if (pr) core.setOutput('number', String(pr.number));
 
       # This privileged job has no repository checkout or dependency install.
-      - name: Load publisher code from an immutable trusted main commit
+      - name: Load publisher code from an immutable trusted default-branch commit
         if: steps.source.outputs.number != ''
         uses: actions/github-script@v9.0.0
         env:
@@ -44,7 +44,7 @@ jobs:
           script: |
             const { mkdirSync, writeFileSync } = require('node:fs');
             const { join } = require('node:path');
-            const { data: ref } = await github.rest.git.getRef({ ...context.repo, ref: 'heads/main' });
+            const { data: ref } = await github.rest.git.getRef({ ...context.repo, ref: `heads/${context.payload.repository.default_branch}` });
             const sha = ref.object.sha;
             if (!/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid trusted code reference');
             mkdirSync(process.env.PUBLISHER_CODE_ROOT, { recursive: true });

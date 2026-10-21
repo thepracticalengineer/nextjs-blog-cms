@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { test } from 'node:test'
+import { validate } from '../promotion/fixtures/policy.test.mjs'
 import { installAncestryHistory, runRelease } from './run.mjs'
 
 const require = createRequire(import.meta.url)
@@ -316,7 +317,53 @@ test('release runner uses the pinned manifest for publication and then PR genera
     assertCurrent: async () => { checks++ },
     runGit: args => args[0] === 'merge-base' ? '' : f.state.commits.slice(0, f.state.commits.findIndex(c => c.sha === boundary)).map(c => c.sha).join('\n'),
   })
-  assert.equal(checks, 2)
+  assert.equal(checks, 3)
   assert.equal(f.state.creates, 1)
   assert.equal(f.state.pulls[0].title, 'chore(main): release 1.0.1')
+})
+
+test('real generated release candidate passes trusted main policy and pins the root branch contract', async () => {
+  const f = fixture()
+  // Package renames must not silently change the release branch.
+  f.files.set('package.json', JSON.stringify({ ...JSON.parse(f.files.get('package.json')), name: 'renamed-package' }))
+  await (await f.manifest()).createPullRequests()
+  const pr = f.state.pulls[0]
+  assert.equal(pr.headBranchName, 'release-please--branches--main--components--nextjs-blog-cms')
+  const [candidate] = await (await f.manifest()).buildPullRequests()
+  const files = candidate.updates.filter(update => f.files.has(update.path)).map(update => update.path)
+  assert.deepEqual([...files].sort(), ['.release-please-manifest.json', 'CHANGELOG.md', 'package.json'])
+  assert.deepEqual(await validate('main', pr.headBranchName, {
+    author: 'the-practical-engineer-releases[bot]', title: pr.title.toString(), labels: pr.labels, files,
+  }), [])
+})
+
+for (const declaration of ['BREAKING CHANGE: already released retirement', '  BREAKING-CHANGE: already released retirement', 'feat!:copied retirement']) {
+  test(`runner refuses copied promotion metadata: ${declaration}`, async () => {
+    const f = fixture([`chore(promotion): promote develop to main\n\n${declaration}`, 'feat: new bulk actions'])
+    await assert.rejects(runRelease({ github: f.github, config: { 'bootstrap-sha': boundary },
+      assertCurrent: async () => {}, runGit: args => args[0] === 'merge-base' ? '' : f.state.commits.slice(0, 2).map(c => c.sha).join('\n'),
+    }), /Breaking release metadata/)
+    assert.equal(f.state.creates, 0)
+    assert.equal(f.state.publishAttempts, 0)
+  })
+}
+
+test('runner still creates a major for a genuinely new breaking feature', async () => {
+  const f = fixture(['chore(promotion): promote develop to main', 'feat!: replace current API\n\nBREAKING CHANGE: migrate the new contract'])
+  await runRelease({ github: f.github, config: { 'bootstrap-sha': boundary },
+    assertCurrent: async () => {}, runGit: args => args[0] === 'merge-base' ? '' : f.state.commits.slice(0, 2).map(c => c.sha).join('\n'),
+  })
+  assert.equal(f.state.pulls[0].title, 'chore(main): release 2.0.0')
+  assert.match(f.state.pulls[0].body.toString(), /migrate the new contract/)
+})
+
+test('main advancing during history preflight prevents release writes', async () => {
+  const f = fixture()
+  let checks = 0
+  await assert.rejects(runRelease({ github: f.github, config: { 'bootstrap-sha': boundary },
+    assertCurrent: async () => { if (++checks === 2) throw new Error('main advanced during preflight') },
+    runGit: args => args[0] === 'merge-base' ? '' : f.state.commits[0].sha,
+  }), /main advanced during preflight/)
+  assert.equal(f.state.creates, 0)
+  assert.equal(f.state.publishAttempts, 0)
 })

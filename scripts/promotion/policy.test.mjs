@@ -1,23 +1,11 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { runInNewContext } from 'node:vm'
+import { validate } from './fixtures/policy.test.mjs'
 import { parse } from 'yaml'
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 const workflow = parse(read('.github/workflows/pr-policy.yml'))
 const script = workflow.jobs.policy.steps[0].with.script
-async function validate(base, head, { fork = false, author = 'human', title = 'fix: repair behavior', files = ['package.json'], labels = [] } = {}) {
-  const failures = []
-  await runInNewContext(`(async () => {${script}\n})()`, {
-    context: { repo: { owner: 'org', repo: 'repo' }, issue: { number: 1 } },
-    github: { rest: { pulls: {
-      get: async () => ({ data: { base: { ref: base }, head: { ref: head, repo: { full_name: fork ? 'fork/repo' : 'org/repo' } }, title, user: { login: author }, labels: labels.map(name => ({ name })) } }),
-      listFiles: async () => ({ data: files.map(filename => ({ filename, status: 'modified' })) }),
-    } }, paginate: async method => (await method()).data },
-    core: { setFailed: message => failures.push(message), notice() {} },
-  })
-  return failures
-}
 test('ordinary feature and fork PRs target develop; main only admits reviewed sources', async () => {
   assert.deepEqual(await validate('develop', 'feat/215-work', { fork: true }), [])
   assert.equal((await validate('main', 'feat/215-work')).length, 1)
@@ -33,7 +21,7 @@ test('promotion and synchronization require same-repository branches and hidden 
 })
 test('release source needs the installed App, expected branch, pending label and metadata-only files', async () => {
   const options = { author: 'the-practical-engineer-releases[bot]', title: 'chore(main): release 1.2.0', labels: ['autorelease: pending'] }
-  const head = 'release-please--branches--main'
+  const head = 'release-please--branches--main--components--nextjs-blog-cms'
   assert.deepEqual(await validate('main', head, options), [])
   for (const override of [{ author: 'human' }, { files: ['app/page.tsx'] }, { labels: [] }, { fork: true }]) {
     assert.equal((await validate('main', head, { ...options, ...override })).length, 1)
@@ -88,4 +76,26 @@ test('accept actual root release branch while rejecting other components', async
     assert.equal((await validate('main', head, { ...options, ...override })).length, 1)
   }
   assert.equal((await validate('main', 'release-please--branches--main--components--other', options)).length, 1)
+})
+
+test('release trust rejects legacy branches, identity mismatches and every non-modified status', async () => {
+  const head = 'release-please--branches--main--components--nextjs-blog-cms'
+  const options = { author: 'the-practical-engineer-releases[bot]', title: 'chore(main): release 3.1.0', labels: ['autorelease: pending'] }
+  assert.equal((await validate('main', 'release-please--branches--main', options)).length, 1)
+  for (const override of [
+    { authorId: 1 }, { authorType: 'User' }, { title: 'chore(main): release 3.1.0 extra' },
+    { files: [] }, ...['added', 'removed', 'renamed', 'copied', 'changed', 'unknown'].map(status => ({ files: [{ filename: 'package.json', status }] })),
+  ]) assert.equal((await validate('main', head, { ...options, ...override })).length, 1)
+  assert.deepEqual(await validate('develop', 'fix/231-release-policy-contract'), [])
+})
+
+test('promotion and sync reject breaking metadata before it can contaminate releases', async () => {
+  for (const [base, head, title] of [
+    ['main', 'develop', 'chore(promotion): promote develop to main'],
+    ['develop', 'main', 'chore(sync): merge main into develop'],
+  ]) {
+    for (const body of ['BREAKING CHANGE: retired API', '  BREAKING-CHANGE: retired API', 'feat!:copied retirement']) {
+      assert.equal((await validate(base, head, { title, body })).length, 1)
+    }
+  }
 })

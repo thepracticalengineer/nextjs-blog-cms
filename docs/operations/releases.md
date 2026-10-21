@@ -27,8 +27,8 @@ The existing release App is already configured. Preserve it and the published
    credentials are missing, the workflow fails with a setup message; it does not
    silently fall back to `GITHUB_TOKEN`.
 4. Enable an active `main` branch ruleset requiring PRs, a human approval, and
-   successful **Lint**, **Unit Tests**, **Build**, **API and Browser Tests**, and
-   **Coverage report** checks from the CI workflow. Confirm the exact check names
+   successful **CI gate** from the CI workflow (which evaluates every applicable
+   full or lightweight job). Confirm the exact check names
    on a completed PR. Do not grant the release App a ruleset bypass or permission
    to approve/merge its own PR. Apply any tag rules so the App can create `v*`
    tags, while protecting existing tags from changes/deletion. If enabling signed
@@ -244,3 +244,69 @@ Dependency installation runs on trusted main with frozen lockfile and lifecycle
 scripts disabled, before any App token is generated. The token is passed only to
 the release runner step. This workflow must never check out a PR head. Both branch
 protections and required code-owner reviews are prerequisites for this trust model.
+
+## CI optimization rollout
+
+Use the [CI event matrix and hosted checklist](../development/ci.md) when updating
+required checks. Release metadata PRs can receive lightweight validation only
+when their actual JSON changes are version-only; dependency/lockfile changes run
+fully. Main/develop pushes remain fully validated for exact-commit coverage
+baselines. Stable Release Please remains serialized on main with unchanged
+publication permissions. The separate run `39554736612` failed on attempt 1 and
+succeeded on attempt 2; it does not establish a CI-duration/synchronization cause.
+The post-merge ancestry audit is detection, not a release-publication gate.
+
+
+## Root release branch contract and issue #231 recovery
+
+The single root application explicitly sets `component: nextjs-blog-cms` in
+[the release configuration](../../release-please-config.json). Its canonical PR
+head is **`release-please--branches--main--components--nextjs-blog-cms`**, even if
+`package.json` is renamed. Component-free tags remain `vX.Y.Z`; pinning the branch
+component changes neither published tags nor the manifest version.
+
+The temporary legacy allowance `release-please--branches--main` introduced with
+#232 is retired. At the October 21, 2026 audit there were no open legacy release
+PRs; #229 and #235 had already merged from the canonical component-qualified head.
+Do not rename, delete, or regenerate their branches as recovery, and do not move
+published tags. #229 published v3.0.0 and #235 published v3.0.1. The original #229
+policy run failed, while #235 obtained a successful main-base policy run
+[39556902797](https://github.com/thepracticalengineer/nextjs-blog-cms/actions/runs/39556902797).
+
+REST verified the installed App author as login
+`the-practical-engineer-releases[bot]`, numeric ID `345175842`, type `Bot`.
+The policy checks all three, same-repository source, the exact branch, a stable
+`chore(main): release X.Y.Z` title, and `autorelease: pending`. Only modified
+`package.json`, `CHANGELOG.md`, `.release-please-manifest.json`, or `pnpm-lock.yaml`
+files are allowed; additions, deletions, renames, empty diffs and other paths fail.
+Offline release tests run a real pinned-library candidate through the actual
+trusted workflow script so generator/validator drift fails CI.
+
+Deliver subsequent changes through a reviewed PR into develop and the normal
+merge-commit promotion into main (or the documented maintainer-labeled production
+hotfix process). A release PR head cannot update its `pull_request_target` policy.
+After corrected code reaches main, trigger a **fresh** metadata event on an open,
+still-pending canonical release PR, such as removing and restoring its pending
+label, and inspect the new **PR branch policy** run. Rerunning an old run can reuse
+old trusted workflow code. Tagged/merged release PRs no longer have the pending
+label and can fail later label-triggered runs; use the pre-merge pending-state run
+as evidence. Verify develop behavior on the ordinary implementation PR and main
+behavior on the next intended pending release; never publish solely for testing.
+
+The separate version investigation confirmed that squash promotion #225 copied
+historical retirement `BREAKING CHANGE:` text already released in v2.0.0 into
+v3.0.0's notes. Preserve those published versions and tags. Promotion/sync titles
+and bodies must not carry breaking declarations: place new declarations on the
+individual feature commits retained by merge-commit promotions. Policy now rejects
+such PR metadata, and the runner checks the entire unreleased ancestry range
+**before any publication or PR writes**, refusing contaminated promotion/sync
+messages rather than guessing which breaking declarations are historical. The
+already released boundary is excluded from this check. Genuine new breaking
+feature commits still produce a major release.
+
+If this preflight stops a future run, review the offending SHA and compare it with
+the latest published release. Correct still-unmerged PR metadata before merging.
+For metadata already in main, stop automation and prepare a separately reviewed,
+evidence-backed history-handling change; neither strip all breaking text nor set
+`release-as` merely to unblock CI. No published-history rewrite is authorized by
+this recovery procedure.

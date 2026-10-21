@@ -1,0 +1,34 @@
+name: Merge ancestry audit
+
+on:
+  pull_request_target:
+    branches: [main, develop]
+    types: [closed]
+
+# Trusted base workflow: metadata inspection only, with no checkout or writes.
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Merge ancestry audit
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const sameRepo = pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            const recovery = sameRepo && /^chore\/.*sync-recovery$/.test(pr.head.ref) && pr.title.startsWith('chore(sync): ');
+            const requireMerge = pr.base.ref === 'main' ||
+              (pr.base.ref === 'develop' && sameRepo && pr.head.ref === 'main') || recovery;
+            const { data: commit } = await github.rest.repos.getCommit({ ...context.repo, ref: pr.merge_commit_sha });
+            const preserved = commit.parents.length === 2 && commit.parents[1].sha === pr.head.sha;
+            const valid = requireMerge ? preserved : commit.parents.length === 1;
+            const message = valid
+              ? `PR #${pr.number}: merge ancestry matches the expected ${requireMerge ? 'merge commit' : 'ordinary squash'} path.`
+              : `PR #${pr.number}: unexpected merge ancestry. Expected ${requireMerge ? 'a merge commit preserving the original PR head as second parent' : 'an ordinary squash commit'}. Preserve existing history; do not reset or force-push. Follow docs/operations/branch-promotion.md#incorrect-merge-recovery before another promotion or release.`;
+            await core.summary.addRaw(message).write();
+            if (valid) core.notice(message);
+            else core.setFailed(message);

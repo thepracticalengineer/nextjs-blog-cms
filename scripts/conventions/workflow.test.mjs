@@ -54,9 +54,9 @@ test('title edits revalidate on a read-only workflow without contributor executi
   assert.doesNotMatch(script, /\$\{\{|require\(|exec\(|eval\(/)
 })
 
-test('recommended branches retain push CI and dependency bots use compatible titles', () => {
+test('long-lived branches retain push CI and dependency bots use compatible titles', () => {
   const ci = parse(read('.github/workflows/ci.yml'))
-  for (const branch of ['develop', 'main', 'feat/**', 'fix/**', 'chore/**', 'feature/**', 'codex/**']) {
+  for (const branch of ['develop', 'main']) {
     assert.ok(ci.on.push.branches.includes(branch))
   }
   assert.deepEqual(ci.on.pull_request.branches, ['main', 'develop'])
