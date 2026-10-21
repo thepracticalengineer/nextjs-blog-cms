@@ -34,6 +34,9 @@ export async function installAncestryHistory(github, { runGit = git, bootstrapSh
 export async function runRelease({ github, assertCurrent, config, runGit }) {
   await installAncestryHistory(github, { bootstrapSha: config['bootstrap-sha'], runGit })
   await assertCurrent()
+  // Validate the unreleased history before publication or PR writes.
+  await Array.fromAsync(github.mergeCommitIterator('main'))
+  await assertCurrent()
   const manifest = await Manifest.fromManifest(github, 'main')
   await manifest.createReleases()
   // Publication can create a new boundary. The iterator re-reads releases each call.
