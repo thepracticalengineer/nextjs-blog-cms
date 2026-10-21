@@ -73,3 +73,29 @@ test('disposable Git rehearsal preserves feature, release, concurrent develop wo
   assert.equal(failures.length, 1)
   assert.deepEqual([git('rev-parse', 'main'), git('rev-parse', 'develop')], refs)
 })
+
+test('squashed identical trees still surface a sync PR and retain real main-only metadata', async t => {
+  const dir = mkdtempSync(join(tmpdir(), 'squashed-promotion-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const args = ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null']
+  const git = (...cmd) => execFileSync('git', [...args, ...cmd], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  git('init', '-b', 'main'); writeFileSync(join(dir, 'version'), '1.0.0'); git('add', '.'); git('commit', '-m', 'base')
+  git('checkout', '-b', 'develop'); writeFileSync(join(dir, 'feature'), 'develop feature'); git('add', '.'); git('commit', '-m', 'feat: work')
+  git('checkout', 'main'); git('merge', '--squash', 'develop'); git('commit', '-m', 'incorrect squash')
+  assert.equal(git('diff', '--name-only', 'develop', 'main'), '')
+  assert.equal(git('diff', '--name-only', 'develop...main'), 'feature')
+  const writes = [], pr = { number: 1, html_url: 'https://example.invalid/1', mergeable: true, head: { ref: 'main', repo: { full_name: 'offline/repo' } } }
+  const github = { rest: {
+    repos: { compareCommitsWithBasehead: async () => ({ data: { ahead_by: Number(git('rev-list', '--count', 'develop..main')), files: git('diff', '--name-only', 'develop...main').split('\n').filter(Boolean).map(filename => ({ filename })) } }) },
+    pulls: { list: async () => ({ data: writes.length ? [pr] : [] }), create: async value => { writes.push(value); return { data: pr } }, get: async () => ({ data: pr }) },
+  }, paginate: async (fn, params) => (await fn(params)).data }
+  const core = { notice() {}, setFailed: assert.fail, summary: { addRaw() { return this }, async write() {} } }
+  const sync = () => synchronize({ github, core, owner: 'offline', repo: 'repo' })
+  assert.equal((await sync()).status, 'open')
+  writeFileSync(join(dir, 'version'), '1.1.0'); git('commit', '-am', 'release metadata')
+  assert.equal((await sync()).status, 'open'); assert.equal(writes.length, 1)
+  git('checkout', 'develop'); git('merge', '--no-ff', 'main', '-m', 'restore ancestry')
+  assert.equal(git('show', 'develop:feature'), 'develop feature')
+  assert.equal(git('show', 'develop:version'), '1.1.0')
+  assert.equal((await sync()).status, 'synchronized')
+})

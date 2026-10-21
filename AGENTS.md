@@ -10,6 +10,8 @@ Start at [documentation index](docs/README.md): [setup](docs/setup/local-develop
 
 Use Node **24.21.0** (`.nvmrc`) and pnpm **10.29.3** (`package.json`). Install with `pnpm install --frozen-lockfile`. Commit manifest/`pnpm-lock.yaml` together; use `pnpm add`, preserve strict peers and review dependency scripts in `pnpm-workspace.yaml`. Do not generate npm lockfiles.
 
+- CI event/classification/gate and hosted rollout guidance: [CI matrix](docs/development/ci.md). Ordinary branch pushes do not run CI; open a PR or manually dispatch full CI. Run `node --test scripts/ci/*.test.mjs scripts/promotion/*.test.mjs scripts/coverage/*.test.mjs` for workflow/reporting changes. Preserve full main/develop push baselines and separate release/sync concurrency.
+
 - `pnpm run dev`: development server; `pnpm run build`: production build.
 - `pnpm run typecheck`: Next route types and TypeScript; `pnpm run lint`: zero-warning ESLint.
 - `pnpm run test:run`: unit tests; `pnpm run test:coverage`: coverage thresholds; `pnpm test`: watch mode.

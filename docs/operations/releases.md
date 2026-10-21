@@ -27,8 +27,8 @@ The existing release App is already configured. Preserve it and the published
    credentials are missing, the workflow fails with a setup message; it does not
    silently fall back to `GITHUB_TOKEN`.
 4. Enable an active `main` branch ruleset requiring PRs, a human approval, and
-   successful **Lint**, **Unit Tests**, **Build**, **API and Browser Tests**, and
-   **Coverage report** checks from the CI workflow. Confirm the exact check names
+   successful **CI gate** from the CI workflow (which evaluates every applicable
+   full or lightweight job). Confirm the exact check names
    on a completed PR. Do not grant the release App a ruleset bypass or permission
    to approve/merge its own PR. Apply any tag rules so the App can create `v*`
    tags, while protecting existing tags from changes/deletion. If enabling signed
@@ -244,3 +244,14 @@ Dependency installation runs on trusted main with frozen lockfile and lifecycle
 scripts disabled, before any App token is generated. The token is passed only to
 the release runner step. This workflow must never check out a PR head. Both branch
 protections and required code-owner reviews are prerequisites for this trust model.
+
+## CI optimization rollout
+
+Use the [CI event matrix and hosted checklist](../development/ci.md) when updating
+required checks. Release metadata PRs can receive lightweight validation only
+when their actual JSON changes are version-only; dependency/lockfile changes run
+fully. Main/develop pushes remain fully validated for exact-commit coverage
+baselines. Stable Release Please remains serialized on main with unchanged
+publication permissions. The separate run `39554736612` failed on attempt 1 and
+succeeded on attempt 2; it does not establish a CI-duration/synchronization cause.
+The post-merge ancestry audit is detection, not a release-publication gate.

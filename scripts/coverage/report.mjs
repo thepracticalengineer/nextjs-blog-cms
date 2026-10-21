@@ -26,6 +26,13 @@ export function metric(value, baseline) {
 }
 
 export function createReport({ root, baseline, identity, artifacts = {} }) {
+  if (['docs', 'metadata'].includes(identity.validationMode)) {
+    return {
+      markdown: `# Test coverage\n\nValidation mode: **${identity.validationMode}**. Unit and browser coverage intentionally omitted after content classification; no coverage baseline was collected. Documentation, policy and offline release checks remain required.\n\n[Tested commit ${escape(identity.sha)}; run ${escape(identity.run)} / attempt ${escape(identity.attempt)}](${identity.url}).\n`,
+      snapshot: { schema: 1, scope: 'loaded-client-v1', sha: identity.sha, validationMode: identity.validationMode,
+        unit: totals(null), e2e: Object.fromEntries(suites.map(suite => [suite, totals(null)])) },
+    }
+  }
   const unit = totals(readJson(join(root, 'unit/coverage-summary.json')))
   const e2e = Object.fromEntries(suites.map(suite => {
     const status = readJson(join(root, 'e2e/coverage/e2e', suite, 'status.json'))
@@ -61,14 +68,14 @@ export function createReport({ root, baseline, identity, artifacts = {} }) {
   lines.push('- E2E artifact: `playwright-report/<suite>/index.html`, `test-results/<suite>/`, and `coverage/e2e/<suite>/index.html` when available.', '',
     'Reports are downloadable artifacts (7-day retention). Open the HTML locally. Missing or zero-denominator metrics are unavailable, never 0% or 100%. Failed/skipped collection does not change test exit status. Reruns publish a new attempt summary and update the coverage PR comment.', '')
   return { markdown: lines.join('\n'), snapshot: {
-    schema: 1, scope: 'loaded-client-v1', sha: identity.sha, unit,
+    schema: 1, scope: 'loaded-client-v1', sha: identity.sha, validationMode: 'full', unit,
     e2e: Object.fromEntries(suites.map(suite => [suite, e2e[suite].status?.status === 'passed' && !e2e[suite].status?.errors ? e2e[suite].metrics : totals(null)])),
   } }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const env = process.env
-  const identity = { unitStatus: env.UNIT_STATUS, baseSha: env.BASELINE_SHA, sha: env.GITHUB_SHA ?? 'local', head: env.PR_HEAD_SHA || env.GITHUB_SHA || 'local', run: env.GITHUB_RUN_ID ?? 'local', attempt: env.GITHUB_RUN_ATTEMPT ?? '1', url: `${env.GITHUB_SERVER_URL ?? 'https://github.com'}/${env.GITHUB_REPOSITORY ?? 'local'}/actions/runs/${env.GITHUB_RUN_ID ?? 'local'}` }
+  const identity = { validationMode: env.VALIDATION_MODE, unitStatus: env.UNIT_STATUS, baseSha: env.BASELINE_SHA, sha: env.GITHUB_SHA ?? 'local', head: env.PR_HEAD_SHA || env.GITHUB_SHA || 'local', run: env.GITHUB_RUN_ID ?? 'local', attempt: env.GITHUB_RUN_ATTEMPT ?? '1', url: `${env.GITHUB_SERVER_URL ?? 'https://github.com'}/${env.GITHUB_REPOSITORY ?? 'local'}/actions/runs/${env.GITHUB_RUN_ID ?? 'local'}` }
   const baseline = readJson('baseline/baseline.json')
   const { markdown, snapshot } = createReport({ root: 'artifacts', baseline, identity, artifacts: { unit: env.UNIT_ARTIFACT_ID, e2e: env.E2E_ARTIFACT_ID } })
   mkdirSync('coverage-report', { recursive: true })

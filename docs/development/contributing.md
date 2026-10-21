@@ -83,3 +83,13 @@ compatibility. CI runs these checks with documentation validation.
 # Code of Conduct
 
 This project follows the [Contributor Covenant Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/). By participating, you agree to uphold a respectful and inclusive environment. Report unacceptable behavior to the project maintainer.
+
+## CI and merge verification
+
+Open a PR to start automatic CI for ordinary feature branches; standalone feature
+pushes do not duplicate it. Manual CI dispatch runs full validation on the chosen
+branch. See the [CI matrix](ci.md) for content-based lightweight paths and the
+required **CI gate**, **PR title**, and **PR branch policy** checks. Select squash
+for ordinary develop PRs, merge commits for promotion/sync/recovery, and inspect
+failed post-merge ancestry audits before another promotion or release. Hosted
+ruleset changes remain a maintainer rollout task.
