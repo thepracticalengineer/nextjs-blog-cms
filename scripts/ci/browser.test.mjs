@@ -17,3 +17,8 @@ test('every isolated group records its complete suite outcomes for artifact inve
   assert.deepEqual(reports[0].suites.map(suite => suite.name), groups.content)
   assert.ok(reports[0].suites.every(suite => suite.exitCode === 0))
 })
+test('report paths come from fixed destinations and reject arbitrary CLI path arguments', async () => {
+  const { groupReportPath = () => null } = await import('./browser.mjs')
+  assert.equal(groupReportPath('auth'), 'test-results/isolated-auth.json')
+  for (const input of ['../../outside', '__proto__', 'toString', 'content/../other']) assert.throws(() => groupReportPath(input), /Unknown isolated browser group/)
+})

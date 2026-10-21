@@ -8,6 +8,16 @@ export const groups = {
   auth: ['oauth-ui', 'auth-abuse', 'mfa'],
   content: ['ai-settings', 'homepage', 'seo'],
 }
+// A CLI argument may select a destination, but can never construct one.
+export function groupReportPath(group) {
+  switch (group) {
+    case 'harness': return 'test-results/isolated-harness.json'
+    case 'auth': return 'test-results/isolated-auth.json'
+    case 'content': return 'test-results/isolated-content.json'
+    default: throw new Error('Unknown isolated browser group')
+  }
+}
+
 // Groups run on separate runners. Within each group preserve every suite's
 // result even if an earlier suite fails, and never run competing servers together.
 export function runGroup(group, run = spawnSync, record = () => {}) {
@@ -25,6 +35,6 @@ export function runGroup(group, run = spawnSync, record = () => {}) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   process.exitCode = runGroup(process.argv[2], spawnSync, report => {
     mkdirSync('test-results', { recursive: true })
-    writeFileSync(`test-results/isolated-${report.group}.json`, JSON.stringify(report, null, 2))
+    writeFileSync(groupReportPath(report.group), JSON.stringify(report, null, 2))
   })
 }

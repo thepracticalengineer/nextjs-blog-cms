@@ -21,9 +21,9 @@ export function classify({ event, base, head, files, read }) {
     const newManifest = JSON.parse(read('.release-please-manifest.json', 'head'))
     if (!stableVersion(before.version) || !stableVersion(after.version) || before.version === after.version) return 'full'
     if (!isDeepStrictEqual(oldManifest, { '.': before.version }) || !isDeepStrictEqual(newManifest, { '.': after.version })) return 'full'
-    const { version: _old, ...oldPackage } = before
-    const { version: _new, ...newPackage } = after
-    return isDeepStrictEqual(oldPackage, newPackage) ? 'metadata' : 'full'
+    delete before.version
+    delete after.version
+    return isDeepStrictEqual(before, after) ? 'metadata' : 'full'
   } catch { return 'full' }
 }
 
