@@ -28,20 +28,35 @@
 
 ### Task 1: Event classification and gate
 
-- [ ] Add failing behavioral classifier/gate tests and workflow event assertions.
-- [ ] Implement strict docs/release metadata classification, PR-scoped cancellation and manual full validation.
-- [ ] Verify full/metadata/docs paths, invalid data, dependencies and gate result combinations.
+- [x] Add failing behavioral classifier/gate tests and workflow event assertions.
+- [x] Implement strict docs/release metadata classification, PR-scoped cancellation and manual full validation.
+- [x] Verify full/metadata/docs paths, invalid data, dependencies and gate result combinations.
 
 ### Task 2: Split jobs and reporting
 
-- [ ] Add failing tests pinning preserved commands, isolated suite inventory and artifact aggregation.
-- [ ] Extract shared setup, run DB/full-stack separately, and run isolated browser groups in parallel without fail-fast.
-- [ ] Preserve aggregated e2e-reports compatibility; report intentional omitted coverage explicitly and never use it as a baseline.
-- [ ] Run workflow, coverage and release regressions plus representative local browser validation where available.
+- [x] Add failing tests pinning preserved commands, isolated suite inventory and artifact aggregation.
+- [x] Extract shared setup, run DB/full-stack separately, and run isolated browser groups in parallel without fail-fast.
+- [x] Preserve aggregated e2e-reports compatibility; report intentional omitted coverage explicitly and never use it as a baseline.
+- [x] Run workflow, coverage and release regressions plus representative local browser validation where available.
 
 ### Task 3: Merge safeguards and evidence
 
-- [ ] Reproduce squash ancestry in a disposable Git test and test trusted post-merge detection.
-- [ ] Add non-destructive detection and clear merge instructions; preserve sync idempotency.
-- [ ] Record timing baseline, event matrix, benchmark procedure, required hosted rules/checks and recovery in canonical docs.
-- [ ] Run repository checks, review the complete diff, commit, push the issue branch and open a PR against develop.
+- [x] Reproduce squash ancestry in a disposable Git test and test trusted post-merge detection.
+- [x] Add non-destructive detection and clear merge instructions; preserve sync idempotency.
+- [x] Record timing baseline, event matrix, benchmark procedure, required hosted rules/checks and recovery in canonical docs.
+- [x] Run repository checks, review the complete diff, commit, push the issue branch and open a PR against develop.
+
+## Verification record
+
+Local verification: 1,477 unit tests and all 80% coverage thresholds, 101 isolated
+browser tests across 11 suites, CI/promotion/coverage/convention regressions,
+33 offline release tests, documentation checks/tests, ESLint, typecheck and a
+production build passed. An independent review found a missing split-artifact
+inventory check; group outcome manifests and a failing inventory regression now
+cover it. Generated browser cache/config edits were removed before committing.
+
+The implementation PR is #240 against develop. Hosted full validation and timing
+comparison are recorded in that PR's checks and the implementation conversation;
+post-merge event/ruleset rollout still requires normal maintainer observation.
+Retarget/edit events rerun validation so a main hotfix cannot reuse a develop
+lightweight check. Existing shared history and hosted settings were preserved.

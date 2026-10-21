@@ -17,7 +17,11 @@ reduces duplicate validation while retaining security and publication coverage.
 | Standalone feature/fix/chore push | No automatic CI; open a PR or manually dispatch CI on the branch | None until validation runs |
 | Manual CI dispatch on any branch | Full | Full; not eligible as a push baseline |
 
-No workflow path filter can leave a required workflow pending. Classification
+PR events include edits and ready-for-review transitions as well as opening,
+synchronizing and reopening. Retargeting must reclassify the new merge/base;
+title/body edits conservatively rerun validation too, rather than reusing a
+lightweight result from another target. No workflow path filter can leave a
+required workflow pending. Classification
 examines the actual tested merge's first-parent diff, with renames disabled so
 both old and new paths are considered. Missing ancestry or unreadable data selects
 full validation. Only the exact root README and Markdown under docs qualify as

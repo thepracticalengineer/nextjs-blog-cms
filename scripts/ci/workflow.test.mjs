@@ -78,3 +78,8 @@ test('artifact inventory accepts a complete split and rejects a missing noncover
   await run(names)
   await assert.rejects(run(names.slice(0, -1)), /Missing split report artifacts: e2e-reports-isolated-content/)
 })
+test('retargeted PRs rerun classification so main hotfixes cannot reuse develop lightweight checks', () => {
+  assert.ok(ci.on.pull_request.types?.includes('edited'))
+  assert.ok(ci.on.pull_request.types.includes('ready_for_review'))
+  for (const type of ['opened', 'synchronize', 'reopened']) assert.ok(ci.on.pull_request.types.includes(type))
+})
