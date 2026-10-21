@@ -79,3 +79,13 @@ for (const file of ['release-please.yml', 'sync-develop.yml']) {
     }
   })
 }
+
+test('accept actual root release branch while rejecting other components', async () => {
+  const options = { author: 'the-practical-engineer-releases[bot]', title: 'chore(main): release 3.0.0', labels: ['autorelease: pending'] }
+  const head = 'release-please--branches--main--components--nextjs-blog-cms'
+  assert.deepEqual(await validate('main', head, options), [])
+  for (const override of [{ author: 'human' }, { files: ['app/page.tsx'] }, { labels: [] }, { fork: true }]) {
+    assert.equal((await validate('main', head, { ...options, ...override })).length, 1)
+  }
+  assert.equal((await validate('main', 'release-please--branches--main--components--other', options)).length, 1)
+})

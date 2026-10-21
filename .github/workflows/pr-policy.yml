@@ -42,7 +42,7 @@ jobs:
             if (/^fix\/[a-z0-9][a-z0-9-]*$/.test(head) &&
                 /^fix(\([^()\s]+\))?!?: /.test(pr.title) &&
                 pr.labels.some(label => label.name === 'production-hotfix')) return;
-            if (head === 'release-please--branches--main' &&
+            if (['release-please--branches--main', 'release-please--branches--main--components--nextjs-blog-cms'].includes(head) &&
                 pr.user.login === 'the-practical-engineer-releases[bot]' &&
                 /^chore\(main\): release \d+\.\d+\.\d+$/.test(pr.title) &&
                 pr.labels.some(label => label.name === 'autorelease: pending')) {
