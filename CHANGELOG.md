@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.0.1](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.0.0...v3.0.1) (2026-10-21)
+
+
+### Bug Fixes
+
+* **release:** accept generated root release PR branch ([#232](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/232)) ([f45fe20](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/f45fe20318c73a302bc86d50558c864ed3af4630))
+
 ## [3.0.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v2.0.0...v3.0.0) (2026-10-21)
 
 
