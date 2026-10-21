@@ -53,7 +53,14 @@ CI, title validation and coverage support both long-lived branches. The
 it never executes contributor code. It accepts same-repository develop promotions,
 `fix/...` hotfixes explicitly labeled `production-hotfix` with a `fix:` title, and the installed release App's expected metadata-only release
 PR into main. The release App identity is `the-practical-engineer-releases[bot]`;
-a replacement App requires updating the policy and tests in a reviewed PR.
+its REST numeric ID is `345175842` and its type is `Bot`. The exact release head
+is `release-please--branches--main--components--nextjs-blog-cms`; the legacy
+component-free head is no longer accepted. A replacement App requires updating
+the policy and tests in a reviewed PR. See [the release branch contract and
+recovery procedure](releases.md#root-release-branch-contract-and-issue-231-recovery).
+Promotion/sync titles and bodies must not contain breaking declarations; the
+trusted policy rejects them and the release runner refuses contaminated
+unreleased promotion/sync history before writing release metadata.
 Fork feature contributions remain supported into develop.
 
 Promotion automation runs on every develop push and manual dispatch on develop.

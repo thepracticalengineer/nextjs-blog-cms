@@ -25,6 +25,11 @@ jobs:
             const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: context.issue.number });
             const sameRepo = pr.head.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
             const head = pr.head.ref;
+            const breakingMetadata = /\bBREAKING[ -]CHANGE:|(?:^|\n)\s*[a-z]+(?:\([^()\s]+\))?!:/.test(`${pr.title}\n${pr.body ?? ''}`);
+            if ((head === 'main' && pr.base.ref === 'develop' || head === 'develop' && pr.base.ref === 'main') && breakingMetadata) {
+              core.setFailed('Promotion/synchronization metadata must not contain breaking-change declarations. Keep them on the individual feature commits.');
+              return;
+            }
             if (pr.base.ref === 'develop') {
               if (head === 'main' && (!sameRepo || !pr.title.startsWith('chore(sync): '))) {
                 core.setFailed('Synchronization requires this repository main branch and a chore(sync): title. Merge with a merge commit.');
@@ -42,8 +47,9 @@ jobs:
             if (/^fix\/[a-z0-9][a-z0-9-]*$/.test(head) &&
                 /^fix(\([^()\s]+\))?!?: /.test(pr.title) &&
                 pr.labels.some(label => label.name === 'production-hotfix')) return;
-            if (['release-please--branches--main', 'release-please--branches--main--components--nextjs-blog-cms'].includes(head) &&
+            if (head === 'release-please--branches--main--components--nextjs-blog-cms' &&
                 pr.user.login === 'the-practical-engineer-releases[bot]' &&
+                pr.user.id === 345175842 && pr.user.type === 'Bot' &&
                 /^chore\(main\): release \d+\.\d+\.\d+$/.test(pr.title) &&
                 pr.labels.some(label => label.name === 'autorelease: pending')) {
               const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: context.issue.number, per_page: 100 });
