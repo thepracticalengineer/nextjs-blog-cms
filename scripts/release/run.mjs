@@ -35,7 +35,10 @@ export async function runRelease({ github, assertCurrent, config, runGit }) {
   await installAncestryHistory(github, { bootstrapSha: config['bootstrap-sha'], runGit })
   await assertCurrent()
   // Validate the unreleased history before publication or PR writes.
-  for await (const commit of github.mergeCommitIterator('main')) void commit
+  const history = github.mergeCommitIterator('main')
+  while (!(await history.next()).done) {
+    // Draining executes validation for the complete unreleased range.
+  }
   await assertCurrent()
   const manifest = await Manifest.fromManifest(github, 'main')
   await manifest.createReleases()

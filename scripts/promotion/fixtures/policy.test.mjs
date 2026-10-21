@@ -1,7 +1,8 @@
+// Test-only harness for the checked-in trusted workflow; no PR-provided code is evaluated.
 import { readFileSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 import { parse } from 'yaml'
-const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
+const read = path => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8')
 const workflow = parse(read('.github/workflows/pr-policy.yml'))
 const script = workflow.jobs.policy.steps[0].with.script
 export async function validate(base, head, { fork = false, author = 'human', title = 'fix: repair behavior', files = ['package.json'], labels = [], body = '', authorId = 345175842, authorType = 'Bot' } = {}) {

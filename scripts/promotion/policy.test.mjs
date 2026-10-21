@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
-import { validate } from './policy-fixture.mjs'
+import { validate } from './fixtures/policy.test.mjs'
 import { parse } from 'yaml'
 const read = path => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8')
 const workflow = parse(read('.github/workflows/pr-policy.yml'))
