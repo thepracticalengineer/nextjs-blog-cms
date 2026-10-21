@@ -26,6 +26,8 @@
 
 ## Features
 
+- [Bulk post selection, deletion and unpublish](features/bulk-post-actions.md)
+
 - [Authentication abuse controls and deployment prerequisites](features/auth-abuse-controls.md)
 
 - [Client auth state, profile requests and retry](features/client-auth-state.md)

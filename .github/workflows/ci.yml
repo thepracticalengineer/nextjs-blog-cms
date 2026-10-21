@@ -184,6 +184,7 @@ jobs:
         run: |
           node database/tests/legacy-ai-upgrade.mjs
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/legacy_ai_retirement.sql
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/bulk_post_retention.sql
 
       - name: Verify MFA database and storage boundaries
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
@@ -239,6 +240,9 @@ jobs:
 
       - name: Verify provider settings with isolated Auth and Data API responses
         run: pnpm exec playwright test --config=e2e/ai-settings.config.ts
+
+      - name: Verify bulk post controls on desktop and mobile
+        run: pnpm exec playwright test --config=e2e/bulk-posts.config.ts
 
       - name: Verify OAuth controls with isolated provider navigation
         run: pnpm exec playwright test --config=e2e/oauth-ui.config.ts
