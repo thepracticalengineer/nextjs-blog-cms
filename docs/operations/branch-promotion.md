@@ -15,7 +15,7 @@ Vercel Git integration with **Production Branch = main** explicitly.
 3. Apply required production [migrations](../setup/migrations.md) before promoting
    dependent code. Pause newsletter dispatch for its handoff migration. Review
    the full batch, migration compatibility, and CI.
-4. Open this repository's `develop` → `main` PR titled
+4. Review the automatically maintained `develop` → `main` PR titled
    `chore(promotion): promote develop to main`. Merge with **Create a merge commit**.
    Never squash or rebase a promotion: preserve feature/fix squash commits for
    SemVer and changelog generation. Keep the promotion title/body non-breaking;
@@ -55,6 +55,20 @@ it never executes contributor code. It accepts same-repository develop promotion
 PR into main. The release App identity is `the-practical-engineer-releases[bot]`;
 a replacement App requires updating the policy and tests in a reviewed PR.
 Fork feature contributions remain supported into develop.
+
+Promotion automation runs on every develop push and manual dispatch on develop.
+It uses the existing release App credentials, with Contents read and Pull requests
+write, to open or reuse one `develop` → `main` PR. The PR follows develop directly;
+no branch refs are written and no PR is merged automatically. Review the batch,
+CI and production migrations before merging with **Create a merge commit**.
+No new credentials are required if the release App is already configured.
+The workflow executes the immutable develop event commit without installing
+dependencies; protect develop and review workflow/script changes accordingly.
+No file changes or develop already contained in main produces no new PR, including
+synchronization-only updates. Existing redundant PRs remain for human closure.
+Creation races reuse the existing PR; conflicts or unknown mergeability retain the
+PR and report action required. Run `node --test scripts/promotion/*.test.mjs`
+for offline orchestration checks.
 
 Synchronization runs on every main push and manual dispatch on main. It compares
 current `develop...main`, reuses a pending same-repository main-to-develop PR,

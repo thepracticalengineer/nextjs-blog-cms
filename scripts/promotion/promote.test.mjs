@@ -1,0 +1,108 @@
+import assert from 'node:assert/strict'
+import { test } from 'node:test'
+import { promote } from './promote.mjs'
+
+function fixture({ ahead = 1, files = [{ filename: 'package.json' }], existing = false, mergeable = true, race = false } = {}) {
+  const writes = [], failures = [], notices = []
+  const pr = { number: 17, html_url: 'https://example.invalid/pull/17', mergeable, head: { ref: 'develop', repo: { full_name: 'org/repo' } }, base: { ref: 'main' } }
+  let pending = existing
+  const github = { rest: {
+    repos: { compareCommitsWithBasehead: async args => {
+      assert.equal(args.basehead, 'main...develop')
+      return { data: { ahead_by: ahead, files } }
+    } },
+    pulls: {
+      list: async args => { assert.equal(args.base, 'main'); assert.equal(args.head, 'org:develop'); return { data: pending ? [pr] : [] } },
+      create: async args => { writes.push(args); pending = true; if (race) throw Object.assign(new Error('already exists'), { status: 422 }); return { data: pr } },
+      get: async () => ({ data: pr }),
+    },
+  }, paginate: async (method, args) => (await method(args)).data }
+  const core = { notice: value => notices.push(value), setFailed: value => failures.push(value), summary: { addRaw() { return this }, async write() {} } }
+  return { writes, failures, notices, args: { github, core, owner: 'org', repo: 'repo', wait: async () => {} } }
+}
+test('develop change creates one reviewed develop-to-main PR without changing branch refs', async () => {
+  const f = fixture()
+  assert.equal((await promote(f.args)).status, 'open')
+  assert.equal(f.writes[0].head, 'develop')
+  assert.equal(f.writes[0].base, 'main')
+  assert.match(f.writes[0].title, /^chore\(promotion\):/)
+  await promote(f.args)
+  assert.equal(f.writes.length, 1)
+})
+test('existing promotion follows develop without changing branch refs', async () => {
+  const f = fixture({ existing: true })
+  assert.equal((await promote(f.args)).number, 17)
+  assert.equal(f.writes.length, 0)
+})
+for (const options of [{ ahead: 0 }, { files: [] }]) {
+  test(`no-op when develop is contained or promotion adds only ancestry: ${JSON.stringify(options)}`, async () => {
+    const f = fixture(options)
+    assert.equal((await promote(f.args)).status, 'unchanged')
+    assert.equal(f.writes.length, 0)
+  })
+}
+test('creation race reuses the PR instead of making duplicates', async () => {
+  const f = fixture({ race: true })
+  assert.equal((await promote(f.args)).number, 17)
+  assert.equal(f.failures.length, 0)
+})
+for (const mergeable of [false, null]) {
+  test(`conflict or unknown mergeability (${mergeable}) reports action required and retains PR`, async () => {
+    const f = fixture({ existing: true, mergeable })
+    assert.equal((await promote(f.args)).status, 'attention')
+    assert.equal(f.failures.length, 1)
+    assert.match(f.failures[0], /17/)
+    assert.equal(f.writes.length, 0)
+  })
+}
+test('API permission errors propagate rather than claiming promotion', async () => {
+  const f = fixture()
+  f.args.github.rest.pulls.create = async () => { throw Object.assign(new Error('Forbidden'), { status: 403 }) }
+  await assert.rejects(promote(f.args), /Forbidden/)
+})
+
+test('unknown mergeability is polled sequentially and stops as soon as it becomes known', async () => {
+  const f = fixture({ existing: true })
+  let reads = 0
+  const events = []
+  f.args.github.rest.pulls.get = async () => {
+    events.push('read')
+    return { data: { number: 17, html_url: 'https://example.invalid/pull/17', mergeable: ++reads < 3 ? null : true } }
+  }
+  f.args.wait = async ms => { assert.equal(ms, 2000); events.push('wait') }
+  assert.equal((await promote(f.args)).status, 'open')
+  assert.deepEqual(events, ['read', 'wait', 'read', 'wait', 'read'])
+  assert.equal(f.failures.length, 0)
+})
+
+test('unknown mergeability never exceeds three API reads and two waits', async () => {
+  const f = fixture({ existing: true, mergeable: null })
+  let reads = 0, waits = 0
+  const original = f.args.github.rest.pulls.get
+  f.args.github.rest.pulls.get = async () => { reads++; return original() }
+  f.args.wait = async () => { waits++ }
+  assert.equal((await promote(f.args)).status, 'attention')
+  assert.equal(reads, 3)
+  assert.equal(waits, 2)
+  assert.equal(f.failures.length, 1)
+})
+
+test('missing comparison file data fails closed', async () => {
+  const f = fixture()
+  f.args.github.rest.repos.compareCommitsWithBasehead = async () => ({ data: { ahead_by: 1 } })
+  await assert.rejects(promote(f.args), /omitted files/)
+  assert.equal(f.writes.length, 0)
+})
+
+test('promotion workflow scopes credentials and runs immutable develop code', async () => {
+  const { readFileSync } = await import('node:fs')
+  const workflow = readFileSync(new URL('../../.github/workflows/promote-develop.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /branches: \[develop\]/)
+  assert.match(workflow, /github.ref == 'refs\/heads\/develop'/)
+  assert.match(workflow, /ref: \$\{\{ github.sha \}\}/)
+  assert.match(workflow, /permission-contents: read/)
+  assert.match(workflow, /permission-pull-requests: write/)
+  assert.match(workflow, /cancel-in-progress: false/)
+  assert.doesNotMatch(workflow, /pnpm install|permission-contents: write/)
+  for (const match of workflow.matchAll(/uses: ([^\s]+)/g)) assert.match(match[1], /@[a-f0-9]{40}$/)
+})
