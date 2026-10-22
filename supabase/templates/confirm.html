@@ -246,7 +246,7 @@
 
       <!-- CTA -->
       <div class="cta-wrap">
-        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}&amp;return={{ .Data.signup_return }}" class="cta-btn">▶ Confirm My Email</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}{{ if .Data.signup_return }}&amp;return={{ .Data.signup_return }}{{ end }}" class="cta-btn">▶ Confirm My Email</a>
       </div>
 
       <div class="divider"></div>
@@ -269,7 +269,7 @@
       </div>
 
       <p class="fallback">
-        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}&amp;return={{ .Data.signup_return }}">{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}&amp;return={{ .Data.signup_return }}</a>
+        <a href="{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}{{ if .Data.signup_return }}&amp;return={{ .Data.signup_return }}{{ end }}">{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}{{ if .Data.signup_return }}&amp;return={{ .Data.signup_return }}{{ end }}</a>
       </p>
     </div>
 

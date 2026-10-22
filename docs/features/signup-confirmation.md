@@ -48,7 +48,7 @@ the person requesting a link.
    `/auth/callback` redirects after the new flow is deployed.
 3. Deploy the application, then install `supabase/templates/confirm.html` in
    **Authentication → Email Templates → Confirm signup**. Both the CTA and copyable
-   fallback must use `{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}&amp;return={{ .Data.signup_return }}`.
+   fallback must use `{{ .SiteURL }}/auth/callback?type=signup&amp;token_hash={{ .TokenHash }}{{ if .Data.signup_return }}&amp;return={{ .Data.signup_return }}{{ end }}`.
    The template fixes the path, type and query separator independently of
    `.RedirectTo`. Dashboard-sent emails or GoTrue falling back to Site URL after
    a missing/disallowed redirect still produce a usable canonical signup link.

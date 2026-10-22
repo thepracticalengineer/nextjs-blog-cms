@@ -160,11 +160,13 @@ it('requires MFA from authoritative user factors even if cached assurance unders
 
 it.each(['google', 'github'])('routes a new %s account into onboarding after assurance', async provider => {
   mocks.get.mockReturnValue({ value: JSON.stringify({ provider, next: '/blog/article#comments', flowId }) })
+  mocks.user.mockResolvedValue({ data: { user: { ...user, app_metadata: { onboarding_pending: true } } }, error: null })
   mocks.progress.mockResolvedValue({ data: { completed_at: null }, error: null })
   expect(await callback()).toBe('/dashboard/onboarding?next=%2Fblog%2Farticle%23comments')
   expect(mocks.commit).toHaveBeenCalledOnce()
 })
 it('does not commit an OAuth session when onboarding state cannot be read', async () => {
+  mocks.user.mockResolvedValue({ data: { user: { ...user, app_metadata: { onboarding_pending: true } } }, error: null })
   mocks.progress.mockResolvedValue({ data: null, error: { message: 'offline' } })
   expect(await callback()).toBe('/login?error=auth_callback_failed')
   expect(mocks.commit).not.toHaveBeenCalled()

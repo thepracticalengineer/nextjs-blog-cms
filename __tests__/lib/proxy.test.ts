@@ -13,6 +13,7 @@ beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: 'user' } } })
   getAal.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null })
   getRole.mockResolvedValue({ data: { role: 'author' } })
+  getProgress.mockReset()
   getProgress.mockResolvedValue({ data: null, error: null })
   createServerClient.mockImplementation((_url, _key, options) => {
     // Simulate the SSR client's session refresh and its anti-cache headers.
@@ -137,6 +138,7 @@ it('keeps a verified factor challenge even when nextLevel is stale', async () =>
 
 
 describe('new-account onboarding gate', () => {
+  beforeEach(() => { getUser.mockResolvedValue({ data: { user: { id: 'user', app_metadata: { onboarding_pending: true } } } }) })
   it('resumes pending onboarding only after MFA', async () => {
     getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
     expect((await proxy(request('/dashboard/posts'))).headers.get('location')).toBe('https://example.com/dashboard/onboarding?next=%2Fdashboard%2Fposts')
@@ -145,10 +147,14 @@ describe('new-account onboarding gate', () => {
   })
   it('fails closed without redirecting editor actions or bypassing a progress outage', async () => {
     getProgress.mockResolvedValue({ data: null, error: { message: 'outage' } })
-    expect((await proxy(request('/dashboard/posts'))).status).toBe(503)
+    const outage = await proxy(request('/dashboard/posts'))
+    expect(outage.headers.get('location')).toBe('https://example.com/onboarding-unavailable?next=%2Fdashboard%2Fposts')
+    expectRefresh(outage)
     getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
     const action = new NextRequest('https://example.com/dashboard/posts/new', { method: 'POST', headers: { 'next-action': 'save' } })
-    expect((await proxy(action)).status).toBe(403)
+    const denied = await proxy(action)
+    expect(denied.status).toBe(403)
+    expect((await denied.json()).error).toContain('Finish account setup')
   })
   it('does not loop on onboarding and retains nested MFA entry destinations', async () => {
     getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
@@ -162,6 +168,30 @@ it('keeps onboarding answers mounted when an action loses authentication', async
   const action = new NextRequest('https://example.com/dashboard/onboarding', { method: 'POST', headers: { 'next-action': 'save' } })
   const response = await proxy(action)
   expect(response.status).toBe(401)
+  expect(response.headers.get('location')).toBeNull()
+  expectRefresh(response)
+})
+
+it.each([undefined, false])('skips onboarding reads for exempt/completed users (pending=%s)', async pending => {
+  getUser.mockResolvedValue({ data: { user: { id: 'user', app_metadata: { onboarding_pending: pending } } } })
+  expect((await proxy(request('/dashboard/posts'))).status).toBe(200)
+  const action = new NextRequest('https://example.com/dashboard/posts/new', { method: 'POST', headers: { 'next-action': 'save' } })
+  expect((await proxy(action)).status).toBe(200)
+  expect(getProgress).not.toHaveBeenCalled()
+})
+it('shows a retry page after MFA when onboarding cannot be read', async () => {
+  getUser.mockResolvedValue({ data: { user: { id: 'user', app_metadata: { onboarding_pending: true } } } })
+  getProgress.mockResolvedValue({ data: null, error: { message: 'offline' } })
+  const response = await proxy(request('/mfa?next=%2Fblog'))
+  expect(response.headers.get('location')).toBe('https://example.com/onboarding-unavailable?next=%2Fblog')
+  expectRefresh(response)
+})
+it('keeps an onboarding outage in place for server-action requests', async () => {
+  getUser.mockResolvedValue({ data: { user: { id: 'user', app_metadata: { onboarding_pending: true } } } })
+  getProgress.mockResolvedValue({ data: null, error: { message: 'offline' } })
+  const action = new NextRequest('https://example.com/dashboard/posts/new', { method: 'POST', headers: { 'next-action': 'save' } })
+  const response = await proxy(action)
+  expect(response.status).toBe(503)
   expect(response.headers.get('location')).toBeNull()
   expectRefresh(response)
 })

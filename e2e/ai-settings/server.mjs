@@ -8,6 +8,7 @@ const profile = { id, email: user.email, full_name: 'Settings Test', role: 'auth
 let keys = []
 let failLoads = 0
 let writes = 0
+let onboardingOutage = false
 
 function send(response, status, data) {
   response.writeHead(status, { 'Content-Type': 'application/json' })
@@ -32,7 +33,7 @@ function setHeaders(response) {
 async function handleControl(request, response, path) {
   if (path === '/__control' && request.method === 'POST') {
     const data = await readBody(request)
-    keys = []; writes = 0; failLoads = data.failLoads ?? 0
+    keys = []; writes = 0; failLoads = data.failLoads ?? 0; onboardingOutage = data.onboardingOutage ?? false
     send(response, 200, { reset: true })
     return true
   }
@@ -84,9 +85,9 @@ async function handleRequest(request, response) {
   if (await handleControl(request, response, url.pathname)) return
   if (url.pathname === '/auth/v1/settings') return send(response, 200, { external: {} })
   if (!authenticated(request)) return send(response, 401, { code: 'session_not_found', message: 'No synthetic session' })
-  if (url.pathname === '/auth/v1/user') return send(response, 200, user)
+  if (url.pathname === '/auth/v1/user') return send(response, 200, { ...user, app_metadata: { onboarding_pending: onboardingOutage } })
   // This fixture models an established account exempt from new-user setup.
-  if (url.pathname === '/rest/v1/onboarding_progress') return send(response, 200, [])
+  if (url.pathname === '/rest/v1/onboarding_progress') return onboardingOutage ? send(response, 503, { message: 'Synthetic onboarding outage' }) : send(response, 200, [])
   if (url.pathname === '/rest/v1/profiles') return send(response, 200, profile)
   if (url.pathname === '/rest/v1/llm_provider_keys') return handleProviders(request, response, url)
   send(response, 404, { message: `Unsupported synthetic request: ${request.method} ${url.pathname}` })

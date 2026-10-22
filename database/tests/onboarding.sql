@@ -5,9 +5,12 @@ INSERT INTO auth.users(id,email) VALUES
  ('14600000-0000-4000-8000-000000000001','onboarding-a@example.test'),
  ('14600000-0000-4000-8000-000000000002','onboarding-b@example.test'),
  ('14600000-0000-4000-8000-000000000003','onboarding-existing@example.test');
+UPDATE auth.users SET raw_app_meta_data = raw_app_meta_data || '{"preserved":"yes"}'::jsonb WHERE id = '14600000-0000-4000-8000-000000000001';
 DELETE FROM public.onboarding_progress WHERE user_id = '14600000-0000-4000-8000-000000000003';
 INSERT INTO public.tags(id,name,slug) VALUES ('14600000-0000-4000-8000-000000000010','Onboarding SQL topic','onboarding-sql-topic');
 DO $$ BEGIN
+ ASSERT (SELECT raw_app_meta_data->>'onboarding_pending' = 'true' FROM auth.users WHERE id = '14600000-0000-4000-8000-000000000001'), 'New account missing pending hint';
+ ASSERT (SELECT raw_app_meta_data->>'onboarding_pending' = 'false' FROM auth.users WHERE id = '14600000-0000-4000-8000-000000000003'), 'Exempt account retained pending hint';
  ASSERT (SELECT count(*) FROM public.onboarding_progress WHERE user_id IN ('14600000-0000-4000-8000-000000000001','14600000-0000-4000-8000-000000000002')) = 2, 'Future accounts not eligible';
 END $$;
 SET LOCAL ROLE anon;
@@ -42,6 +45,10 @@ DO $$ DECLARE s jsonb; answers jsonb; BEGIN
  BEGIN PERFORM public.save_onboarding(answers || '{"revision":3}'); RAISE EXCEPTION 'Completion overwritten'; EXCEPTION WHEN serialization_failure THEN NULL; END;
 END $$;
 RESET ROLE;
+DO $$ BEGIN
+ ASSERT (SELECT raw_app_meta_data->>'onboarding_pending' = 'false' FROM auth.users WHERE id = '14600000-0000-4000-8000-000000000001'), 'Completion did not atomically clear pending hint';
+ ASSERT (SELECT raw_app_meta_data->>'preserved' = 'yes' FROM auth.users WHERE id = '14600000-0000-4000-8000-000000000001'), 'Hint erased unrelated metadata';
+END $$;
 SELECT set_config('request.jwt.claims','{"sub":"14600000-0000-4000-8000-000000000003","role":"authenticated","aal":"aal1"}',true);
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN

@@ -69,3 +69,13 @@ it('prefers a newer profile name on reload while retaining a draft when the prof
   expect(screen.getByLabelText('Full name')).toHaveValue('New profile name')
   expect(screen.getByText('Your profile name changed since your last save. We have filled in the latest name.')).toBeVisible()
 })
+
+it.each([{ interests: [] }, { interests: ['00000000-0000-4000-8000-000000000001'] }])('does not submit setup when Enter is pressed in topic search (selections %j)', async ({ interests }) => {
+  const user = userEvent.setup()
+  render(<OnboardingForm {...props} progress={{ ...progress, step: 2, full_name: 'Jane', experience: 'learning', profession: 'student', interests }} />)
+  await user.type(screen.getByLabelText('Search topics'), 'type{Enter}')
+  expect(mocks.save).not.toHaveBeenCalled()
+  expect(mocks.replace).not.toHaveBeenCalled()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByLabelText('Search topics')).toHaveValue('type')
+})

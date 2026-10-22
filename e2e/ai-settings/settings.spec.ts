@@ -94,3 +94,15 @@ test('settings load failure can retry and invalid save preserves the input witho
   expect(state.keys).toEqual([])
   expect(state.writes).toBe(0)
 })
+
+test('onboarding lookup outages show a retry page and recover to the intended settings page', async ({ page, request }) => {
+  await request.post(`${stub}/__control`, { data: { onboardingOutage: true } })
+  await page.goto('/dashboard/settings/ai-providers')
+  await expect(page.getByRole('heading', { name: 'Account setup is temporarily unavailable' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Try again' })).toHaveAttribute('href', '/dashboard/onboarding/entry?next=%2Fdashboard%2Fsettings%2Fai-providers')
+  await page.getByRole('link', { name: 'Try again' }).click()
+  await expect(page.getByRole('heading', { name: 'Account setup is temporarily unavailable' })).toBeVisible()
+  await request.post(`${stub}/__control`, { data: {} })
+  await page.getByRole('link', { name: 'Try again' }).click()
+  await expect(page.getByRole('heading', { name: 'AI Providers', exact: true })).toBeVisible()
+})

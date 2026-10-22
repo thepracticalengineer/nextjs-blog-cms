@@ -15,7 +15,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: P
     client.rpc('start_onboarding', { p_destination: destination }),
     client.from('tags').select('id,name').is('merged_into', null).order('name'),
   ])
-  if (state.error || topics.error) throw new Error('Unable to load your setup. Please retry.')
+  if (state.error || topics.error) redirect(`/onboarding-unavailable?next=${encodeURIComponent(destination)}`)
   const progress = state.data as OnboardingProgress | null
   if (!progress || progress.completed_at) redirect(onboardingReturnPath(progress?.return_to ?? destination))
   return <OnboardingForm progress={progress} profile={{ full_name: profile.full_name, email: profile.email, avatar_url: profile.avatar_url }} tags={topics.data ?? []} />

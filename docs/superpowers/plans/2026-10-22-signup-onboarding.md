@@ -53,3 +53,7 @@
 - Production build, typecheck, lint, docs checks/tests and 82 CI/reporting script tests passed.
 - Independent code review completed; unavailable-topic navigation, name-conflict recovery, duplicate-save and expired-session cases are covered.
 - Live external OAuth consent screens, hosted SMTP/configuration and the entire existing E2E suite were not exercised locally.
+
+## PR review follow-up
+
+PR #245 follow-up fixes the nested MFA assertion, prevents Enter in topic search from finishing setup, adds a friendly lookup-outage retry page, and uses an authoritative server-owned pending hint to skip permanent progress queries for completed/exempt users. The hint is synchronized by ordered migration `20261022064224_onboarding_pending_hint.sql`. Pending action errors describe setup accurately, and default confirmation emails omit the absent return token.

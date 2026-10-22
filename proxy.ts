@@ -77,9 +77,9 @@ export async function proxy(request: NextRequest) {
       const next = request.nextUrl.searchParams.get('next')
       const entry = onboardingAfterMfa(next)
       try {
-        return redirectWithCookies(entry === safeReturnPath(next) ? entry : await onboardingDestination(supabase, user.id, next))
+        return redirectWithCookies(entry === safeReturnPath(next) ? entry : await onboardingDestination(supabase, user.id, next, user.app_metadata?.onboarding_pending === true))
       } catch {
-        return denyPostAction(503, 'Unable to check onboarding. Please retry.')
+        return redirectWithCookies(`/onboarding-unavailable?next=${encodeURIComponent(safeReturnPath(next))}`)
       }
     }
 
@@ -98,14 +98,14 @@ export async function proxy(request: NextRequest) {
     }
 
     // An interrupted introduction resumes only after the existing MFA gate.
-    if (!pathname.startsWith('/dashboard/onboarding')) {
+    if (!pathname.startsWith('/dashboard/onboarding') && user.app_metadata?.onboarding_pending === true) {
       try {
         const destination = await onboardingDestination(supabase, user.id, pathname + request.nextUrl.search)
         if (destination.startsWith('/dashboard/onboarding?')) {
-          return isPostAction ? denyPostAction(403) : redirectWithCookies(destination)
+          return isPostAction ? denyPostAction(403, 'Finish account setup to continue. Your input is preserved.') : redirectWithCookies(destination)
         }
       } catch {
-        return denyPostAction(503, 'Unable to check onboarding. Please retry.')
+        return isPostAction ? denyPostAction(503, 'Unable to check onboarding. Your input is preserved; please retry.') : redirectWithCookies(`/onboarding-unavailable?next=${encodeURIComponent(safeReturnPath(pathname + request.nextUrl.search))}`)
       }
     }
 
