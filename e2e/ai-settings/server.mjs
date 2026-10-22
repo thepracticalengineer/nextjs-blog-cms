@@ -85,6 +85,8 @@ async function handleRequest(request, response) {
   if (url.pathname === '/auth/v1/settings') return send(response, 200, { external: {} })
   if (!authenticated(request)) return send(response, 401, { code: 'session_not_found', message: 'No synthetic session' })
   if (url.pathname === '/auth/v1/user') return send(response, 200, user)
+  // This fixture models an established account exempt from new-user setup.
+  if (url.pathname === '/rest/v1/onboarding_progress') return send(response, 200, [])
   if (url.pathname === '/rest/v1/profiles') return send(response, 200, profile)
   if (url.pathname === '/rest/v1/llm_provider_keys') return handleProviders(request, response, url)
   send(response, 404, { message: `Unsupported synthetic request: ${request.method} ${url.pathname}` })

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, Loader2, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { mfaErrorMessage } from '@/lib/auth/mfa-errors'
-import { safeReturnPath } from '@/lib/auth/navigation'
+import { onboardingAfterMfa } from '@/features/onboarding/validation'
 import { useSignOut } from '@/components/auth/use-signout'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -71,7 +71,7 @@ export default function MfaChallenge({ next }: { next: string }) {
         if (result.error.code === 'mfa_challenge_expired') setCode('')
         throw result.error
       }
-      window.location.replace(safeReturnPath(next))
+      window.location.replace(onboardingAfterMfa(next))
       navigating = true
     } catch (error) {
       setError(mfaErrorMessage(error))

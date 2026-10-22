@@ -16,7 +16,7 @@ describe('signup confirmation boundary', () => {
   it.each(['', '&next=https://evil.invalid', '&next=/reset-password', '&next=/dashboard/admin'])('verifies only signup and uses a fixed destination (%s)', async extra => {
     const response = await GET(request(`type=signup&token_hash=hash${extra}`))
     expect(mocks.verify).toHaveBeenCalledWith({ token_hash: 'hash', type: 'signup' })
-    expect(response.headers.get('location')).toBe('https://example.com/dashboard')
+    expect(response.headers.get('location')).toBe('https://example.com/dashboard/onboarding/entry?next=%2Fdashboard')
     expect(response.headers.get('cache-control')).toBe('private, no-store')
     expect(response.headers.get('referrer-policy')).toBe('no-referrer')
     expect(mocks.exchange).not.toHaveBeenCalled()
@@ -41,4 +41,16 @@ describe('signup confirmation boundary', () => {
       expect((await GET(request('type=signup&token_hash=hash'))).headers.get('location')).toContain('invalid_confirmation')
     }
   })
+})
+
+it('uses a signed destination only for its verified account email', async () => {
+  const { signSignupReturn } = await import('@/features/onboarding/confirmation-return')
+  vi.stubEnv('AUTH_ABUSE_HMAC_KEY', 'test-only-signup-key-at-least-32-characters')
+  const token = signSignupReturn('/blog/article#comments', 'owner@example.com')!
+  mocks.verify.mockResolvedValue({ data: { session: { user: { id: 'owner', email: 'owner@example.com' } } }, error: null })
+  const response = await GET(request(`type=signup&token_hash=hash&return=${encodeURIComponent(token)}`))
+  expect(new URL(response.headers.get('location')!).searchParams.get('next')).toBe('/blog/article#comments')
+  mocks.verify.mockResolvedValue({ data: { session: { user: { id: 'other', email: 'other@example.com' } } }, error: null })
+  const mismatched = await GET(request(`type=signup&token_hash=hash&return=${encodeURIComponent(token)}`))
+  expect(new URL(mismatched.headers.get('location')!).searchParams.get('next')).toBe('/dashboard')
 })

@@ -1,3 +1,4 @@
+import { markEstablishedAccount } from '../established-account'
 import { test, expect, type Page } from '../coverage/fixture'
 import { createClient } from '@supabase/supabase-js'
 import { createHmac, randomUUID } from 'node:crypto'
@@ -29,6 +30,7 @@ test('real email recovery works in a fresh browser and rejects reused links', as
   const { data, error } = await admin().auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   if (error || !data.user) throw new Error('Unable to create disposable recovery user')
   const userId = data.user.id
+  await markEstablishedAccount(admin(), userId)
   const fresh = await browser.newContext()
   try {
     await page.goto('/login')
@@ -120,6 +122,7 @@ test('recovery storage rejects public access, expired grants, and concurrent rep
   const { data, error } = await admin().auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   if (error || !data.user) throw new Error('Unable to create disposable grant user')
   const userId = data.user.id
+  await markEstablishedAccount(admin(), userId)
   const service = admin()
   const expiredId = randomUUID()
   const id = randomUUID()
@@ -163,6 +166,7 @@ test('MFA-protected accounts verify their authenticator before resetting', async
   const { data, error } = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   if (error || !data.user) throw new Error('Unable to create disposable MFA user')
   const userId = data.user.id
+  await markEstablishedAccount(admin(), userId)
   try {
     const client = anon()
     expect((await client.auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()

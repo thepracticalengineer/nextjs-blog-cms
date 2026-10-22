@@ -69,6 +69,8 @@ export default defineConfig({
         'features/ai/components/*.tsx',
         'app/api/settings/ai-providers/route.ts',
         'lib/api-retirement.ts',
+        // private signup onboarding
+        'features/onboarding/**/*.{ts,tsx}',
         // features
         'features/auth/context/*.tsx',
         'features/auth/hooks/*.ts',

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const { getUser, getAal, getRole, createServerClient } = vi.hoisted(() => ({
-  getUser: vi.fn(), getAal: vi.fn(), getRole: vi.fn(), createServerClient: vi.fn(),
+const { getUser, getAal, getRole, getProgress, createServerClient } = vi.hoisted(() => ({
+  getUser: vi.fn(), getAal: vi.fn(), getRole: vi.fn(), getProgress: vi.fn(), createServerClient: vi.fn(),
 }))
 vi.mock('@supabase/ssr', () => ({ createServerClient }))
 import { proxy } from '@/proxy'
@@ -13,12 +13,13 @@ beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: 'user' } } })
   getAal.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null })
   getRole.mockResolvedValue({ data: { role: 'author' } })
+  getProgress.mockResolvedValue({ data: null, error: null })
   createServerClient.mockImplementation((_url, _key, options) => {
     // Simulate the SSR client's session refresh and its anti-cache headers.
     options.cookies.setAll([{ name: 'refreshed-session', value: 'new-session', options: { httpOnly: true } }], {
       'Cache-Control': 'private, no-store', Pragma: 'no-cache', Expires: '0',
     })
-    const chain = { select: () => chain, eq: () => chain, single: getRole }
+    const chain = { select: () => chain, eq: () => chain, single: getRole, maybeSingle: getProgress }
     return { auth: { getUser, mfa: { getAuthenticatorAssuranceLevel: getAal } }, from: () => chain }
   })
 })
@@ -132,4 +133,35 @@ it.each([
 it('keeps a verified factor challenge even when nextLevel is stale', async () => {
   getUser.mockResolvedValue({ data: { user: { id: 'user', factors: [{ status: 'verified' }] } } })
   expect((await proxy(request('/mfa'))).headers.get('location')).toBeNull()
+})
+
+
+describe('new-account onboarding gate', () => {
+  it('resumes pending onboarding only after MFA', async () => {
+    getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
+    expect((await proxy(request('/dashboard/posts'))).headers.get('location')).toBe('https://example.com/dashboard/onboarding?next=%2Fdashboard%2Fposts')
+    getAal.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal2' }, error: null })
+    expect((await proxy(request('/dashboard/posts'))).headers.get('location')).toContain('/mfa?next=')
+  })
+  it('fails closed without redirecting editor actions or bypassing a progress outage', async () => {
+    getProgress.mockResolvedValue({ data: null, error: { message: 'outage' } })
+    expect((await proxy(request('/dashboard/posts'))).status).toBe(503)
+    getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
+    const action = new NextRequest('https://example.com/dashboard/posts/new', { method: 'POST', headers: { 'next-action': 'save' } })
+    expect((await proxy(action)).status).toBe(403)
+  })
+  it('does not loop on onboarding and retains nested MFA entry destinations', async () => {
+    getProgress.mockResolvedValue({ data: { completed_at: null }, error: null })
+    expect((await proxy(request('/dashboard/onboarding?next=%2Fblog'))).headers.get('location')).toBeNull()
+    expect((await proxy(request('/mfa?next=%2Fdashboard%2Fonboarding%2Fentry%3Fnext%3D%252Fblog'))).headers.get('location')).toBe('https://example.com/dashboard/onboarding/entry?next=%2Fblog')
+  })
+})
+
+it('keeps onboarding answers mounted when an action loses authentication', async () => {
+  getUser.mockResolvedValue({ data: { user: null } })
+  const action = new NextRequest('https://example.com/dashboard/onboarding', { method: 'POST', headers: { 'next-action': 'save' } })
+  const response = await proxy(action)
+  expect(response.status).toBe(401)
+  expect(response.headers.get('location')).toBeNull()
+  expectRefresh(response)
 })

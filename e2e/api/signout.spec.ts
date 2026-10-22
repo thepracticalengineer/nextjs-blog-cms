@@ -1,3 +1,4 @@
+import { markEstablishedAccount } from '../established-account'
 import { test, expect, request as apiRequest } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import { authStorageKey } from '../../lib/auth/signout'
@@ -18,6 +19,7 @@ for (const scope of ['local', 'global'] as const) {
     const created = await service.auth.admin.createUser({ email, password, email_confirm: true })
     expect(created.error).toBeNull()
     const id = created.data.user!.id
+    await markEstablishedAccount(service, id)
     const jar = new Map<string, string>()
     const current = createServerClient(url, anonKey, { cookies: {
       getAll: () => [...jar].map(([name, value]) => ({ name, value })),

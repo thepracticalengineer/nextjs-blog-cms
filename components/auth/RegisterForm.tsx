@@ -5,6 +5,7 @@ import { AuthAbuseControls } from './AuthAbuseControls'
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { onboardingEntry } from '@/features/onboarding/validation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -44,6 +45,7 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
       formData.set('email', values.email)
       formData.set('password', values.password)
       formData.set('full_name', values.full_name)
+      formData.set('next', next)
       abuse.prepare(formData)
       const result = await registerAction(formData)
       abuse.receive(result)
@@ -52,7 +54,7 @@ export default function RegisterForm({ next = '/dashboard', initialError = null 
       } else if (result?.needsConfirmation) {
         setNeedsConfirmation(true)
       } else if (result?.success) {
-        router.push(next)
+        router.push(onboardingEntry(next))
         navigating = true
         return
       }

@@ -1,3 +1,4 @@
+import { markEstablishedAccount } from '../established-account'
 import { createClient } from '@supabase/supabase-js'
 import { test, expect } from '../coverage/fixture'
 import { randomUUID } from 'node:crypto'
@@ -21,6 +22,7 @@ test.beforeAll(async () => {
   const { data: account, error: accountError } = await client.auth.admin.createUser({ email, password, email_confirm: true })
   if (accountError) throw accountError
   userId = account.user.id
+  await markEstablishedAccount(client, userId)
   const { data: post, error: postError } = await client.from('posts').insert({ author_id: userId, title: 'Taxonomy fixture', slug: `taxonomy-${fixtureId}`, status: 'draft' }).select('id').single()
   if (postError) throw postError
   postId = post.id

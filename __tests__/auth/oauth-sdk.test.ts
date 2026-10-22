@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn().mockImplementation(async (input: string) => {
     if (input.endsWith('/settings')) return Response.json({ external: { google: true, github: true } })
     if (input.endsWith('/user')) return Response.json(authUser)
+    if (input.includes('/rest/v1/onboarding_progress')) return Response.json([])
     if (input.includes('/rest/v1/profiles')) return Response.json({ id: authUser.id })
     return tokenResponse()
   }))

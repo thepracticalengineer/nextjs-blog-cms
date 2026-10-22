@@ -9,6 +9,7 @@ describe('deployed signup email contract', () => {
     try {
       const template = readFileSync('supabase/templates/confirm.html', 'utf8')
       const rendered = template.replaceAll('{{ .RedirectTo }}', redirect())
+        .replaceAll('{{ .Data.signup_return }}', 'signed-return-token')
         .replaceAll('{{ .TokenHash }}', 'synthetic-hash').replaceAll('{{ .SiteURL }}', 'https://cms.example.com')
       const links = [...rendered.matchAll(/href="([^"]+)"/g)].map(match => new URL(match[1].replaceAll('&amp;', '&')))
       const confirmations = links.filter(link => link.searchParams.has('token_hash'))
@@ -16,7 +17,7 @@ describe('deployed signup email contract', () => {
       for (const link of confirmations) {
         expect(link.origin).toBe('https://cms.example.com')
         expect(link.pathname).toBe('/auth/callback')
-        expect([...link.searchParams]).toEqual([['type', 'signup'], ['token_hash', 'synthetic-hash']])
+        expect([...link.searchParams]).toEqual([['type', 'signup'], ['token_hash', 'synthetic-hash'], ['return', 'signed-return-token']])
       }
       expect(links.some(link => link.href === 'https://cms.example.com/')).toBe(true)
       expect(template).not.toMatch(/ConfirmationURL|blog\.frankmendez\.site|24 hours/)

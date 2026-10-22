@@ -5,6 +5,7 @@ import { AuthAbuseControls } from './AuthAbuseControls'
 
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { onboardingEntry } from '@/features/onboarding/validation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -48,7 +49,7 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
       if (result?.error) {
         setError(result.error)
       } else if (result?.success) {
-        router.push(next)
+        router.push(onboardingEntry(next))
         navigating = true
         return
       }

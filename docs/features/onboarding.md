@@ -1,0 +1,37 @@
+# Signup onboarding
+
+New accounts created after the signup-onboarding migration complete three setup steps after authentication, email confirmation and any enrolled MFA challenge. Existing accounts are exempt: the migration does not backfill progress rows. Completion persists across later sign-ins.
+
+## Questions and saved progress
+
+1. **About you:** prefilled full name, read-only account email and existing avatar, required experience and professional role. Full name remains part of the public author profile; experience and profession are private. Photo editing remains in Profile. Professional role never changes the CMS permission role.
+2. **Discovery:** optional referral source. **Skip this question** saves an empty answer.
+3. **Interests:** searchable active CMS tags, up to 32 selections, at least one required when tags exist. An empty taxonomy permits completion without interests. Selected chips remain removable even when search filters hide their topic. Deleted/merged topics are pruned on step navigation; any unavailable topics still selected on the Interests step must be removed and replaced before finishing.
+
+Continue, Back and Skip save the answers and current step. Refresh or a later login resumes the last saved step; changes typed since the last save are not persisted. A failed save keeps inputs mounted and offers retry. Another tab's saved changes or a changed profile name trigger a reload prompt, preventing silent overwrites. Reloading after a profile-name change prefills the latest profile name; a saved draft name is retained when the profile has not changed. The public profile name changes only in the same transaction that records completion. Preferences are not editable after completion in this release.
+
+This flow does not create usernames, change feed rankings, or subscribe/re-subscribe an email address. Newsletter signup remains a separate optional flow.
+
+## Routing and privacy
+
+The authenticated entry page and dashboard proxy route eligible incomplete accounts to `/dashboard/onboarding`, after the existing assurance check. Email/password, immediate-session signup, Google/GitHub callbacks and MFA return paths share this behavior. Dashboard requests resume setup; public browsing remains available. Password recovery keeps its separate grant and routing behavior.
+
+Completion returns to the first saved validated intended destination, defaulting to `/dashboard`. Only existing `/dashboard` and `/blog` return paths are accepted, and onboarding itself is excluded as a completion destination. Administrator pages still enforce permission checks after completion.
+
+Signup carries a signed, email-bound, 24-hour return token in the `signup_return` metadata field solely for transport in the confirmation template. The signature, expiry, verified account email and destination are revalidated by the server; editable metadata and unsigned `next` parameters never authorize a redirect. The token contains an HMAC of the email rather than the email itself. Resent signup emails reuse the saved token; missing, altered, expired or mismatched tokens fall back to `/dashboard`. It uses the existing server-only `AUTH_ABUSE_HMAC_KEY` with a separate signing domain. Rotation safely invalidates in-flight return tokens while confirmation still works. Auth token expiry remains one hour.
+
+`onboarding_progress` stores schema version, step, revision, answers, the profile-name baseline, intended destination and completion/creation/update timestamps. RLS permits only the owner with required MFA assurance to read rows. Anonymous access and direct authenticated writes are revoked; transaction functions derive identity from `auth.uid()` and enforce assurance, input validation and revision checks. No administrator UI exposes these answers. Service-role operational access remains privileged. Account deletion cascades to progress. `public_author_profiles` is unchanged and exposes none of the onboarding fields.
+
+## Migration and rollout
+
+Apply `20261022045712_signup_onboarding.sql` **before** deploying the application. The profile-insert trigger makes only future accounts eligible, including social signups; already-created unconfirmed accounts remain exempt. Deploy the updated `supabase/templates/confirm.html` to hosted **Authentication → Email Templates → Confirm signup**. It retains the fixed canonical Site URL and callback and adds `return={{ .Data.signup_return }}` to both confirmation links. No wildcard redirect allowlist entries or new environment secrets are required. Preserve the existing Site URL, redirect allowlist, OTP expiry and SMTP configuration in [signup confirmation](signup-confirmation.md).
+
+Installing only the application leaves old templates unable to preserve signup destinations; confirmation still defaults safely. Installing only the template leaves old applications ignoring the signed return token. Hosted template changes are not applied automatically by committing files. A rollback must account for progress collected since rollout; do not delete private answers or reset completed users as a deployment shortcut.
+
+## Verification
+
+- `pnpm exec vitest run __tests__/features/onboarding __tests__/auth __tests__/lib/proxy.test.ts` checks validation, routing, forms, retry, concurrent changes and authentication regressions with mocks.
+- `docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/onboarding.sql` runs rolled-back ownership, MFA, eligibility, transition, topic and atomic-completion assertions on a **disposable migrated local database only**.
+- Set dedicated test credentials in `.env.e2e`, ensure its Auth Site URL is `http://localhost:3000`, apply migrations and restart local Auth after template changes. Run `pnpm exec playwright test --config=e2e/onboarding.config.ts`. Set `E2E_MAILPIT_URL` for fresh-browser email confirmation. This suite seeds/removes only its own accounts and topic and disables external mail/webhooks/analytics in the application server. SMTP must point to local Mailpit. It covers desktop and 320px mobile login, resume, selected states, keyboard selection, failed server-action retry, completion and later sign-in. Social providers are covered by mocked callback/SDK tests, not real external OAuth consent screens.
+
+The main E2E suite's established-author, password-recovery, password-policy, logout and taxonomy fixtures are deliberately exempt; onboarding tests create fresh eligible accounts. Verify real Google/GitHub signup, hosted email delivery and deployed policies separately on a designated non-production deployment before production rollout.
