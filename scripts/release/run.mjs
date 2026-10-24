@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import { orderedHistory } from './history.mjs'
+import { orderedHistory, recoveredCommits, recoveryBoundary } from './history.mjs'
 
 const require = createRequire(import.meta.url)
 const { GitHub } = require('release-please/build/src/github.js')
@@ -27,7 +27,11 @@ export async function installAncestryHistory(github, { runGit = git, bootstrapSh
     runGit(['merge-base', '--is-ancestor', boundary, 'HEAD'])
     const range = runGit(['rev-list', '--topo-order', `${boundary}..HEAD`]).split('\n').filter(Boolean)
     const shas = [...range, boundary]
-    yield* await orderedHistory({ iterate, shas, options })
+    const recoveryVerified = range.some(sha => recoveredCommits.has(sha))
+    // Apply the historical acknowledgement only at/after the audited release.
+    // An absent/unrelated boundary fails closed before any release writes.
+    if (recoveryVerified) runGit(['merge-base', '--is-ancestor', recoveryBoundary, boundary])
+    yield* await orderedHistory({ iterate, shas, options, recoveryVerified })
   }
 }
 
