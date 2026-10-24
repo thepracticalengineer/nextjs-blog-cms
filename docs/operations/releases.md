@@ -310,3 +310,58 @@ For metadata already in main, stop automation and prepare a separately reviewed,
 evidence-backed history-handling change; neither strip all breaking text nor set
 `release-as` merely to unblock CI. No published-history rewrite is authorized by
 this recovery procedure.
+
+
+## Historical retirement recovery
+
+The October 24, 2026 Release Please run `40096050254` stopped at promotion
+`6615f109bf4d7073b7035df4f0ffded4a9110b08` (#233). Earlier squash promotions
+and syncs copied retirement declarations into new commit bodies. Subsequent
+ancestry repair also made the original retirement commit reachable outside the
+latest release's ancestor set. Changing a PR description after merge cannot
+change these commit messages; do not reset or force-push shared history.
+
+The release history adapter acknowledges exactly seven immutable historical
+commits, after verifying that the selected published release boundary contains
+v3.0.1 (`25bc3e6ceeb85fca3244964314e48c938bb4e881`):
+
+| Commit | Historical content |
+| --- | --- |
+| `57d97ea68bc4ad947cc59b83ee0a2fd2df7f9769` | Sync #234, copied retirement metadata |
+| `6615f109bf4d7073b7035df4f0ffded4a9110b08` | Promotion #233, copied retirement metadata |
+| `6d47b66f22d22a08cb2631ee4a7acd40ed1ffd81` | Sync recovery #236, copied retirement metadata |
+| `b6ad1bb93e3b4b849ef27712c01cc135ab7b2316` | Sync #227, copied retirement metadata |
+| `bb4c33a559f1592a63c0f6781d08d07ed9c5698a` | Sync recovery #226, copied retirement metadata |
+| `6925b7933f3734b6cf6fff4ce599e76ac75c3266` | Sync #221, copied retirement metadata |
+| `e26478d14c77ecfba5b776c22e238fa5b4de1224` | Original retirement #219, already shipped in v2.0.0 |
+
+These commits are omitted only from release calculation; Git history, files,
+versions and tags stay intact. Evidence: v2.0.0's changelog records the retirement,
+and `git diff e26478d v2.0.0 -- app features lib components supabase` is empty.
+The copied metadata commits contain that same retirement declaration. This is
+an explicit acknowledgement of this history, not a rule that ignores all chore
+commits or all breaking declarations. Missing API history still fails before
+filtering, and the current published boundary is always retained.
+
+The offline fixture `scripts/release/fixtures/recovery-history.json` captures
+commit messages and topological order from `v3.0.1..cf67b6d` (the failed run's
+main tip). Its file lists are synthetic for the pinned library's test harness.
+The regression uses the real pinned parser and manifest: this batch proposes
+3.1.0, retains bulk actions and onboarding, and excludes the historical retirement.
+A genuinely new breaking feature still proposes 4.0.0; a new contaminated
+promotion/sync SHA still fails before writes. The onboarding PR was merged with
+a merge commit, so its merge title and feature commit can both appear in notes;
+this recovery does not deduplicate ordinary feature merge titles.
+
+Deliver this recovery through a reviewed ordinary PR into develop, squash that
+PR, then promote develop to main with **Create a merge commit** and a concise
+non-breaking promotion description. Once the corrected runner is on main, a
+fresh main dispatch can regenerate the release PR. Review its version and notes
+before merging the release PR with **Create a merge commit**. Do not rerun an
+old workflow revision expecting it to use the new code. No release publication
+is needed to test the recovery.
+
+For future promotions and syncs, use merge commits and short descriptions that
+do not paste accumulated commit messages. If another unknown historical SHA
+fails the guard, investigate it separately; do not broaden this list automatically
+or use `release-as` to bypass the failure.
