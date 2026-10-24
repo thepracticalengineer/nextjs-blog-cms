@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { credentialFields, signupSchema } from '@/lib/auth/credentials'
 import { credentialErrorMessage } from '@/lib/auth/credential-errors'
+import { signSignupReturn } from '@/features/onboarding/confirmation-return'
 import { signupCallbackUrl } from '@/lib/auth/confirmation'
 
 export async function register(formData: FormData): Promise<AuthActionResult> {
@@ -26,10 +27,11 @@ export async function register(formData: FormData): Promise<AuthActionResult> {
     if (blocked) return blocked
     const supabase = await createClient()
     const { email, password, full_name } = parsed.data
+    const signupReturn = signSignupReturn(formData.get('next'), email)
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name }, emailRedirectTo },
+      options: { data: { full_name, ...(signupReturn ? { signup_return: signupReturn } : {}) }, emailRedirectTo },
     })
     if (error) return providerCooldown(error) ?? { error: credentialErrorMessage(error, 'signup') }
     if (!data.session) return { needsConfirmation: true }

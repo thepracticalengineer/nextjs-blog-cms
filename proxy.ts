@@ -1,3 +1,5 @@
+import { onboardingEntry, onboardingAfterMfa } from '@/features/onboarding/validation'
+import { onboardingDestination } from '@/features/onboarding/routing'
 import { checkAssurance } from '@/lib/auth/assurance'
 import { mfaDestination, safeReturnPath } from '@/lib/auth/navigation'
 import { createServerClient } from '@supabase/ssr'
@@ -54,8 +56,8 @@ export async function proxy(request: NextRequest) {
 
   // Action requests must fail in place when authentication expires. Redirecting
   // would unmount the editor before it can show retry and recovery controls.
-  function denyPostAction(status: number): NextResponse {
-    const response = NextResponse.json({ error: 'Authentication required. Your input is preserved; sign in again and retry.' }, { status })
+  function denyPostAction(status: number, error = 'Authentication required. Your input is preserved; sign in again and retry.'): NextResponse {
+    const response = NextResponse.json({ error }, { status })
     supabaseResponse.cookies.getAll().forEach(cookie => response.cookies.set(cookie.name, cookie.value, cookie))
     for (const header of ['cache-control', 'expires', 'pragma']) {
       const value = supabaseResponse.headers.get(header)
@@ -64,7 +66,7 @@ export async function proxy(request: NextRequest) {
     return response
   }
   const isPostAction = request.method === 'POST' && request.headers.has('next-action') &&
-    (pathname === '/dashboard/posts' || pathname.startsWith('/dashboard/posts/'))
+    (pathname === '/dashboard/posts' || pathname.startsWith('/dashboard/posts/') || pathname === '/dashboard/onboarding')
 
   // ── /mfa page ──────────────────────────────────────────────────────────────
   if (pathname === '/mfa') {
@@ -72,7 +74,13 @@ export async function proxy(request: NextRequest) {
 
     // Only leave the challenge when assurance is known and no step-up is needed.
     if (!await checkAssurance(supabase, user)) {
-      return redirectWithCookies(safeReturnPath(request.nextUrl.searchParams.get('next')))
+      const next = request.nextUrl.searchParams.get('next')
+      const entry = onboardingAfterMfa(next)
+      try {
+        return redirectWithCookies(entry === safeReturnPath(next) ? entry : await onboardingDestination(supabase, user.id, next, user.app_metadata?.onboarding_pending === true))
+      } catch {
+        return redirectWithCookies(`/onboarding-unavailable?next=${encodeURIComponent(safeReturnPath(next))}`)
+      }
     }
 
     return supabaseResponse
@@ -87,6 +95,18 @@ export async function proxy(request: NextRequest) {
     // allowing the request through without MFA verification.
     if (await checkAssurance(supabase, user)) {
       return isPostAction ? denyPostAction(403) : redirectWithCookies(mfaDestination(pathname + request.nextUrl.search))
+    }
+
+    // An interrupted introduction resumes only after the existing MFA gate.
+    if (!pathname.startsWith('/dashboard/onboarding') && user.app_metadata?.onboarding_pending === true) {
+      try {
+        const destination = await onboardingDestination(supabase, user.id, pathname + request.nextUrl.search)
+        if (destination.startsWith('/dashboard/onboarding?')) {
+          return isPostAction ? denyPostAction(403, 'Finish account setup to continue. Your input is preserved.') : redirectWithCookies(destination)
+        }
+      } catch {
+        return isPostAction ? denyPostAction(503, 'Unable to check onboarding. Your input is preserved; please retry.') : redirectWithCookies(`/onboarding-unavailable?next=${encodeURIComponent(safeReturnPath(pathname + request.nextUrl.search))}`)
+      }
     }
 
     // Protect /dashboard/admin — require admin role
@@ -104,7 +124,7 @@ export async function proxy(request: NextRequest) {
 
   // ── Redirect logged-in users away from auth pages ─────────────────────────
   if (user && (pathname === '/login' || pathname === '/register')) {
-    return redirectWithCookies(safeReturnPath(request.nextUrl.searchParams.get('next')))
+    return redirectWithCookies(onboardingEntry(request.nextUrl.searchParams.get('next')))
   }
 
   return supabaseResponse

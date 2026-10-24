@@ -4,7 +4,7 @@ import { authErrorMessage, OAUTH_CONTEXT_COOKIE } from '@/lib/auth/oauth'
 
 const mocks = vi.hoisted(() => ({
   get: vi.fn(), set: vi.fn(), remove: vi.fn(), commit: vi.fn(), user: vi.fn(), start: vi.fn(), exchange: vi.fn(),
-  assurance: vi.fn(), profile: vi.fn(), signOut: vi.fn(),
+  assurance: vi.fn(), progress: vi.fn(), profile: vi.fn(), signOut: vi.fn(),
 }))
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: mocks.get, set: mocks.set, delete: mocks.remove }) }))
 vi.mock('@/lib/auth/oauth-server', () => ({ createOAuthClient: async () => ({
@@ -12,7 +12,7 @@ vi.mock('@/lib/auth/oauth-server', () => ({ createOAuthClient: async () => ({
   supabase: {
     auth: { getUser: mocks.user, signInWithOAuth: mocks.start, exchangeCodeForSession: mocks.exchange,
       signOut: mocks.signOut, mfa: { getAuthenticatorAssuranceLevel: mocks.assurance } },
-    from: () => ({ select: () => ({ eq: () => ({ single: mocks.profile }) }) }),
+    from: () => ({ select: () => ({ eq: () => ({ single: mocks.profile, maybeSingle: mocks.progress }) }) }),
   },
 }) }))
 import { startOAuth } from '@/app/auth/oauth/actions'
@@ -31,6 +31,7 @@ beforeEach(() => {
   mocks.user.mockResolvedValue({ data: { user }, error: null })
   mocks.exchange.mockResolvedValue({ data: { session: { user } }, error: null })
   mocks.assurance.mockResolvedValue({ data: { currentLevel: 'aal1', nextLevel: 'aal1' }, error: null })
+  mocks.progress.mockResolvedValue({ data: null, error: null })
   mocks.profile.mockResolvedValue({ data: { id: user.id }, error: null })
   mocks.signOut.mockResolvedValue({ error: null })
   mocks.start.mockResolvedValue({ data: { flowId, url: `https://test.supabase.co/auth/v1/authorize?provider=github&redirect_to=${encodeURIComponent('https://cms.example.com/auth/callback?flow=oauth')}` }, error: null })
@@ -155,4 +156,19 @@ describe('OAuth completion', () => {
 it('requires MFA from authoritative user factors even if cached assurance understates enrollment', async () => {
   mocks.user.mockResolvedValue({ data: { user: { ...user, factors: [{ status: 'verified' }] } }, error: null })
   expect(await callback()).toBe('/mfa?next=%2Fdashboard%2Fposts')
+})
+
+it.each(['google', 'github'])('routes a new %s account into onboarding after assurance', async provider => {
+  mocks.get.mockReturnValue({ value: JSON.stringify({ provider, next: '/blog/article#comments', flowId }) })
+  mocks.user.mockResolvedValue({ data: { user: { ...user, app_metadata: { onboarding_pending: true } } }, error: null })
+  mocks.progress.mockResolvedValue({ data: { completed_at: null }, error: null })
+  expect(await callback()).toBe('/dashboard/onboarding?next=%2Fblog%2Farticle%23comments')
+  expect(mocks.commit).toHaveBeenCalledOnce()
+})
+it('does not commit an OAuth session when onboarding state cannot be read', async () => {
+  mocks.user.mockResolvedValue({ data: { user: { ...user, app_metadata: { onboarding_pending: true } } }, error: null })
+  mocks.progress.mockResolvedValue({ data: null, error: { message: 'offline' } })
+  expect(await callback()).toBe('/login?error=auth_callback_failed')
+  expect(mocks.commit).not.toHaveBeenCalled()
+  expect(mocks.signOut).toHaveBeenCalled()
 })

@@ -168,3 +168,5 @@ Queue/runner contention and dependency/image caches vary. Hosted docs/metadata,
 release, promotion and synchronization events require observation during normal
 rollout; offline tests cannot prove GitHub event delivery or rule enforcement.
 No test production release is needed or permitted for benchmarking.
+
+The full-stack job also runs `e2e/onboarding.config.ts` against the disposable Supabase stack on desktop and mobile, including local Mailpit confirmation. Its artifacts are in `test-results/onboarding/`; it does not contribute to the four coverage-summary suites. The database job runs the rolled-back `database/tests/onboarding.sql` privacy and completion assertions.

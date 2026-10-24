@@ -51,3 +51,14 @@ describe('signup server password validation', () => {
     expect(await register(form('NewPassword123!'))).toEqual({ error: 'Unable to create an account. Try again, or sign in or request a confirmation link if you already registered.' })
   })
 })
+
+it('transports an email-bound signed destination without changing the canonical callback', async () => {
+  vi.stubEnv('AUTH_ABUSE_HMAC_KEY', 'test-only-signup-key-at-least-32-characters')
+  const data = form('Password123!')
+  data.set('next', '/blog/article#comments')
+  expect(await register(data)).toEqual({ needsConfirmation: true })
+  const options = mocks.signUp.mock.calls[0][0].options
+  expect(options.emailRedirectTo).toBe('https://example.com/auth/callback?type=signup')
+  expect(options.data.signup_return).toMatch(/^[\w-]+\.[\w-]+$/)
+  expect(options.data.signup_return).not.toContain('signup@example.com')
+})

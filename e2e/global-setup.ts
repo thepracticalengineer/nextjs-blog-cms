@@ -1,3 +1,4 @@
+import { markEstablishedAccount } from './established-account'
 import { config } from 'dotenv'
 import { assertDedicatedTestProject } from './environment'
 import { createClient } from '@supabase/supabase-js'
@@ -40,6 +41,9 @@ export default async function globalSetup() {
     if (error || !data.user) throw new Error(`Failed to create test user: ${error?.message}`)
     userId = data.user.id
   }
+
+  // Main suite models an established author; onboarding has its own fresh-account suite.
+  await markEstablishedAccount(supabase, userId)
 
   // ── 2. Upsert profiles row ────────────────────────────────────────────────
   const { error: profileError } = await supabase

@@ -385,3 +385,7 @@ content/working-copy preservation, stale-row retry and emptied-page recovery.
 CI also runs `database/tests/bulk_post_retention.sql` after migrations to verify
 that deletion preserves retired AI provenance and chats, removes linked working
 copies, and rejects another author's deletion. All fixtures are rolled back.
+
+## Signup onboarding
+
+See [onboarding verification](../features/onboarding.md#verification) for focused unit, disposable SQL and real desktop/mobile signup, resume, retry and completion checks. The main established-author fixture is exempt; fresh-account tests own onboarding coverage.

@@ -1,3 +1,4 @@
+import { markEstablishedAccount } from '../established-account'
 import { test, expect, type Page } from '../coverage/fixture'
 import type { APIRequestContext } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
@@ -71,6 +72,7 @@ test('provider enforces the minimum, recent-session exception, old-session nonce
   const created = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   expect(created.error).toBeNull()
   const userId = created.data.user!.id
+  await markEstablishedAccount(service, userId)
   try {
     const auth = client()
     expect((await auth.auth.signInWithPassword({ email, password: initialPassword })).error).toBeNull()
@@ -109,6 +111,7 @@ test('account settings reject bypassed browser validation and complete an old-se
   const created = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   expect(created.error).toBeNull()
   const userId = created.data.user!.id
+  await markEstablishedAccount(service, userId)
   try {
     await page.goto('/login')
     await page.getByLabel('Email address').fill(email)
@@ -170,6 +173,7 @@ test('legacy six-character passwords still log in and can be changed in account 
   const created = await service.auth.admin.createUser({ email, password: 'InitialPassword123!', email_confirm: true })
   expect(created.error).toBeNull()
   const userId = created.data.user!.id
+  await markEstablishedAccount(service, userId)
   try {
     // Existing hashes predate the new policy; new account creation must still
     // enforce it. Mutate only this disposable local fixture to model a legacy hash.
@@ -198,6 +202,7 @@ test('MFA rejects direct AAL1 updates and account settings retain AAL2 through a
   const created = await service.auth.admin.createUser({ email, password: initialPassword, email_confirm: true })
   expect(created.error).toBeNull()
   const userId = created.data.user!.id
+  await markEstablishedAccount(service, userId)
   const jar = new Map<string, string>()
   const auth = createServerClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { cookies: {
     getAll: () => [...jar].map(([name, value]) => ({ name, value })),
