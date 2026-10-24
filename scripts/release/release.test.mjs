@@ -367,3 +367,48 @@ test('main advancing during history preflight prevents release writes', async ()
   assert.equal(f.state.creates, 0)
   assert.equal(f.state.publishAttempts, 0)
 })
+
+// Actual ancestry newly reachable after v3.0.1, captured from main cf67b6d.
+// Replay through the pinned GraphQL parser and manifest without network writes.
+for (const newBreaking of [false, true]) {
+  test(`audited historical retirement does not replay; new breaking=${newBreaking}`, async () => {
+    const f = fixture()
+    const released = '25bc3e6ceeb85fca3244964314e48c938bb4e881'
+    f.files.set('package.json', JSON.stringify({ ...JSON.parse(f.files.get('package.json')), version: '3.0.1' }))
+    f.files.set('.release-please-manifest.json', JSON.stringify({ '.': '3.0.1' }))
+    f.state.releases = [{ tagName: 'v3.0.1', sha: released }]
+    f.state.commits = JSON.parse(read('scripts/release/fixtures/recovery-history.json'))
+    if (newBreaking) f.state.commits.unshift(commit('feat!: new reader API\n\nBREAKING CHANGE: migrate reader clients', 'de'.repeat(20)))
+    const range = f.state.commits.map(c => c.sha)
+    f.state.commits.push(commit('chore(main): release 3.0.1', released))
+    await installAncestryHistory(f.github, { runGit: args => args[0] === 'merge-base' ? '' : range.join('\n') })
+    const [candidate] = await (await f.manifest()).buildPullRequests()
+    assert.equal(candidate.version.toString(), newBreaking ? '4.0.0' : '3.1.0')
+    const notes = candidate.body.toString()
+    assert.doesNotMatch(notes, /External CMS|Revoked CMS keys|retire legacy AI/)
+    assert.equal(notes.split('add bulk delete and unpublish actions').length - 1, 1)
+    assert.match(notes, /add resumable onboarding for new accounts/)
+    if (newBreaking) assert.match(notes, /migrate reader clients/)
+  })
+}
+
+for (const failure of ['new copied metadata', 'unverified release boundary']) {
+  test(`historical recovery still refuses ${failure} before writes`, async () => {
+    const f = fixture()
+    const released = '25bc3e6ceeb85fca3244964314e48c938bb4e881'
+    f.state.releases = [{ tagName: 'v3.0.1', sha: released }]
+    f.state.commits = JSON.parse(read('scripts/release/fixtures/recovery-history.json'))
+    if (failure === 'new copied metadata') f.state.commits.unshift(commit('chore(promotion): next promotion\n\nBREAKING CHANGE: copied again', 'fa'.repeat(20)))
+    const range = f.state.commits.map(c => c.sha)
+    f.state.commits.push(commit('chore(main): release 3.0.1', released))
+    await assert.rejects(runRelease({ github: f.github, config: {}, assertCurrent: async () => {}, runGit: args => {
+      if (args[0] === 'merge-base') {
+        if (args[2] === released && args[3] === released && failure === 'unverified release boundary') throw new Error('unverified recovery boundary')
+        return ''
+      }
+      return range.join('\n')
+    } }), failure === 'new copied metadata' ? /Breaking release metadata/ : /unverified recovery boundary/)
+    assert.equal(f.state.creates, 0)
+    assert.equal(f.state.publishAttempts, 0)
+  })
+}
