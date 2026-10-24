@@ -27,6 +27,8 @@
 
 ## Features
 
+- [Signup onboarding, private preferences and rollout](features/onboarding.md)
+
 - [Bulk post selection, deletion and unpublish](features/bulk-post-actions.md)
 
 - [Authentication abuse controls and deployment prerequisites](features/auth-abuse-controls.md)

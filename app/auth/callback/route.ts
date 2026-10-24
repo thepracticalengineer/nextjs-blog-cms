@@ -1,3 +1,5 @@
+import { onboardingEntry } from '@/features/onboarding/validation'
+import { readSignupReturn } from '@/features/onboarding/confirmation-return'
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { completeOAuth } from '@/app/auth/oauth/callback'
@@ -42,7 +44,7 @@ export async function GET(request: Request) {
       // A fixed type prevents signup from consuming recovery/invite tokens.
       // No PKCE verifier is required, so this works in a fresh browser too.
       const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'signup' })
-      if (!error && data.session) return redirect('/dashboard')
+      if (!error && data.session) return redirect(onboardingEntry(readSignupReturn(searchParams.get('return'), data.session.user.email)))
     } catch {
       // Never expose tokens or provider descriptions in the destination URL.
     }

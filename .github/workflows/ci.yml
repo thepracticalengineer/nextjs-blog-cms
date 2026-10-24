@@ -125,6 +125,8 @@ jobs:
           node --input-type=module -e 'import { appendFileSync } from "node:fs"; import { randomBytes } from "node:crypto"; appendFileSync(process.env.GITHUB_ENV, "LLM_KEY_ENCRYPTION_SECRET=" + randomBytes(16).toString("hex") + "\n")'
       - name: Run API and browser tests
         run: pnpm run test:e2e
+      - name: Verify signup onboarding on desktop and mobile
+        run: pnpm exec playwright test --config=e2e/onboarding.config.ts
       - name: Verify publication of URLs created after a production build
         run: |
           pnpm run build
@@ -260,6 +262,8 @@ jobs:
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/bulk_post_retention.sql
       - name: Verify MFA database and storage boundaries
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/mfa_assurance.sql
+      - name: Verify private onboarding progress and completion
+        run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/onboarding.sql
       - name: Verify author profile database privacy
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/public_author_profiles.sql
       - name: Verify private draft recovery permissions

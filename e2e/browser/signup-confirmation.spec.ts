@@ -65,7 +65,7 @@ for (const freshBrowser of [false, true]) {
         expect((await service().auth.admin.getUserById(userId)).data.user?.email_confirmed_at).toBeFalsy()
       }
       await confirmationPage.goto(link)
-      await expect(confirmationPage).toHaveURL(/\/dashboard$/)
+      await expect(confirmationPage).toHaveURL(/\/dashboard\/onboarding\?next=%2Fdashboard$/)
       expect((await service().auth.admin.getUserById(userId)).data.user?.email_confirmed_at).toBeTruthy()
       expect((await service().from('password_recovery_grants').select('id').eq('user_id', userId)).data).toEqual([])
 
@@ -94,7 +94,7 @@ test('signup without a redirect option still emails a usable canonical confirmat
   if (error || !data.user) throw new Error('Unable to create disposable fallback signup')
   try {
     await page.goto(await confirmationLink(request, email))
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/dashboard\/onboarding\?next=%2Fdashboard$/)
     expect((await service().auth.admin.getUserById(data.user.id)).data.user?.email_confirmed_at).toBeTruthy()
   } finally { expect((await service().auth.admin.deleteUser(data.user.id)).error).toBeNull() }
 })
@@ -129,7 +129,7 @@ test('expired signup email offers neutral resend, enforces cooldown and accepts 
     expect((await anon.auth.resend({ type: 'signup', email })).error?.code).toBe('over_email_send_rate_limit')
     const newLink = await confirmationLink(request, email, oldLink)
     await page.goto(newLink)
-    await expect(page).toHaveURL(/\/dashboard$/)
+    await expect(page).toHaveURL(/\/dashboard\/onboarding\?next=%2Fdashboard$/)
   } finally { expect((await service().auth.admin.deleteUser(userId)).error).toBeNull() }
 })
 

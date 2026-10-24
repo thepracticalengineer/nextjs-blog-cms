@@ -1,3 +1,4 @@
+import { onboardingDestination } from '@/features/onboarding/routing'
 import { cookies } from 'next/headers'
 import { checkAssurance } from '@/lib/auth/assurance'
 import { createOAuthClient } from '@/lib/auth/oauth-server'
@@ -41,9 +42,10 @@ export async function completeOAuth(params: URLSearchParams): Promise<string> {
       const { data: profile, error: profileError } = await client.supabase.from('profiles').select('id').eq('id', user.id).single()
       if (profileError || !profile) return failure('oauth_profile')
     }
+    const destination = needsMfa ? mfaDestination(next) : await onboardingDestination(client.supabase, user.id, next, user.app_metadata?.onboarding_pending === true)
     client.commit()
     accepted = true
-    return needsMfa ? mfaDestination(next) : next
+    return destination
   } catch {
     return failure('auth_callback_failed')
   } finally {
