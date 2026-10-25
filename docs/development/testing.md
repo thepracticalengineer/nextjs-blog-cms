@@ -408,4 +408,6 @@ whole link, while a text selection changes only the selected text. With an empty
 selection outside a link, Apply inserts the URL as linked text. Cancel, Escape,
 backdrop and close-button dismissal leave content unchanged. Focus returns to the
 Link toolbar button. If content changes while the dialog is open, reopen it before
-applying to avoid modifying a stale selection.
+applying to avoid modifying a stale selection. The stale-document alert remains
+visible and disables Apply without marking the URL field invalid. The image and
+link dialog suites share `e2e/dialog-harness-config.ts` and its Vite configuration.
