@@ -172,3 +172,10 @@ it('does not commit an OAuth session when onboarding state cannot be read', asyn
   expect(mocks.commit).not.toHaveBeenCalled()
   expect(mocks.signOut).toHaveBeenCalled()
 })
+
+it('gives recovery guidance for unexpected Auth failures without claiming a collision', async () => {
+  const destination = await callback('error=server_error&error_code=unexpected_failure&error_description=Multiple+accounts+secret')
+  expect(destination).toBe('/login?error=auth_callback_failed')
+  expect(authErrorMessage('auth_callback_failed')).toContain('contact an administrator')
+  expect(authErrorMessage('auth_callback_failed')).not.toContain('browser where you started')
+})
