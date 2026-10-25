@@ -9,7 +9,7 @@ export function isOAuthProvider(value: unknown): value is OAuthProvider {
 
 export const AUTH_ERRORS = {
   invalid_confirmation: 'This confirmation link is missing, invalid, expired, or already used. If you already confirmed your email, sign in below. Otherwise, request a new confirmation link.',
-  auth_callback_failed: 'We could not finish signing you in. Use your existing sign-in method, or contact an administrator if this continues. If you use a password, you can reset it using Forgot password.',
+  auth_callback_failed: 'We could not finish signing you in. Try again, use your existing sign-in method, or contact an administrator if this continues. If you use a password, you can reset it using Forgot password.',
   oauth_cancelled: 'Sign-in was cancelled or permission was denied. Try again and allow access to your email, or use another sign-in method.',
   oauth_unavailable: 'This sign-in provider is unavailable. Try again later or use email and password.',
   oauth_email: 'A verified email address is required. Verify an email with your provider, allow email access, and try again.',

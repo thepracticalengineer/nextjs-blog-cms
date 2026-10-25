@@ -196,3 +196,9 @@ user IDs, profiles, roles, posts and usable sign-in methods; do not delete
 identities or merge accounts speculatively. This UI handling does not repair
 hosted account conflicts. Validate recovery with dedicated non-production accounts
 and keep #150 open until its hosted linking and recovery checks are complete.
+
+Failure redirects retain the validated destination from a valid OAuth initiation
+context, including provider errors before code exchange. Missing or invalid
+contexts cannot supply a return destination. Generic failures also offer retry
+for transient outages and first-time sign-ins, without promising that retry
+resolves an account conflict. Bare `#error` and `#error_code` anchors are ignored.

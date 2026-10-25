@@ -389,3 +389,8 @@ copies, and rejects another author's deletion. All fixtures are rolled back.
 ## Signup onboarding
 
 See [onboarding verification](../features/onboarding.md#verification) for focused unit, disposable SQL and real desktop/mobile signup, resume, retry and completion checks. The main established-author fixture is exempt; fresh-account tests own onboarding coverage.
+
+The isolated auth-abuse and SEO fixtures use distinct loopback ports 15496 and
+15494, respectively, below Linux's usual ephemeral port range. This avoids the
+54996 bind collision observed in both CI groups; keep fixture server, test control
+URLs and application environment URLs synchronized when changing these ports.

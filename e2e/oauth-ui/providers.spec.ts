@@ -60,9 +60,9 @@ for (const [code, message] of [
 }
 
 test('login preserves ordinary fragments', async ({ page }) => {
-  await page.goto('/login#ordinary-anchor')
+  await page.goto('/login#error')
   await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeEnabled()
-  await expect(page).toHaveURL(/#ordinary-anchor$/)
+  await expect(page).toHaveURL(/#error$/)
 })
 
 test('provider fragment survives the server callback and is safely removed on login', async ({ page }) => {
@@ -72,9 +72,9 @@ test('provider fragment survives the server callback and is safely removed on lo
     callback.hash = 'error=server_error&error_code=unexpected_failure&error_description=DO_NOT_REFLECT_PROVIDER_TEXT'
     await route.fulfill({ status: 302, headers: { location: callback.toString() } })
   })
-  await page.goto('/login')
+  await page.goto('/login?next=%2Fblog%2Fexample')
   await page.getByRole('button', { name: 'Continue with GitHub' }).click()
-  await expect(page).toHaveURL(/\/login\?error=auth_callback_failed&next=%2Fdashboard$/)
+  await expect(page).toHaveURL(/\/login\?error=auth_callback_failed&next=%2Fblog%2Fexample$/)
   await expect(page.locator('[data-slot="alert"]')).toContainText('contact an administrator')
   await expect(page.locator('[data-slot="alert"]')).not.toContainText('DO_NOT_REFLECT_PROVIDER_TEXT')
 })

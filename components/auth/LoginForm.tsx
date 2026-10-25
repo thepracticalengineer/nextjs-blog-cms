@@ -35,7 +35,7 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
     // Fragments never reach the server callback. Treat their codes as display
     // hints only: never exchange tokens or infer a collision from provider text.
     const fragment = new URLSearchParams(window.location.hash.slice(1))
-    if (!fragment.has('error') && !fragment.has('error_code')) return
+    if (!fragment.get('error') && !fragment.get('error_code')) return
     const query = new URLSearchParams({
       error: oauthErrorCode(fragment.get('error_code') ?? fragment.get('error') ?? undefined),
       next: safeReturnPath(next),

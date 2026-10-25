@@ -13,13 +13,15 @@ export async function completeOAuth(params: URLSearchParams): Promise<string> {
   let client: Awaited<ReturnType<typeof createOAuthClient>> | undefined
   let accepted = false
   let exchanged = false
-  const failure = (code: string) => `/login?error=${code}`
+  let returnPath: string | undefined
+  const failure = (code: string) => `/login?error=${code}${returnPath ? `&next=${encodeURIComponent(returnPath)}` : ''}`
   try {
     if (!raw) return failure('oauth_expired')
     const context = JSON.parse(raw)
     if (!isOAuthProvider(context.provider) || typeof context.flowId !== 'string' || !/^[a-f0-9]{32}$/.test(context.flowId)) {
       return failure('oauth_expired')
     }
+    returnPath = safeReturnPath(context.next)
     if (params.has('error') || params.has('error_code')) return failure(oauthErrorCode(params.get('error_code') ?? params.get('error') ?? undefined))
     const code = params.get('code')
     if (!code || params.has('type') || params.has('token_hash')) return failure('auth_callback_failed')
