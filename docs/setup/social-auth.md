@@ -172,33 +172,3 @@ References: [Google](https://supabase.com/docs/guides/auth/social-login/auth-goo
 [GitHub](https://supabase.com/docs/guides/auth/social-login/auth-github),
 [identity linking](https://supabase.com/docs/guides/auth/auth-identity-linking),
 [PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow).
-
-### OAuth failure recovery (#150)
-
-Login normalizes OAuth error fragments to fixed application error codes and replaces
-that history entry, retaining only a validated return destination. Provider
-messages and tokens are not forwarded or rendered. Ordinary page anchors are
-unchanged. Fragment codes are untrusted display hints, never evidence of account
-ownership or permission to link accounts.
-
-An `unexpected_failure` remains a generic failure: it can indicate an account
-linking collision or an unrelated Auth error. The message directs users to an
-existing sign-in method or an administrator; password users can use Forgot
-password. Retrying in the same browser is not prescribed as an account-conflict
-remedy. Recognized identity errors retain the account-recovery guidance.
-
-For administrators, correlate the failed attempt with hosted Auth logs before
-remediation. Check all verified emails returned by the provider, not just the
-primary email: different emails may match different existing users even when
-there are no duplicate email rows. Review the linking domain, provider settings,
-exact application redirect allowlist and affected identities privately. Preserve
-user IDs, profiles, roles, posts and usable sign-in methods; do not delete
-identities or merge accounts speculatively. This UI handling does not repair
-hosted account conflicts. Validate recovery with dedicated non-production accounts
-and keep #150 open until its hosted linking and recovery checks are complete.
-
-Failure redirects retain the validated destination from a valid OAuth initiation
-context, including provider errors before code exchange. Missing or invalid
-contexts cannot supply a return destination. Generic failures also offer retry
-for transient outages and first-time sign-ins, without promising that retry
-resolves an account conflict. Bare `#error` and `#error_code` anchors are ignored.

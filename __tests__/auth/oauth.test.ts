@@ -105,7 +105,7 @@ describe('OAuth completion', () => {
     expect(mocks.exchange).not.toHaveBeenCalled()
   })
   it.each(['error=access_denied', 'error_code=access_denied&error_description=secret'])('handles cancellation without exchanging a code: %s', async query => {
-    expect(await callback(query)).toBe('/login?error=oauth_cancelled&next=%2Fdashboard%2Fposts')
+    expect(await callback(query)).toBe('/login?error=oauth_cancelled')
     expect(mocks.exchange).not.toHaveBeenCalled()
   })
   it.each(['code=valid&type=recovery', 'code=valid&token_hash=hash', ''])('never treats a recovery/invalid request as OAuth: %s', async query => {
@@ -146,7 +146,7 @@ describe('OAuth completion', () => {
   })
   it('handles thrown exchange errors safely', async () => {
     mocks.exchange.mockRejectedValue(new Error('secret'))
-    expect(await callback()).toBe('/login?error=auth_callback_failed&next=%2Fdashboard%2Fposts')
+    expect(await callback()).toBe('/login?error=auth_callback_failed')
     expect(mocks.commit).not.toHaveBeenCalled()
     expect(mocks.signOut).not.toHaveBeenCalled()
   })
@@ -168,24 +168,7 @@ it.each(['google', 'github'])('routes a new %s account into onboarding after ass
 it('does not commit an OAuth session when onboarding state cannot be read', async () => {
   mocks.user.mockResolvedValue({ data: { user: { ...user, app_metadata: { onboarding_pending: true } } }, error: null })
   mocks.progress.mockResolvedValue({ data: null, error: { message: 'offline' } })
-  expect(await callback()).toBe('/login?error=auth_callback_failed&next=%2Fdashboard%2Fposts')
+  expect(await callback()).toBe('/login?error=auth_callback_failed')
   expect(mocks.commit).not.toHaveBeenCalled()
   expect(mocks.signOut).toHaveBeenCalled()
-})
-
-it('gives recovery guidance for unexpected Auth failures without claiming a collision', async () => {
-  const destination = await callback('error=server_error&error_code=unexpected_failure&error_description=Multiple+accounts+secret')
-  expect(destination).toBe('/login?error=auth_callback_failed&next=%2Fdashboard%2Fposts')
-  expect(authErrorMessage('auth_callback_failed')).toContain('contact an administrator')
-  expect(authErrorMessage('auth_callback_failed')).not.toContain('browser where you started')
-})
-
-it('retains a validated destination after provider failure', async () => {
-  const result = new URL(await callback('error=access_denied'), 'https://cms.example.com')
-  expect(result.searchParams.get('next')).toBe('/dashboard/posts')
-})
-it('does not retain an external destination after failure', async () => {
-  mocks.get.mockReturnValue({ value: JSON.stringify({ provider: 'github', next: 'https://evil.invalid', flowId }) })
-  const result = new URL(await callback('error=access_denied'), 'https://cms.example.com')
-  expect(result.searchParams.get('next')).toBe('/dashboard')
 })

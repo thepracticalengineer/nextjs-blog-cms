@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 
-const fixture = 'http://127.0.0.1:15496'
+const fixture = 'http://127.0.0.1:54996'
 test.beforeEach(async ({ page }) => {
   await page.route('**/*', route => {
     const url = new URL(route.request().url())
