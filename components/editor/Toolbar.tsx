@@ -8,6 +8,7 @@ import {
   List, ListOrdered, ListTodo, Quote, Code,
   Link, Image as ImageIcon, Minus,
 } from 'lucide-react'
+import { LinkDialog } from './LinkDialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
@@ -194,6 +195,8 @@ function LineHeightMenu({ editor, activeLineHeight }: LineHeightMenuProps) {
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 export function Toolbar({ editor, onImage }: ToolbarProps) {
+  const [linkOpen, setLinkOpen] = useState(false)
+  const linkTriggerRef = useRef<HTMLButtonElement>(null)
   const [colorPanelOpen, setColorPanelOpen] = useState(false)
   const colorTriggerRef = useRef<HTMLButtonElement | null>(null)
   const [initialSection, setInitialSection] = useState<'text' | 'highlight'>('text')
@@ -210,8 +213,7 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
   }) })
 
   function addLink() {
-    const url = window.prompt('Enter URL')
-    if (url) editor.chain().focus().setLink({ href: url }).run()
+    setLinkOpen(true)
   }
 
 
@@ -227,6 +229,7 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
   return (
     <fieldset aria-label="Content formatting" className="min-w-0 flex flex-wrap items-center gap-1 p-2 border-b bg-muted/30">
 
+      {linkOpen && <LinkDialog editor={editor} triggerRef={linkTriggerRef} onClose={() => setLinkOpen(false)} />}
       {/* Group 1: Heading dropdown */}
       <DropdownMenu>
         <DropdownMenuTrigger aria-label={`Paragraph style: ${getHeadingLabel(editor)}`} className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary inline-flex items-center justify-between h-8 px-2 text-xs min-w-[90px] rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground">
@@ -322,7 +325,7 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       {/* Group 6: Insert */}
-      <Button type="button" variant={editor.isActive('link') ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" onClick={addLink} title="Link" aria-label="Link" aria-pressed={editor.isActive('link')}>
+      <Button ref={linkTriggerRef} aria-haspopup="dialog" aria-expanded={linkOpen} type="button" variant={editor.isActive('link') ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" onClick={addLink} title="Link" aria-label="Link" aria-pressed={editor.isActive('link')}>
         <Link className="h-4 w-4" />
       </Button>
       <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onImage} title="Insert or edit image" aria-label="Insert or edit image">

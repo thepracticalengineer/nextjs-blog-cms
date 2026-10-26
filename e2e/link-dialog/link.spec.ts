@@ -1,0 +1,80 @@
+import { test, expect } from '@playwright/test'
+
+test.beforeEach(async ({ page }) => {
+  await page.goto('/e2e/link-dialog/fixture.html')
+  page.on('dialog', async dialog => { await dialog.dismiss() })
+})
+
+test('inserts into preserved selection and updates the whole existing link', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select text', exact: true }).click()
+  await page.getByRole('button', { name: 'Link', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Insert link' })
+  await expect(dialog).toBeVisible()
+  await expect(page.getByLabel('URL', { exact: true })).toBeFocused()
+  await page.getByLabel('URL', { exact: true }).fill('https://example.com/article')
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.locator('.tiptap a').first()).toHaveText('Selected text')
+  await expect(page.locator('.tiptap a').first()).toHaveAttribute('href', 'https://example.com/article')
+  await expect(page.getByRole('button', { name: 'Link', exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'Select existing link' }).click()
+  await page.getByRole('button', { name: 'Link', exact: true }).click()
+  await expect(page.getByLabel('URL', { exact: true })).toHaveValue('https://old.example/')
+  await page.getByLabel('URL', { exact: true }).fill('mailto:hello@example.com')
+  await page.getByLabel('URL', { exact: true }).press('Enter')
+  await expect(page.locator('.tiptap a').last()).toHaveAttribute('href', 'mailto:hello@example.com')
+  await expect(page.locator('.tiptap a').last()).toHaveText('existing link')
+})
+
+test('validation and every dismissal preserve content; keyboard and narrow layout work', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 })
+  await page.getByRole('button', { name: 'Select text', exact: true }).click()
+  const original = await page.locator('.tiptap').innerHTML()
+  const trigger = page.getByRole('button', { name: 'Link', exact: true })
+  await trigger.focus()
+  await trigger.press('Enter')
+  for (const value of ['', 'not a url', 'javascript:alert(1)', 'tel:123', 'data:text/html,test', '/relative', 'mailto:']) {
+    await page.getByLabel('URL', { exact: true }).fill(value)
+    await page.getByRole('button', { name: 'Apply', exact: true }).click()
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.locator('.tiptap')).toHaveJSProperty('innerHTML', original)
+  }
+  await page.getByLabel('URL', { exact: true }).press('Shift+Tab')
+  await expect(page.getByRole('button', { name: 'Close', exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(page.getByLabel('URL', { exact: true })).toBeFocused()
+  const bounds = await page.getByRole('dialog').boundingBox()
+  expect(bounds!.x).toBeGreaterThanOrEqual(0)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(320)
+  for (const dismissal of ['Escape', 'Cancel', 'Close', 'backdrop']) {
+    if (dismissal === 'Escape') await page.keyboard.press('Escape')
+    else if (dismissal === 'backdrop') await page.mouse.click(2, 2)
+    else await page.getByRole('button', { name: dismissal, exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(page.locator('.tiptap')).toHaveJSProperty('innerHTML', original)
+    await expect(trigger).toBeFocused()
+    if (dismissal !== 'backdrop') await trigger.click()
+  }
+})
+
+test('inserts URL text at an empty selection', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select caret' }).click()
+  await page.getByRole('button', { name: 'Link', exact: true }).click()
+  await page.getByLabel('URL', { exact: true }).fill('http://example.com/')
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.locator('.tiptap a').first()).toHaveText('http://example.com/')
+})
+
+test('refuses to apply a stale selection after external content replacement', async ({ page }) => {
+  await page.getByRole('button', { name: 'Select text', exact: true }).click()
+  await page.getByRole('button', { name: 'Link', exact: true }).click()
+  await page.getByLabel('URL', { exact: true }).fill('https://example.com/')
+  await page.evaluate(() => window.dispatchEvent(new Event('replace-content')))
+  await page.getByRole('button', { name: 'Apply', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveText('The document changed. Cancel and select the text again.')
+  await expect(page.getByLabel('URL', { exact: true })).toHaveAttribute('aria-invalid', 'false')
+  await page.getByLabel('URL', { exact: true }).fill('https://another.example/')
+  await expect(page.getByRole('alert')).toHaveText('The document changed. Cancel and select the text again.')
+  await expect(page.getByRole('button', { name: 'Apply', exact: true })).toBeDisabled()
+  await expect(page.locator('.tiptap')).toHaveText('Externally replaced content')
+  await expect(page.locator('.tiptap a')).toHaveCount(0)
+})

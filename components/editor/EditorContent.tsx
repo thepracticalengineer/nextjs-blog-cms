@@ -1,3 +1,4 @@
+import { parseAllowedLinkUrl } from '@/lib/editor-link-url'
 import { imageDimension } from '@/features/posts/media/validation'
 
 interface TipTapMark {
@@ -20,7 +21,6 @@ function sanitizeLineHeight(value: unknown): string | null {
   return String(n)
 }
 const ALLOWED_ALIGNS = ['left', 'center', 'right', 'justify']
-const ALLOWED_LINK_PROTOCOLS = ['http:', 'https:', 'mailto:']
 const ALLOWED_SRC_PROTOCOLS = ['http:', 'https:']
 
 function sanitizeColor(value: unknown): string | null {
@@ -31,13 +31,7 @@ function sanitizeColor(value: unknown): string | null {
 }
 
 function sanitizeHref(href: unknown): string | null {
-  if (typeof href !== 'string') return null
-  try {
-    const url = new URL(href)
-    return ALLOWED_LINK_PROTOCOLS.includes(url.protocol) ? url.href : null
-  } catch {
-    return null
-  }
+  return parseAllowedLinkUrl(href)?.href ?? null
 }
 
 function sanitizeSrc(src: unknown): string | null {

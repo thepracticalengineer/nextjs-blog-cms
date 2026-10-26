@@ -16,6 +16,7 @@ export default defineConfig({
       include: [
         // lib core logic
         'lib/utils.ts',
+        'lib/editor-link-url.ts',
         'lib/analytics/**/*.ts',
         'components/analytics/*.tsx',
         'components/newsletter/SubscribeForm.tsx',
