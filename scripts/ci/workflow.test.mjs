@@ -31,7 +31,7 @@ test('database assertions, full-stack publication and isolated groups remain ind
   assert.equal(ci.jobs.browsers.strategy['fail-fast'], false)
   assert.deepEqual(ci.jobs.browsers.strategy.matrix.group, ['harness', 'auth', 'content'])
   const browser = read('scripts/ci/browser.mjs')
-  for (const config of ['analytics', 'ai-settings', 'bulk-posts', 'oauth-ui', 'auth-abuse', 'mfa', 'image-dialog', 'comment-reactions', 'article-reactions', 'homepage', 'seo']) assert.ok(browser.includes(`'${config}'`), config)
+  for (const config of ['analytics', 'ai-settings', 'bulk-posts', 'oauth-ui', 'auth-abuse', 'mfa', 'image-dialog', 'link-dialog', 'comment-reactions', 'article-reactions', 'homepage', 'seo']) assert.ok(browser.includes(`'${config}'`), config)
 })
 test('split reports are merged and republished under the existing aggregate name', () => {
   const steps = ci.jobs.coverage.steps
