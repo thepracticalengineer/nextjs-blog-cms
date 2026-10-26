@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.2](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.1...v3.1.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **posts:** display full article cover images ([02cde8d](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/02cde8d4f4536b91e374ff81bf384bb991959b63))
+* **posts:** display full article cover images ([13a30a6](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/13a30a618adb689a3ff748e9ff19ebc15605f3c2))
+
 ## [3.1.1](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.0...v3.1.1) (2026-10-26)
 
 
