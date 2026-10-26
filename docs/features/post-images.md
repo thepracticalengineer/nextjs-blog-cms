@@ -89,7 +89,9 @@ Legacy inline HTTP/HTTPS images remain renderable for compatibility.
 
 TipTap images store alt text and intrinsic width/height; reader preview and public
 article preserve those dimensions and use lazy loading and asynchronous decoding.
-Cover containers reserve responsive layout space and use the edited description,
+Article and reader-preview covers show the entire image without cropping, preserving
+its aspect ratio within the reserved responsive space. Listing thumbnails still crop
+to fill their cards. Cover containers use the edited description,
 falling back to the post title when none is saved. Newsletter covers use the same
 description and fallback.
 Dashboard saves and recovery copies preserve cover descriptions (`image_alt`)
