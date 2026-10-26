@@ -389,3 +389,25 @@ copies, and rejects another author's deletion. All fixtures are rolled back.
 ## Signup onboarding
 
 See [onboarding verification](../features/onboarding.md#verification) for focused unit, disposable SQL and real desktop/mobile signup, resume, retry and completion checks. The main established-author fixture is exempt; fresh-account tests own onboarding coverage.
+
+The isolated auth-abuse and SEO fixtures use distinct loopback ports 15496 and
+15494, respectively, below Linux's usual ephemeral port range. This avoids the
+54996 bind collision observed in both CI groups; keep fixture server, test control
+URLs and application environment URLs synchronized when changing these ports.
+
+## Editor link dialog
+
+Run `pnpm exec playwright test --config=e2e/link-dialog.config.ts` for the real
+TipTap toolbar and shared dialog on desktop and mobile, without Auth, database,
+or external services. Coverage includes selection preservation, whole-link updates
+from a caret, URL validation, cancellation/dismissal, keyboard focus, and 320px layout.
+
+The Link action accepts absolute `http`, `https`, and `mailto` URLs, matching the
+public renderer. It prefills an existing link; a caret inside a link updates that
+whole link, while a text selection changes only the selected text. With an empty
+selection outside a link, Apply inserts the URL as linked text. Cancel, Escape,
+backdrop and close-button dismissal leave content unchanged. Focus returns to the
+Link toolbar button. If content changes while the dialog is open, reopen it before
+applying to avoid modifying a stale selection. The stale-document alert remains
+visible and disables Apply without marking the URL field invalid. The image and
+link dialog suites share `e2e/dialog-harness-config.ts` and its Vite configuration.

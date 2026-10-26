@@ -3,7 +3,9 @@
 import { useAuthAbuse } from './use-auth-abuse'
 import { AuthAbuseControls } from './AuthAbuseControls'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { oauthErrorCode } from '@/lib/auth/oauth'
+import { safeReturnPath } from '@/lib/auth/navigation'
 import { useRouter } from 'next/navigation'
 import { onboardingEntry } from '@/features/onboarding/validation'
 import { useForm } from 'react-hook-form'
@@ -28,6 +30,20 @@ export default function LoginForm({ next = '/dashboard', initialError = null }: 
   const [loading, setLoading] = useState(false)
   const [oauthPending, setOauthPending] = useState(false)
   const submitting = useRef(false)
+
+  useEffect(() => {
+    // Fragments never reach the server callback. Treat their codes as display
+    // hints only: never exchange tokens or infer a collision from provider text.
+    const fragment = new URLSearchParams(window.location.hash.slice(1))
+    if (!fragment.get('error') && !fragment.get('error_code')) return
+    const query = new URLSearchParams({
+      error: oauthErrorCode(fragment.get('error_code') ?? fragment.get('error') ?? undefined),
+      next: safeReturnPath(next),
+    })
+    // A fresh server render picks up the fixed message and replaces the error
+    // URL in history. No provider description or token is forwarded.
+    window.location.replace(`/login?${query}`)
+  }, [next])
 
   const { register, handleSubmit, clearErrors, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
