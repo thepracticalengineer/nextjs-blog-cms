@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.1.1](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.0...v3.1.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **auth:** normalize OAuth error returns and clarify recovery ([7ad87fc](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/7ad87fc6390a7a620086a3ed171654700bda065b))
+* **auth:** normalize OAuth error returns and clarify recovery ([fb0da84](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/fb0da8450a47525d631ca50028b49df5ba5c77fa))
+* **auth:** preserve failed OAuth destinations and isolate test ports ([17b43cd](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/17b43cd986289aa36b140c652313a492baa52086))
+* **editor:** replace native link prompt with accessible dialog ([#255](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/255)) ([4745837](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/47458378796943fbe1fa4c57e9acc4a49ff89285))
+
 ## [3.1.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.0.1...v3.1.0) (2026-10-24)
 
 
