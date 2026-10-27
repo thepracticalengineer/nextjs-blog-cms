@@ -1,5 +1,6 @@
 /** Shared by insertion, persistence, HTML import and public rendering. No network fetches. */
 export const VIDEO_URL_ERROR = 'Enter a YouTube watch or youtu.be link, or a direct HTTPS .mp4 or .webm URL.'
+export const VIDEO_CONTENT_ERROR = 'This article contains an unsupported video. Reinsert it using Insert or edit video with a YouTube link or direct HTTPS MP4/WebM URL. Legacy video markup with source children is not supported.'
 export const VIDEO_HELP = 'Playback depends on the host and browser. If unavailable, open the source; YouTube owners may disable embedding.'
 export type VideoUrl = { type: 'youtube' | 'video'; src: string; source: string }
 
@@ -32,7 +33,7 @@ export function parseYoutubeEmbed(value: unknown): VideoUrl | null {
 
 export function videoAttributes(video: VideoUrl): Record<string, string> {
   return video.type === 'youtube'
-    ? { src: video.src, title: 'YouTube video player', allowfullscreen: '', referrerpolicy: 'strict-origin-when-cross-origin', class: 'article-video-player' }
+    ? { src: video.src, title: 'YouTube video player', loading: 'lazy', allow: 'encrypted-media; picture-in-picture; fullscreen', allowfullscreen: '', referrerpolicy: 'strict-origin-when-cross-origin', class: 'article-video-player' }
     : { src: video.src, controls: '', preload: 'none', playsinline: '', title: 'Video player', class: 'article-video-player' }
 }
 

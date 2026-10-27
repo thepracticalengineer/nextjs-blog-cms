@@ -4,7 +4,7 @@ import { parseVideoUrl, parseYoutubeEmbed, videoAttributes, hasValidVideoNodes }
 export function sanitizeEditorHtml(html: string): string {
   return sanitizeHtml(html, {
     allowedTags: [...sanitizeHtml.defaults.allowedTags, 'img', 'input', 's', 'u', 'mark', 'iframe', 'video'],
-    allowedAttributes: { '*': ['class', 'style'], a: ['href', 'rel'], img: ['src', 'alt', 'width', 'height', 'loading', 'decoding'], input: ['type', 'disabled', 'checked'], iframe: ['src', 'title', 'allowfullscreen', 'referrerpolicy', 'class'], video: ['src', 'controls', 'preload', 'playsinline', 'title', 'class'] },
+    allowedAttributes: { '*': ['class', 'style'], a: ['href', 'rel', 'target'], img: ['src', 'alt', 'width', 'height', 'loading', 'decoding'], input: ['type', 'disabled', 'checked'], iframe: ['src', 'title', 'allowfullscreen', 'referrerpolicy', 'class', 'loading', 'allow'], video: ['src', 'controls', 'preload', 'playsinline', 'title', 'class'] },
     allowedStyles: { '*': {
       color: [/^#[a-f\d]{3,8}$/i, /^rgba?\([\d\s.,]+\)$/],
       background: [/^#[a-f\d]{3,8}$/i],
@@ -25,7 +25,10 @@ export function sanitizeEditorHtml(html: string): string {
     exclusiveFilter: frame => ['iframe', 'video'].includes(frame.tag) && !frame.attribs.src,
     transformTags: {
       iframe: (_tag, attrs) => { const video = parseYoutubeEmbed(attrs.src); return { tagName: 'iframe', attribs: video ? videoAttributes(video) : {} } },
-      video: (_tag, attrs) => { const video = parseVideoUrl(attrs.src); return { tagName: 'video', attribs: video?.type === 'video' ? videoAttributes(video) : {} } }, a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }), input: sanitizeHtml.simpleTransform('input', { type: 'checkbox', disabled: 'disabled' }) },
+      video: (_tag, attrs) => { const video = parseVideoUrl(attrs.src); return { tagName: 'video', attribs: video?.type === 'video' ? videoAttributes(video) : {} } }, a: (_tag, attrs) => {
+        const { target, ...rest } = attrs
+        return { tagName: 'a', attribs: { ...rest, rel: 'noopener noreferrer', ...(target === '_blank' ? { target } : {}) } }
+      }, input: sanitizeHtml.simpleTransform('input', { type: 'checkbox', disabled: 'disabled' }) },
   })
 }
 

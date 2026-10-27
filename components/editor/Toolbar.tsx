@@ -332,8 +332,8 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
       <Button ref={linkTriggerRef} aria-haspopup="dialog" aria-expanded={linkOpen} type="button" variant={editor.isActive('link') ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" onClick={addLink} title="Link" aria-label="Link" aria-pressed={editor.isActive('link')}>
         <Link className="h-4 w-4" />
       </Button>
-      <Button ref={videoTriggerRef} type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" aria-haspopup="dialog" aria-expanded={videoOpen} onClick={() => setVideoOpen(true)} title="Insert or edit video" aria-label="Insert or edit video">
-        <Video />
+      <Button ref={videoTriggerRef} type="button" variant={editor.isActive('video') || editor.isActive('youtube') ? 'secondary' : 'ghost'} aria-pressed={editor.isActive('video') || editor.isActive('youtube')} size="sm" className="h-8 w-8 p-0" aria-haspopup="dialog" aria-expanded={videoOpen} onClick={() => setVideoOpen(true)} title="Insert or edit video" aria-label="Insert or edit video">
+        <Video className="h-4 w-4" />
       </Button>
       <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onImage} title="Insert or edit image" aria-label="Insert or edit image">
         <ImageIcon className="h-4 w-4" />

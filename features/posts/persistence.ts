@@ -1,4 +1,4 @@
-import { VIDEO_URL_ERROR } from '@/lib/editor-video'
+import { VIDEO_CONTENT_ERROR } from '@/lib/editor-video'
 import { hasValidVideoContent } from '@/lib/editor-html'
 import { createHash } from 'node:crypto'
 import slugify from 'slugify'
@@ -31,7 +31,7 @@ export async function savePostAtomic(input: {
   tagIds?: string[]; tagNames?: string[]; requestKey?: string; fingerprint?: string
   allowAdmin?: boolean
 }) {
-  if (!hasValidVideoContent(input.payload.content)) return { data: null, error: { code: 'INVALID_VIDEO', message: VIDEO_URL_ERROR } }
+  if (!hasValidVideoContent(input.payload.content)) return { data: null, error: { code: 'INVALID_VIDEO', message: VIDEO_CONTENT_ERROR } }
   const tagNames = input.tagNames?.map(name => ({ name: name.trim(), slug: slugify(name.trim(), { lower: true, strict: true }) }))
     .filter(tag => tag.name)
   if (tagNames?.some(tag => !tag.slug)) return { data: null, error: { code: 'INVALID_TAGS', message: 'Tag names must contain letters or numbers. No changes were applied.' } }
