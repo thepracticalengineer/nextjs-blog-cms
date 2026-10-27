@@ -127,3 +127,11 @@ describe('private working copy actions', () => {
     expect((await loadWorkingCopy(documentId, null, userId)).data).toBeUndefined()
   })
 })
+it('rejects unsafe video sources before autosaving and preserves valid video working copies', async () => {
+  const invalid = JSON.stringify({ type: 'doc', content: [{ type: 'youtube', attrs: { src: 'https://evil.test/embed/aqz-KE-bpKQ' } }] })
+  expect((await saveWorkingCopy(input({ values: { ...draftValues(), content: invalid } }))).error).toContain('YouTube')
+  expect(writes).toEqual([])
+  const content = JSON.stringify({ type: 'doc', content: [{ type: 'video', attrs: { src: 'https://cdn.example/clip.webm?token=a' } }] })
+  await saveWorkingCopy(input({ values: { ...draftValues(), content } }))
+  expect((await loadWorkingCopy(documentId, null, userId)).data?.values.content).toBe(content)
+})

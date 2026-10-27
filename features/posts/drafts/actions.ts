@@ -1,5 +1,7 @@
 'use server'
 
+import { VIDEO_CONTENT_ERROR } from '@/lib/editor-video'
+import { hasValidVideoContent } from '@/lib/editor-html'
 import { z } from 'zod'
 import { getProfile } from '@/lib/auth/session'
 import { can, type Role } from '@/lib/permissions'
@@ -47,6 +49,7 @@ export async function saveWorkingCopy(input: SaveWorkingCopyInput): Promise<Draf
   const { documentId, postId, editorId, values, revision, expectedRevision, baseUpdatedAt } = parsed.data
   const auth = await context(documentId, postId, editorId)
   if (!auth) return { error: 'Your session expired, the account changed, or this post is no longer editable. Sign in with the account that opened this editor, then retry; your writing is kept on this device.' }
+  if (!hasValidVideoContent(values.content)) return { error: VIDEO_CONTENT_ERROR }
   const row = { user_id: auth.userId, document_id: documentId, post_id: postId, values, revision, base_updated_at: baseUpdatedAt, updated_at: new Date().toISOString() }
   const query = expectedRevision
     ? auth.client.from('post_working_copies').update(row).eq('user_id', auth.userId).eq('document_id', documentId).eq('revision', expectedRevision)

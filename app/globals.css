@@ -325,3 +325,18 @@ header :is(a, button, input):focus-visible,
   outline: 2px solid hsl(var(--foreground));
   outline-offset: 3px;
 }
+
+/* Shared by the editor, preview, and public article renderer. */
+.article-video-player {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border: 0;
+  background: #000;
+  object-fit: contain;
+}
+.article-video-help { font-size: 0.875rem; color: var(--muted-foreground); }
+.tiptap [data-article-video] { margin-block: 1rem; }
+.tiptap [data-article-video].ProseMirror-selectednode { outline: 2px solid var(--primary); }

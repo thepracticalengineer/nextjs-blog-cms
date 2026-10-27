@@ -1,3 +1,4 @@
+import { DirectVideo, YoutubeVideo } from './video'
 import StarterKit from '@tiptap/starter-kit'
 import Image from '@tiptap/extension-image'
 import Link from '@tiptap/extension-link'
@@ -44,6 +45,8 @@ export const extensions = [
   TableCell,
   TableHeader,
   CharacterCount,
+  DirectVideo,
+  YoutubeVideo,
   Typography,
   Image.extend({
     addAttributes() {
