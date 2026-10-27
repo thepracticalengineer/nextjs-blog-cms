@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.3.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.2.0...v3.3.0) (2026-10-27)
+
+
+### Features
+
+* **dashboard:** organize Posts navigation into an accessible submenu ([3adaa0a](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/3adaa0a72cf211397af841b09fa512b33debbcda))
+* **editor:** add YouTube embeds and direct video URLs ([#283](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/283)) ([27caef1](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/27caef1104477cc9583ba7a728a3a9af8f834546))
+* **editor:** enable native spelling assistance ([#281](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/281)) ([bb59e93](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/bb59e93f3a85124f3f9613cbf9320318832cf283))
+
 ## [3.2.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.2...v3.2.0) (2026-10-27)
 
 
