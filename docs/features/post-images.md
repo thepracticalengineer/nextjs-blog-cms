@@ -144,3 +144,88 @@ file decoding/limits, account/origin checks, failure/retry, metadata and renderi
 `e2e/browser/post-media.spec.ts` exercises real picker/paste uploads, unauthorized
 storage operations, failed upload recovery, and preview/public image rendering on the
 dedicated test Supabase project.
+
+## Owner-only media library
+
+**Dashboard → Media** lists only the signed-in user's completed uploads. Authors
+and administrators have the same ownership boundary: administrators cannot list,
+inspect, edit, select or archive another owner's assets. All library endpoints
+verify the session, MFA assurance and original editor account before service-role
+access; mutations also require same origin. A live account change unmounts cached
+library data and cancels active browser transfers. The bucket and its URLs remain
+public, including images in drafts and archived images.
+
+The dashboard offers title/filename/metadata search, grid and list views, sorting,
+active/archived filters and pages of 24 assets. Search matches literal text, including
+`*`, `%`, `_` and backslashes. Title sorting uses the filename when the title is empty;
+images with neither a title nor a filename appear last. Select up to 20 JPEG/PNG/WebP files
+per batch; transfers run sequentially, with individual progress and retry. Existing
+validation and optimized immutable WebP storage are unchanged. Identical content
+still deduplicates within its owner, including renamed files. Reuploading an archived
+image preserves its archive state. The upload queue reports **Already in your archive**
+and offers **Open archived image** to restore it directly. It can also be restored
+from **Archived images** to make it available in the picker.
+
+Details show the stored WebP size, dimensions, upload date and original filename
+when known, plus a public URL to copy. Title, default alt text, caption and description
+are editable. The editor's **Media Library** tab copies default alt text and dimensions
+into the chosen cover or inline occurrence; the description remains editable there.
+Updating library metadata never rewrites posts. Captions and descriptions are library
+metadata only and are not rendered in articles. Original source bytes are not retained;
+avatars remain separate.
+
+**Archive image** removes an asset from active browsing and selection without deleting
+its object, URL, metadata or historical retention. **Restore image** reverses this.
+There is no permanent-delete endpoint or cross-owner usage report. Archive, restore,
+opening active image details, metadata edits, picker selection and intentional library
+uploads set separate durable
+`library_retained` protection. Historical `retained` protection remains permanent.
+Unreferenced editor-only uploads still have the seven-day grace period unless a
+library action retains them. Browsing alone does not retain an upload; the library
+explains that unused editor uploads may expire. Opening details awaits durable retention
+before displaying the public URL, protecting both the Copy URL button and manual copying.
+If cleanup wins first, details show an error instead of a copyable expired URL. Archived
+details already have durable retention and do not restore the asset implicitly. Cleanup respects both protection flags under the same
+row locks as saves and library actions; a selection that loses to cleanup fails
+rather than resurrecting a tombstone.
+
+### Library migration and handoff
+
+For `supabase/migrations/20261027084010_owner_media_library.sql`, **pause and drain all
+image uploads on the old deployment before applying the migration**. Apply it and `supabase/migrations/20261027090813_media_library_literal_search.sql`, deploy
+the matching application, verify the library, then resume uploads. This handoff is
+required: old application instances do not confirm uploads in the new registry and
+could otherwise leave successfully stored assets marked pending after the backfill.
+Do not run the migration with old in-flight uploads still writing objects.
+
+The migration preserves paths and URLs and confirms existing registry rows only when
+a matching `storage.objects` row exists. It uses that object's creation timestamp and
+stored byte size where available. Unknown original filenames and dimensions remain
+null and are displayed honestly. Reservations without stored objects remain pending
+and do not appear as selectable images. New uploads become ready only after successful
+storage completion; failures retry the same immutable key. Stable `uploaded_at` is
+separate from the legacy `created_at` cleanup clock, so reuse does not change the
+library upload date or overwrite customized metadata.
+
+Library API: `GET /api/post-media/library` accepts `editorId`, `q`, `page`,
+`sort=newest|oldest|title`, and `filter=active|archived`.
+`GET /api/post-media/library/[id]` requires `editorId`.
+`PATCH /api/post-media/library/[id]` accepts `editorId` and editable metadata or
+`archived: true|false`. `POST /api/post-media/library/[id]/select` accepts `editorId`
+and durably protects the selected asset before returning it. Known foreign IDs return
+404 and never reveal private metadata. List/detail responses are not cached.
+
+### Library verification
+
+Run `pnpm exec vitest run __tests__/api/media-library.test.ts __tests__/api/post-media.test.ts __tests__/features/posts/media-library-ui.test.tsx __tests__/auth/mfa-authorization.test.ts`.
+Run `pnpm exec playwright test --config=e2e/media-library.config.ts` for isolated
+real-component desktop/mobile search, details, archive/restore, picker default/override,
+keyboard activation, bounded layout and upload failure/retry checks.
+
+On the designated migrated disposable database, run
+`database/tests/media_library.sql` with `psql -v ON_ERROR_STOP=1`,
+`node database/tests/media-library-concurrency.mjs` and
+`node database/tests/media-library-upgrade.mjs`. These cover ownership, retention,
+archive/dedup semantics, real row-lock races and the legacy backfill. The upgrade test
+rolls its temporary schema changes back. Existing media SQL and concurrency tests
+remain required. CI includes the new database tests and isolated browser suite.

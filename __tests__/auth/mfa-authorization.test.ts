@@ -14,6 +14,9 @@ import { authorizeSession, requireAuth } from '@/lib/auth/session'
 import { ownsResource } from '@/lib/auth/api'
 import * as keys from '@/app/api/settings/ai-providers/route'
 import * as media from '@/app/api/post-media/route'
+import * as library from '@/app/api/post-media/library/route'
+import * as libraryAsset from '@/app/api/post-media/library/[id]/route'
+import * as librarySelect from '@/app/api/post-media/library/[id]/select/route'
 import * as subscribers from '@/app/api/newsletter/subscribers/export/route'
 
 function clientFor(currentLevel = 'aal1', enrolled = true) {
@@ -34,6 +37,10 @@ beforeEach(() => vi.clearAllMocks())
 const request = () => new Request('http://localhost/api/test', { method: 'POST', body: '{invalid', headers: { 'content-type': 'application/json' } }) as NextRequest
 const endpoints: [string, () => Promise<Response>][] = [
   ['providers GET', () => keys.GET()], ['providers POST', () => keys.POST(request())], ['providers DELETE', () => keys.DELETE(request())],
+  ['media library list', () => library.GET(request())],
+  ['media library detail', () => libraryAsset.GET(request(), { params: Promise.resolve({ id: 'asset' }) })],
+  ['media library edit', () => libraryAsset.PATCH(request(), { params: Promise.resolve({ id: 'asset' }) })],
+  ['media library select', () => librarySelect.POST(request(), { params: Promise.resolve({ id: 'asset' }) })],
   ['post media', () => media.POST(request())], ['subscribers export', () => subscribers.GET(request())],
 ]
 

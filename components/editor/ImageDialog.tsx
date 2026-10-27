@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { MediaLibrary } from '@/features/posts/media/components/MediaLibrary'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +16,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   onSave: (image: ImageValue) => void; onClose: () => void
 }) {
   const id = useId()
+  const [source, setSource] = useState('upload')
   const [file, setFile] = useState(initialFile)
   const [url, setUrl] = useState(initialFile ? '' : initial?.src ?? '')
   const [image, setImage] = useState<ImageValue | undefined>(initialFile ? undefined : initial)
@@ -24,11 +27,17 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const [error, setError] = useState(initialFile ? imageFileError(initialFile) : undefined)
   const [busy, setBusy] = useState(false)
-  const [phase, setPhase] = useState<'upload' | 'validate'>('upload')
+  const [phase, setPhase] = useState<'upload' | 'validate' | 'select'>('upload')
   const [progress, setProgress] = useState(0)
   const request = useRef<AbortController | null>(null)
   const inFlight = useRef(false)
   useEffect(() => () => request.current?.abort(), [])
+
+  const selecting = useCallback((pending: boolean) => {
+    inFlight.current = pending
+    setBusy(pending)
+    if (pending) setPhase('select')
+  }, [])
 
   const dirty = !!file || url !== (initial?.src ?? '') || alt !== initialAlt || decorative !== initiallyDecorative
   function close() {
@@ -49,6 +58,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
   }
 
   function chooseFile(next: File) {
+    setSource('upload')
     setFile(next)
     setImage(undefined)
     setUrl('')
@@ -94,7 +104,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
 
   return (
     <Dialog open onOpenChange={open => { if (!open) close() }}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden sm:max-w-lg" onPaste={event => {
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden sm:max-w-2xl" onPaste={event => {
         const pasted = pastedImageFile(event.clipboardData)
         if (pasted && !busy && !confirmDiscard) { event.preventDefault(); chooseFile(pasted) }
       }}>
@@ -103,6 +113,19 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
           <DialogDescription>Choose or paste a JPEG, PNG or WebP up to 4 MB, or use a publicly accessible image URL. Uploaded images are public to anyone with their URL.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain py-1 [overflow-wrap:anywhere]">
+          <Tabs value={source} onValueChange={value => setSource(String(value))}>
+            <TabsList className="flex-wrap" aria-label="Image source">
+              <TabsTrigger value="upload" disabled={busy}>Upload</TabsTrigger>
+              <TabsTrigger value="library" disabled={busy}>Media Library</TabsTrigger>
+              <TabsTrigger value="url" disabled={busy}>Insert from URL</TabsTrigger>
+            </TabsList>
+            <TabsContent value="library"><MediaLibrary editorId={editorId} onSelecting={selecting} onSelect={asset => {
+              setFile(undefined); setUrl(asset.url); setAlt(asset.alt_text); setDecorative(false); setError(undefined)
+              setImage({ src: asset.url, alt: asset.alt_text, ...(asset.width && asset.height ? { width: asset.width, height: asset.height } : {}) })
+              setSource('url')
+            }} /></TabsContent>
+            <TabsContent value="url"><p className="text-sm text-muted-foreground">Enter a public image URL below, then add a description.</p></TabsContent>
+            <TabsContent value="upload">
           <div className="min-w-0 space-y-2">
             <Label htmlFor={`${id}-file`}>Image file</Label>
             <Input id={`${id}-file`} type="file" accept={IMAGE_ACCEPT} disabled={busy} onChange={event => {
@@ -114,6 +137,8 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
             {busy && <div role="status" aria-live="polite">{phase === 'upload' && <progress aria-label="Image upload progress" value={progress} max={100} className="w-full" />}<p>{phase === 'validate' ? 'Checking image URL…' : progress === 100 ? 'Optimizing and storing image…' : progress ? `Uploading image: ${progress}%` : 'Preparing image…'}</p></div>}
             {image && <output className="block">{'reused' in image && image.reused ? 'This image has already been uploaded. Reusing the existing image' : 'Image ready'}{image.width && image.height ? ` (${image.width} × ${image.height})` : ''}. Add its description, then use the image.</output>}
           </div>
+            </TabsContent>
+          </Tabs>
           <div className="mt-4 min-w-0 space-y-2">
             <Label htmlFor={`${id}-url`}>Image URL</Label>
             <Input id={`${id}-url`} value={url} disabled={busy} placeholder="https://…" onChange={event => { setUrl(event.target.value); setImage(undefined); setError(undefined) }} />

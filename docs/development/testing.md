@@ -411,3 +411,17 @@ Link toolbar button. If content changes while the dialog is open, reopen it befo
 applying to avoid modifying a stale selection. The stale-document alert remains
 visible and disables Apply without marking the URL field invalid. The image and
 link dialog suites share `e2e/dialog-harness-config.ts` and its Vite configuration.
+
+## Owner-only media library
+
+See [library verification](../features/post-images.md#library-verification) for the
+unit, disposable database, upgrade, concurrency and isolated browser commands.
+`pnpm exec playwright test --config=e2e/media-library.config.ts` uses real dashboard
+and editor components with local HTTP fixtures; it makes no Auth, database or mail
+requests. It runs in the isolated harness CI group. Library request authorization is
+also included in the shared MFA API matrix.
+
+`pnpm exec playwright test e2e/browser/media-library.spec.ts --project=browser`
+uses the dedicated full-stack environment above for actual upload/storage,
+metadata editing, editor reuse, public URL preservation after archive, and author/admin
+cross-owner HTTP denial. The main browser CI project discovers this test automatically.

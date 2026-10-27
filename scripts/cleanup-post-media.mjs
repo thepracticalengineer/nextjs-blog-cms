@@ -8,7 +8,7 @@ const db = createClient(url, key, { auth: { persistSession: false, autoRefreshTo
 const apply = process.argv.includes('--apply')
 if (!apply) {
   const { data, error } = await db.from('post_media').select('path, created_at, state')
-    .eq('retained', false).neq('state', 'deleted').lt('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).limit(100)
+    .eq('retained', false).eq('library_retained', false).is('archived_at', null).neq('state', 'deleted').lt('created_at', new Date(Date.now() - 7 * 86400_000).toISOString()).limit(100)
   if (error) throw error
   console.log(JSON.stringify({ mode: 'dry-run', candidates: data }, null, 2))
 } else {
@@ -18,7 +18,7 @@ if (!apply) {
     const { error: removeError } = await db.storage.from('post-media').remove([media.path])
     if (removeError) throw new Error(`Removal failed for ${media.path}: ${removeError.message}. Retry this command to resume.`)
     // Keep tombstones so old local-only copies cannot restore deleted media URLs.
-    const { error: markError } = await db.from('post_media').update({ state: 'deleted' }).eq('path', media.path).eq('state', 'deleting').eq('retained', false)
+    const { error: markError } = await db.from('post_media').update({ state: 'deleted' }).eq('path', media.path).eq('state', 'deleting').eq('retained', false).eq('library_retained', false).is('archived_at', null)
     if (markError) throw markError
   }
   console.log(`Removed ${data.length} abandoned images. Run again to process another batch.`)
