@@ -8,7 +8,7 @@ export function useSignOut() { return { handleSignOut() {}, signingOut: false, s
 export default function Element(props: React.ComponentProps<'a'> & React.ComponentProps<'img'>) {
   // eslint-disable-next-line @next/next/no-img-element -- This isolated harness has no Next image server.
   if (props.src) return <img {...props} alt={props.alt} />
-  return <a {...props} onClick={event => {
+  return <a {...props} href={props.href} onClick={event => {
     event.preventDefault()
     history.pushState(null, '', `${props.href}${window.location.search}`)
     window.dispatchEvent(new PopStateEvent('popstate'))
