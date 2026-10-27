@@ -5,7 +5,7 @@ export const MAX_IMAGE_DIMENSION = 2400
 export const MAX_STORED_IMAGE_BYTES = 2 * 1024 * 1024
 export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 export const IMAGE_ACCEPT = IMAGE_TYPES.join(',')
-export type ImageValue = { src: string; alt: string; width?: number; height?: number }
+export type ImageValue = { src: string; alt: string; width?: number; height?: number; assetId?: string; archived?: boolean }
 
 export function imageFileError(file: { size: number; type: string }): string | undefined {
   if (!(IMAGE_TYPES as readonly string[]).includes(file.type)) return 'Choose a JPEG, PNG or WebP image. SVG, GIF and other file types are not supported.'

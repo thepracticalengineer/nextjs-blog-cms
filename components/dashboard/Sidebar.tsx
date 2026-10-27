@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
+  LayoutDashboard, Images, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
 } from 'lucide-react'
 import { useSignOut } from '@/components/auth/use-signout'
 import { cn } from '@/lib/utils'
@@ -34,6 +34,7 @@ export function Sidebar({ profile }: SidebarProps) {
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', show: true, section: 'main' as const },
     { href: '/dashboard/profile', icon: UserCircle, label: 'Profile', show: true, section: 'main' as const },
     { href: '/dashboard/posts', icon: FileText, label: 'Posts', show: true, section: 'main' as const },
+    { href: '/dashboard/media', icon: Images, label: 'Media', show: can(role, 'posts:create'), section: 'main' as const },
     { href: '/dashboard/posts/new', icon: PlusCircle, label: 'New Post', show: true, section: 'main' as const },
     { href: '/dashboard/settings/ai-providers', icon: Settings, label: 'Settings', show: can(role, 'ai_providers:write'), section: 'main' as const },
     { href: '/dashboard/admin/users', icon: Users, label: 'Users', show: can(role, 'users:read'), section: 'admin' as const },

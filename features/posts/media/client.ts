@@ -7,7 +7,7 @@ export async function validateImageUrl(url: string, editorId: string, signal?: A
   return result.src
 }
 
-export function uploadImage(file: File, editorId: string, onProgress: (percent: number) => void, signal: AbortSignal): Promise<ImageValue> {
+export function uploadImage(file: File, editorId: string, onProgress: (percent: number) => void, signal: AbortSignal, intent: 'editor' | 'library' = 'editor'): Promise<ImageValue> {
   const error = imageFileError(file)
   if (error) return Promise.reject(new Error(error))
   return new Promise((resolve, reject) => {
@@ -31,6 +31,7 @@ export function uploadImage(file: File, editorId: string, onProgress: (percent: 
     const form = new FormData()
     form.set('file', file)
     form.set('editorId', editorId)
+    form.set('intent', intent)
     if (signal.aborted) { finish(); reject(new Error('Image upload cancelled.')); return }
     xhr.send(form)
   })

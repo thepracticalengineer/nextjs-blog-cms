@@ -23,7 +23,7 @@ test('gate always evaluates every required dependency; lightweight paths retain 
 test('database assertions, full-stack publication and isolated groups remain independently executable', () => {
   assert.ok(ci.jobs.database, 'separate database job')
   const db = ci.jobs.database.steps.map(step => step.run ?? '').join('\n')
-  for (const file of ['auth_abuse.sql', 'auth_abuse_review.sql', 'legacy_ai_retirement.sql', 'bulk_post_retention.sql', 'mfa_assurance.sql', 'public_author_profiles.sql', 'post_working_copies.sql', 'post_slug_routes.sql', 'post_lists.sql', 'atomic_posts.sql', 'tag_taxonomy.sql', 'post_media.sql', 'post_media_dedup.sql', 'comment_reactions.sql', 'article_reactions.sql', 'newsletter_queue.sql', 'auth-abuse-concurrency.mjs', 'legacy-ai-upgrade.mjs', 'post-media-concurrency.mjs', 'comment-reactions-concurrency.mjs', 'article-reactions-concurrency.mjs']) assert.ok(db.includes(file), file)
+  for (const file of ['auth_abuse.sql', 'auth_abuse_review.sql', 'legacy_ai_retirement.sql', 'bulk_post_retention.sql', 'mfa_assurance.sql', 'public_author_profiles.sql', 'post_working_copies.sql', 'post_slug_routes.sql', 'post_lists.sql', 'atomic_posts.sql', 'tag_taxonomy.sql', 'post_media.sql', 'post_media_dedup.sql', 'media_library.sql', 'media-library-concurrency.mjs', 'media-library-upgrade.mjs', 'comment_reactions.sql', 'article_reactions.sql', 'newsletter_queue.sql', 'auth-abuse-concurrency.mjs', 'legacy-ai-upgrade.mjs', 'post-media-concurrency.mjs', 'comment-reactions-concurrency.mjs', 'article-reactions-concurrency.mjs']) assert.ok(db.includes(file), file)
   const full = ci.jobs.e2e.steps.map(step => step.run ?? '').join('\n')
   assert.match(full, /pnpm run test:e2e/)
   assert.match(full, /pnpm run build/)
@@ -31,7 +31,7 @@ test('database assertions, full-stack publication and isolated groups remain ind
   assert.equal(ci.jobs.browsers.strategy['fail-fast'], false)
   assert.deepEqual(ci.jobs.browsers.strategy.matrix.group, ['harness', 'auth', 'content'])
   const browser = read('scripts/ci/browser.mjs')
-  for (const config of ['analytics', 'ai-settings', 'bulk-posts', 'oauth-ui', 'auth-abuse', 'mfa', 'image-dialog', 'link-dialog', 'comment-reactions', 'article-reactions', 'homepage', 'seo']) assert.ok(browser.includes(`'${config}'`), config)
+  for (const config of ['analytics', 'ai-settings', 'bulk-posts', 'oauth-ui', 'auth-abuse', 'mfa', 'image-dialog', 'media-library', 'link-dialog', 'comment-reactions', 'article-reactions', 'homepage', 'seo']) assert.ok(browser.includes(`'${config}'`), config)
 })
 test('split reports are merged and republished under the existing aggregate name', () => {
   const steps = ci.jobs.coverage.steps
