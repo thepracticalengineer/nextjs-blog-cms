@@ -19,14 +19,13 @@ beforeEach(() => {
  for (const method of ['select', 'is', 'not', 'ilike', 'order']) query[method] = vi.fn(() => query)
  eq.mockReturnValue(query); query.eq = eq
  query.range = vi.fn().mockResolvedValue({ data: [], count: 0, error: null })
- rpc.mockResolvedValue({ data: null, error: null })
+ rpc.mockImplementation(async name => ({ data: name === 'list_media_library' ? { assets: [], total: 0, page: 1, pageSize: 24 } : null, error: null }))
  vi.mocked(createServiceClient).mockReturnValue({ from: () => query, rpc } as unknown as ReturnType<typeof createServiceClient>)
 })
 it('scopes even administrator reads to the authenticated owner and bounds pages', async () => {
  const res = await GET(new Request(`http://localhost/api/post-media/library?editorId=${owner}`))
  expect(res.status).toBe(200)
- expect(eq).toHaveBeenCalledWith('owner_id', owner)
- expect(eq).toHaveBeenCalledWith('upload_status', 'ready')
+ expect(rpc).toHaveBeenCalledWith('list_media_library', { p_owner_id: owner, p_search: '', p_page: 1, p_sort: 'newest', p_filter: 'active' })
  expect(await res.json()).toEqual({ assets: [], total: 0, page: 1, pageSize: 24 })
 })
 it('rejects changed accounts, invalid pagination and oversized searches before private access', async () => {
@@ -69,7 +68,13 @@ it('rejects changed accounts on selection before creating a service client', asy
 })
 it('filters archived assets and escapes literal search wildcards', async () => {
  expect((await GET(new Request(`http://localhost/api/post-media/library?editorId=${owner}&filter=archived&q=50%25_&page=2&sort=title`))).status).toBe(200)
- expect(query.not).toHaveBeenCalledWith('archived_at', 'is', null)
- expect(query.ilike).toHaveBeenCalledWith('search_text', '%50\\%\\_%')
- expect(query.range).toHaveBeenCalledWith(24, 47)
+ expect(rpc).toHaveBeenCalledWith('list_media_library', { p_owner_id: owner, p_search: '50%_', p_page: 2, p_sort: 'title', p_filter: 'archived' })
+})
+
+it('reports malformed JSON explicitly before any service access', async () => {
+ const req = new Request('http://localhost/api/post-media/library/'+id, { method: 'PATCH', headers: { origin: 'http://localhost' }, body: '{broken' })
+ const res = await PATCH(req, { params: Promise.resolve({ id }) })
+ expect(res.status).toBe(400)
+ expect(await res.json()).toEqual({ error: 'Invalid JSON in media request.' })
+ expect(createServiceClient).not.toHaveBeenCalled()
 })

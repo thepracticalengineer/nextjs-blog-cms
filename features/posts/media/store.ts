@@ -35,5 +35,8 @@ export async function storeImage(ownerId: string, bytes: Buffer, metadata: { fil
     p_width: metadata.width, p_height: metadata.height, p_byte_size: bytes.byteLength, p_library: metadata.library,
   })
   if (completionError || completed !== true) throw new ImageStorageError(storageUnavailable)
-  return { src: media.url, reused }
+  const { data: asset, error: assetError } = await db.from('post_media').select('id,archived_at')
+    .eq('owner_id', ownerId).eq('path', media.path).eq('state', 'active').eq('upload_status', 'ready').maybeSingle()
+  if (assetError || !asset || typeof asset.id !== 'string') throw new ImageStorageError(storageUnavailable)
+  return { src: media.url, reused, assetId: asset.id, archived: asset.archived_at !== null }
 }

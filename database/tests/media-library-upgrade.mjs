@@ -20,6 +20,7 @@ do $$ begin
  assert (select upload_status='pending' and uploaded_at is null and byte_size is null from public.post_media where path='${missing}'), 'Missing legacy object incorrectly confirmed';
 end $$;
 rollback;`
-const result = spawnSync('docker',['exec','-i','supabase_db_nextjs-blog-cms','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8'})
+const result = spawnSync('/usr/bin/docker',['exec','-i','supabase_db_nextjs-blog-cms','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8'})
+if (result.error) throw result.error
 if(result.status !== 0) throw new Error(result.stderr + result.stdout)
 console.log('Library upgrade passed: only existing objects confirmed; unknown historical metadata stays null')

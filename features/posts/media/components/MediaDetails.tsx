@@ -10,7 +10,7 @@ import type { MediaAsset } from '../library-types'
 import { assetName, assetSize, mediaMutation, mediaRequest } from '../library-client'
 
 type Metadata = Pick<MediaAsset, 'title' | 'alt_text' | 'caption' | 'description'>
-export function MediaDetails({ id, editorId, onClose, onChanged }: { id: string; editorId: string; onClose: () => void; onChanged: () => void }) {
+export function MediaDetails({ id, editorId, onClose, onChanged }: Readonly<{ id: string; editorId: string; onClose: () => void; onChanged: (asset: MediaAsset) => void }>) {
   const formId = useId()
   const [asset, setAsset] = useState<MediaAsset>()
   const [values, setValues] = useState<Metadata>()
@@ -23,13 +23,21 @@ export function MediaDetails({ id, editorId, onClose, onChanged }: { id: string;
   const pending = useRef(false)
   useEffect(() => {
     const controller = new AbortController()
-    mediaRequest<{ asset: MediaAsset }>(`/api/post-media/library/${encodeURIComponent(id)}?${new URLSearchParams({ editorId })}`, { signal: controller.signal }).then(({ asset }) => {
+    mediaRequest<{ asset: MediaAsset }>(`/api/post-media/library/${encodeURIComponent(id)}?${new URLSearchParams({ editorId })}`, { signal: controller.signal }).then(async ({ asset: loaded }) => {
+      if (controller.signal.aborted) return
+      // Make the URL safe to copy, including manual copying from the read-only field.
+      // Archived assets already have durable retention and must not be selected.
+      const asset = loaded.archived_at ? loaded : (await mediaMutation(id, editorId, {}, true, controller.signal)).asset
       if (!controller.signal.aborted) { setAsset(asset); setValues({ title: asset.title, alt_text: asset.alt_text, caption: asset.caption, description: asset.description }); setError('') }
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
     return () => controller.abort()
   }, [id, editorId, revision])
   const dirty = !!asset && !!values && Object.entries(values).some(([key, value]) => asset[key as keyof Metadata] !== value)
-  function close() { if (pending.current) return; if (dirty) setConfirmClose(true); else onClose() }
+  function close() {
+    if (pending.current) return
+    if (dirty) setConfirmClose(true)
+    else onClose()
+  }
   async function save(archive?: boolean) {
     if (pending.current || !values) return
     pending.current = true
@@ -39,7 +47,7 @@ export function MediaDetails({ id, editorId, onClose, onChanged }: { id: string;
       setAsset(updated)
       if (archive === undefined) { setValues({ title: updated.title, alt_text: updated.alt_text, caption: updated.caption, description: updated.description }); setStatus('Metadata saved. Existing articles are unchanged.') }
       else { setConfirmArchive(false); setStatus(archive ? 'Image archived. Existing URLs still work.' : 'Image restored to your library.') }
-      onChanged()
+      onChanged(updated)
     } catch (error) { setError((error as Error).message) }
     finally { pending.current = false; setBusy(false) }
   }
@@ -57,9 +65,9 @@ export function MediaDetails({ id, editorId, onClose, onChanged }: { id: string;
         </form>
         <Button type="button" variant="outline" disabled={busy || dirty} onClick={() => asset.archived_at ? void save(false) : setConfirmArchive(true)}>{asset.archived_at ? 'Restore image' : 'Archive image'}</Button>
         {dirty && <p className="text-xs text-muted-foreground">Save or discard metadata changes before archiving or restoring.</p>}
-      </> : !error && <p role="status">Loading image details…</p>}
+      </> : !error && <output>Loading image details…</output>}
       {error && <div><p role="alert">{error}</p>{!asset && <Button type="button" variant="outline" onClick={() => setRevision(value => value + 1)}>Retry details</Button>}</div>}
-      {status && <p role="status">{status}</p>}
+      {status && <output>{status}</output>}
     </div>
     <DialogFooter><Button type="button" variant="outline" disabled={busy} onClick={close}>Close details</Button><Button type="submit" form={formId} disabled={busy || !values || !dirty}>{busy ? 'Saving…' : 'Save metadata'}</Button></DialogFooter>
     <Dialog open={confirmClose} onOpenChange={setConfirmClose}><DialogContent><DialogHeader><DialogTitle>Discard metadata changes?</DialogTitle><DialogDescription>Your unsaved image details will be lost.</DialogDescription></DialogHeader><DialogFooter><Button type="button" variant="outline" onClick={() => setConfirmClose(false)}>Keep editing</Button><Button type="button" variant="destructive" onClick={onClose}>Discard changes</Button></DialogFooter></DialogContent></Dialog>

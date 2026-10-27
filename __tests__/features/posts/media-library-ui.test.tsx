@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { MediaLibrary } from '@/features/posts/media/components/MediaLibrary'
+import { MediaDetails } from '@/features/posts/media/components/MediaDetails'
 import { MediaUploads } from '@/features/posts/media/components/MediaUploads'
 import { uploadImage } from '@/features/posts/media/client'
 vi.mock('@/features/posts/media/client', () => ({ uploadImage: vi.fn() }))
@@ -51,4 +52,41 @@ it('clears a populated library immediately when the authenticated account change
   rerender(<MediaLibrary editorId="owner-a" />)
   expect(screen.queryByRole('button', { name: 'Open Circuit' })).not.toBeInTheDocument()
   expect(screen.getByRole('alert')).toHaveTextContent('account changed')
+})
+
+it('explains archived duplicate uploads and offers their restore details', async () => {
+  vi.mocked(uploadImage).mockResolvedValueOnce({ src: asset.url, alt: '', archived: true, assetId: asset.id })
+  render(<MediaUploads editorId="owner-a" onUploaded={vi.fn()} />)
+  fireEvent.change(screen.getByLabelText('Upload images'), { target: { files: [new File(['bytes'], 'circuit.png', { type: 'image/png' })] } })
+  expect(await screen.findByText('Already in your archive. Restore it to use it again.')).toBeVisible()
+  expect(screen.queryByText('Uploaded')).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Open archived image circuit.png' })).toBeEnabled()
+})
+it('retains a transient image before showing a copyable URL in details', async () => {
+  let finish!: (value: Response) => void
+  fetcher.mockResolvedValueOnce(Response.json({ asset })).mockImplementationOnce(() => new Promise(resolve => { finish = resolve }))
+  render(<MediaDetails id={asset.id} editorId="owner-a" onClose={vi.fn()} onChanged={vi.fn()} />)
+  await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
+  expect(screen.queryByLabelText('Public image URL')).not.toBeInTheDocument()
+  expect(fetcher.mock.calls[1][0]).toBe('/api/post-media/library/asset-a/select')
+  finish(Response.json({ asset }))
+  expect(await screen.findByLabelText('Public image URL')).toHaveValue(asset.url)
+})
+it('does not expose a copyable URL when retention loses to cleanup', async () => {
+  fetcher.mockResolvedValueOnce(Response.json({ asset })).mockResolvedValueOnce(Response.json({ error: 'Image not found or unavailable.' }, { status: 404 }))
+  render(<MediaDetails id={asset.id} editorId="owner-a" onClose={vi.fn()} onChanged={vi.fn()} />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Image not found')
+  expect(screen.queryByLabelText('Public image URL')).not.toBeInTheDocument()
+})
+it('opens an archived image without trying to select or restore it', async () => {
+  fetcher.mockResolvedValueOnce(Response.json({ asset: { ...asset, archived_at: '2026-10-27T00:00:00Z' } }))
+  render(<MediaDetails id={asset.id} editorId="owner-a" onClose={vi.fn()} onChanged={vi.fn()} />)
+  expect(await screen.findByLabelText('Public image URL')).toHaveValue(asset.url)
+  expect(fetcher).toHaveBeenCalledTimes(1)
+  expect(screen.getByRole('button', { name: 'Restore image' })).toBeEnabled()
+})
+it('uses the same nonblank display name as title sorting', async () => {
+  const { assetName } = await import('@/features/posts/media/library-client')
+  expect(assetName({ ...asset, title: '   ', original_filename: ' circuit.png ' })).toBe('circuit.png')
+  expect(assetName({ ...asset, title: '', original_filename: ' ' })).toBe('Untitled image')
 })

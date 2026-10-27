@@ -6,11 +6,11 @@ export async function mediaRequest<T>(url: string, options?: RequestInit): Promi
   if (!response.ok) throw new Error(result.error ?? 'Media request failed. Retry shortly.')
   return result as T
 }
-export function mediaMutation(id: string, editorId: string, values: Record<string, unknown>, select = false) {
+export function mediaMutation(id: string, editorId: string, values: Record<string, unknown>, select = false, signal?: AbortSignal) {
   return mediaRequest<{ asset: MediaAsset }>(`/api/post-media/library/${encodeURIComponent(id)}${select ? '/select' : ''}`, {
-    method: select ? 'POST' : 'PATCH', headers: { 'content-type': 'application/json' },
+    signal, method: select ? 'POST' : 'PATCH', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...values, editorId }),
   })
 }
-export const assetName = (asset: MediaAsset) => asset.title || asset.original_filename || 'Untitled image'
+export const assetName = (asset: MediaAsset) => asset.title.trim() || asset.original_filename?.trim() || 'Untitled image'
 export const assetSize = (bytes: number | null) => bytes === null ? 'Size unknown' : `${Math.max(1, Math.round(bytes / 1024))} KB`

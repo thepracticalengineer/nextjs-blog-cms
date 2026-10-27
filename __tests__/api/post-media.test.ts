@@ -19,6 +19,8 @@ const upload = vi.fn()
 const rpc = vi.fn()
 const legacyRows = vi.fn()
 const ownerFilter = vi.fn()
+const completedAsset = vi.fn()
+const completionFilters = vi.fn()
 function request(file?: File, editorId = actor, origin = 'http://localhost') {
   const form = new FormData()
   if (file) form.set('file', file)
@@ -34,6 +36,9 @@ beforeEach(() => {
   vi.mocked(authorizeSession).mockResolvedValue({ profile: { id: actor, role: 'author' }, failure: null } as Awaited<ReturnType<typeof authorizeSession>>)
   upload.mockResolvedValue({ error: null })
   ownerFilter.mockImplementation(() => ({ eq: () => ({ is: () => ({ is: () => ({ limit: legacyRows }) }) }) }))
+  const completionQuery = { eq: completionFilters, maybeSingle: completedAsset }
+  completionFilters.mockReturnValue(completionQuery)
+  completedAsset.mockResolvedValue({ data: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', archived_at: null }, error: null })
   legacyRows.mockResolvedValue({ data: [], error: null })
   const reservations = new Map<string, { path: string; url: string }>()
   rpc.mockImplementation(async (_name, args) => {
@@ -44,7 +49,7 @@ beforeEach(() => {
   })
   vi.mocked(createServiceClient).mockReturnValue({
     rpc,
-    from: vi.fn(() => ({ select: () => ({ eq: ownerFilter }) })),
+    from: vi.fn(() => ({ select: (columns: string) => columns === 'id,archived_at' ? completionQuery : ({ eq: ownerFilter }) })),
     storage: { from: vi.fn(() => ({ upload, getPublicUrl: (path: string) => ({ data: { publicUrl: `https://test.supabase.co/storage/v1/object/public/post-media/${path}` } }) })) },
   } as unknown as ReturnType<typeof createServiceClient>)
   vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://test.supabase.co')
@@ -57,7 +62,7 @@ describe('owned, decoded post image upload', () => {
     const response = await POST(request(await fixture(format, 3000)))
     expect(response.status).toBe(200)
     const result = await response.json()
-    expect(result).toMatchObject({ width: 2400 })
+    expect(result).toMatchObject({ width: 2400, assetId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', archived: false })
     expect(result.src).toContain(`/post-media/${actor}/`)
     expect(upload).toHaveBeenCalledWith(expect.stringMatching(new RegExp(`^${actor}/[a-f0-9-]+\\.webp$`)), expect.any(Buffer), expect.objectContaining({ contentType: 'image/webp', upsert: false }))
     const meta = await sharp(upload.mock.calls[0][1]).metadata()
@@ -213,4 +218,21 @@ it('does not return a URL when cleanup wins before completion', async () => {
   const res = await POST(request(await fixture()))
   expect(res.status).toBe(503)
   expect(await res.json()).not.toHaveProperty('src')
+})
+
+it('reports archived reuse with the owner-scoped asset identifier without restoring it', async () => {
+ completedAsset.mockResolvedValueOnce({ data: { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', archived_at: '2026-10-27T00:00:00Z' }, error: null })
+ upload.mockResolvedValueOnce({ error: { statusCode: '409' } })
+ const res = await POST(request(await fixture()))
+ expect(res.status).toBe(200)
+ expect(await res.json()).toMatchObject({ assetId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', archived: true, reused: true })
+ expect(completionFilters).toHaveBeenCalledWith('owner_id', actor)
+ expect(completionFilters).toHaveBeenCalledWith('path', upload.mock.calls[0][0])
+ expect(completionFilters).toHaveBeenCalledWith('state', 'active')
+ expect(completionFilters).toHaveBeenCalledWith('upload_status', 'ready')
+ expect(rpc.mock.calls.some(([name]) => name === 'mutate_media_library')).toBe(false)
+})
+it('fails safely when confirmed upload identity cannot be read', async () => {
+ completedAsset.mockResolvedValueOnce({ data: null, error: null })
+ expect((await POST(request(await fixture()))).status).toBe(503)
 })
