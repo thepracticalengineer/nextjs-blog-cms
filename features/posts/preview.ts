@@ -1,7 +1,7 @@
 'use server'
 
 import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
-import sanitizeHtml from 'sanitize-html'
+import { sanitizeEditorHtml } from '@/lib/editor-html'
 import { z } from 'zod'
 import { getProfile } from '@/lib/auth/session'
 import { can, type Role } from '@/lib/permissions'
@@ -22,25 +22,5 @@ export async function previewPost(content: string, editorId?: string, postId?: s
   if (!isCoverImageAllowed(coverImage)) return { error: COVER_IMAGE_ERROR }
   // Use the public TipTap renderer; also sanitize legacy HTML before inserting
   // unsaved input into the authenticated dashboard DOM.
-  return { content: sanitizeHtml(renderEditorHtml(content), {
-    allowedTags: [...sanitizeHtml.defaults.allowedTags, 'img', 'input', 's', 'u', 'mark'],
-    allowedAttributes: { '*': ['class', 'style'], a: ['href', 'rel'], img: ['src', 'alt', 'width', 'height', 'loading', 'decoding'], input: ['type', 'disabled', 'checked'] },
-    allowedStyles: { '*': {
-      color: [/^#[a-f\d]{3,8}$/i, /^rgba?\([\d\s.,]+\)$/],
-      background: [/^#[a-f\d]{3,8}$/i],
-      'background-color': [/^#[a-f\d]{3,8}$/i, /^rgba?\([\d\s.,]+\)$/],
-      padding: [/^[\d.]+(?:px|rem)(?: [\d.]+(?:px|rem))?$/, /^0$/],
-      margin: [/^[\d.]+(?:px|rem)(?: (?:0|[\d.]+(?:px|rem)))*$/],
-      'border-radius': [/^[\d.]+(?:px|rem)$/],
-      'font-size': [/^[\d.]+(?:px|rem|em)$/],
-      'font-family': [/^monospace$/],
-      'overflow-x': [/^auto$/],
-      'line-height': [/^[\d.]+$/],
-      'text-align': [/^(?:left|center|right|justify)$/],
-    } },
-    allowedSchemes: ['http', 'https', 'mailto'],
-    allowedSchemesByTag: { img: ['http', 'https'] },
-    allowProtocolRelative: false,
-    transformTags: { a: sanitizeHtml.simpleTransform('a', { rel: 'noopener noreferrer' }), input: sanitizeHtml.simpleTransform('input', { type: 'checkbox', disabled: 'disabled' }) },
-  }) }
+  return { content: sanitizeEditorHtml(renderEditorHtml(content)) }
 }

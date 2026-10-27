@@ -44,6 +44,7 @@
 - [Signup confirmation and resend](features/signup-confirmation.md)
 - [Public author profiles and privacy](features/public-author-profiles.md)
 - [Cover and inline images](features/post-images.md)
+- [YouTube and direct video embeds](features/post-videos.md)
 - [Publication readiness, editorial review and slug behavior](features/publication-and-slugs.md)
 - [Screenshots](features/screenshots.md)
 - [Roadmap](features/roadmap.md)

@@ -6,8 +6,9 @@ import {
   Bold, Italic, Underline, Strikethrough,
   AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, ListTodo, Quote, Code,
-  Link, Image as ImageIcon, Minus,
+  Link, Image as ImageIcon, Minus, Video,
 } from 'lucide-react'
+import { VideoDialog } from './VideoDialog'
 import { LinkDialog } from './LinkDialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -195,6 +196,8 @@ function LineHeightMenu({ editor, activeLineHeight }: LineHeightMenuProps) {
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 export function Toolbar({ editor, onImage }: ToolbarProps) {
+  const [videoOpen, setVideoOpen] = useState(false)
+  const videoTriggerRef = useRef<HTMLButtonElement>(null)
   const [linkOpen, setLinkOpen] = useState(false)
   const linkTriggerRef = useRef<HTMLButtonElement>(null)
   const [colorPanelOpen, setColorPanelOpen] = useState(false)
@@ -204,7 +207,7 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
   // Subscribe only to values displayed by the toolbar, including selection changes.
   useEditorState({ editor, selector: ({ editor }) => ({
     marks: ['bold', 'italic', 'underline', 'strike', 'subscript', 'superscript', 'link', 'highlight'].map(mark => editor.isActive(mark)),
-    blocks: ['bulletList', 'orderedList', 'taskList', 'blockquote', 'codeBlock'].map(block => editor.isActive(block)),
+    blocks: ['bulletList', 'orderedList', 'taskList', 'blockquote', 'codeBlock', 'video', 'youtube'].map(block => editor.isActive(block)),
     heading: getHeadingLabel(editor),
     alignment: editor.getAttributes('paragraph').textAlign ?? editor.getAttributes('heading').textAlign,
     color: editor.getAttributes('textStyle').color,
@@ -229,6 +232,7 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
   return (
     <fieldset aria-label="Content formatting" className="min-w-0 flex flex-wrap items-center gap-1 p-2 border-b bg-muted/30">
 
+      {videoOpen && <VideoDialog editor={editor} triggerRef={videoTriggerRef} onClose={() => setVideoOpen(false)} />}
       {linkOpen && <LinkDialog editor={editor} triggerRef={linkTriggerRef} onClose={() => setLinkOpen(false)} />}
       {/* Group 1: Heading dropdown */}
       <DropdownMenu>
@@ -327,6 +331,9 @@ export function Toolbar({ editor, onImage }: ToolbarProps) {
       {/* Group 6: Insert */}
       <Button ref={linkTriggerRef} aria-haspopup="dialog" aria-expanded={linkOpen} type="button" variant={editor.isActive('link') ? 'secondary' : 'ghost'} size="sm" className="h-8 w-8 p-0" onClick={addLink} title="Link" aria-label="Link" aria-pressed={editor.isActive('link')}>
         <Link className="h-4 w-4" />
+      </Button>
+      <Button ref={videoTriggerRef} type="button" variant={editor.isActive('video') || editor.isActive('youtube') ? 'secondary' : 'ghost'} aria-pressed={editor.isActive('video') || editor.isActive('youtube')} size="sm" className="h-8 w-8 p-0" aria-haspopup="dialog" aria-expanded={videoOpen} onClick={() => setVideoOpen(true)} title="Insert or edit video" aria-label="Insert or edit video">
+        <Video className="h-4 w-4" />
       </Button>
       <Button type="button" variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={onImage} title="Insert or edit image" aria-label="Insert or edit image">
         <ImageIcon className="h-4 w-4" />
