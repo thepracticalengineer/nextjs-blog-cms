@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.2.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.2...v3.2.0) (2026-10-27)
+
+
+### Features
+
+* **media:** add owner-only media library ([7d72ad0](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/7d72ad0ddc5ebb73be0448aa03522aa845b8b4a4))
+* **media:** add owner-only media library ([288e58a](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/288e58aca6e53250780d845e7d727545e2509a63))
+
+
+### Bug Fixes
+
+* **media:** address library review findings and security check ([4ce0c8b](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/4ce0c8b5dc997841630fcee0c5ad01616ded87a8))
+
 ## [3.1.2](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.1.1...v3.1.2) (2026-10-26)
 
 
