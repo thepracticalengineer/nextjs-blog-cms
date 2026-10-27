@@ -82,6 +82,33 @@ See [API publication and write contracts](../api/publication-and-writes.md) for 
 
 ## Writing, preview and publication review
 
+### Native spelling assistance
+
+The article body requests browser spellcheck with `spellcheck="true"` and
+`lang="en"`. With spellcheck enabled and an English dictionary available,
+misspelled words can be underlined; right-click an underlined word to use the
+browser's native spelling suggestions. Availability and suggestions depend on
+browser/OS settings and installed dictionaries. The language attribute is a hint,
+not a guarantee that the browser will select an English dictionary. If underlines
+are missing, check those settings, then type a misspelled word and press Space.
+See the [Tiptap spellcheck guide](https://tiptap.dev/docs/guides/spellcheck).
+
+Verify in a desktop browser with spellcheck enabled, using a disposable test draft:
+
+1. Type `This sentense needs a correction.` alongside bold or italic text, then
+   press Space and confirm the misspelling is underlined.
+2. Right-click the underlined word and choose the native `sentence` suggestion.
+   Confirm the correction appears and surrounding formatting remains intact.
+3. Undo the correction, redo it, and continue typing to check normal editing.
+4. Choose **Save Draft**, leave the editor, and reopen the draft. Confirm the
+   corrected text, subsequent typing and formatting persisted.
+
+Native underlines and spelling menus are browser UI; ordinary DOM assertions
+cannot fully verify this flow. This assistance uses no additional editor extension
+or application AI service.
+
+### Drafts, preview and publishing
+
 The writing screen exposes **Save Draft**, **Preview** and **Publish** for new posts. Saving creates the draft without replacing the active editor; subsequent saves update the same post. The new-post recovery URL remains stable while writing; reloading it reopens the same persisted post in place, including any recovery copies. The posts list also links to its edit URL. Recovery continues under the persisted post identity. Published posts expose **Save Changes**, **View Post** and **Unpublish**, with an explicit publication status.
 
 **Preview** opens a private reader view of the current unsaved title, excerpt, cover and body. It shares the public article body and TipTap renderer. The preview action checks authentication, the opened editor account, and ownership (or administrator access) for an existing post. It does not save the article, change publication status, create a public preview URL, or schedule a newsletter. Legacy HTML is sanitized before it enters the dashboard. Closing the preview returns to the current writing form.
