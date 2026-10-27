@@ -9,6 +9,21 @@ Session clients enforce Supabase RLS. Service-role clients bypass RLS and must p
 
 Public email/password, Google, and GitHub signup all use the database default `author` role with immediate author access, including publishing (subject to publication checks). There is no pending-contributor approval state; issue #111 tracks any future invitation/approval policy. Provider names, avatars, and editable user metadata never assign roles. Existing linked identities retain their user ID and database role. See [social authentication](../setup/social-auth.md) for identity and MFA behavior.
 
+## Dashboard Posts navigation
+
+Posts is a collapsible group shared by desktop and mobile navigation. All Posts
+opens the existing list and Add Post starts the existing creation flow. Categories
+and Tags follow in that order for admins only. Both supported roles can create
+posts; unknown roles receive no Posts links. Route and action authorization remains
+independent of link visibility, and authors can still select existing taxonomy in
+the editor.
+
+Opening or refreshing a child route expands Posts. Post edit routes select All
+Posts; the creation route selects Add Post, including draft query parameters.
+Users can collapse the active group; navigating to another child reopens it.
+The Posts button supports Enter/Space and announces its expanded state. Tab moves
+through visible links; collapsed children are removed from keyboard navigation.
+
 ## Signing out
 
 Both the public account menu and dashboard sidebar use the same logout flow.
