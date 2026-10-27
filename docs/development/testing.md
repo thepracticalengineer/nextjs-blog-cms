@@ -430,3 +430,13 @@ cross-owner HTTP denial. The main browser CI project discovers this test automat
 
 See [video verification](../features/post-videos.md#verification) for URL security,
 serialization, persistence boundary and isolated desktop/mobile browser checks.
+
+## Dashboard Posts navigation
+
+Run `pnpm exec vitest run __tests__/components/Sidebar.test.tsx __tests__/lib/permissions.test.ts`
+for role visibility, submenu state, direct routes and active-child semantics.
+Run `pnpm exec playwright test --config=e2e/posts-navigation.config.ts` for the real
+sidebar and Tailwind styles on desktop/mobile, keyboard disclosure, child navigation
+and refresh. This isolated harness stubs Next navigation and sign-out, uses no Auth
+or database, and does not establish deployed authorization. CI runs it in the
+isolated harness group. Existing server page/action permission checks remain in place.

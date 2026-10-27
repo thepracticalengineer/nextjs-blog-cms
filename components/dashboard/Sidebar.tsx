@@ -5,8 +5,9 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Images, FileText, PlusCircle, Users, FolderOpen, Tag, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
+  LayoutDashboard, Images, FileText, Users, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
 } from 'lucide-react'
+import { PostsNavigation } from './PostsNavigation'
 import { useSignOut } from '@/components/auth/use-signout'
 import { cn } from '@/lib/utils'
 import { can } from '@/lib/permissions'
@@ -35,11 +36,8 @@ export function Sidebar({ profile }: SidebarProps) {
     { href: '/dashboard/profile', icon: UserCircle, label: 'Profile', show: true, section: 'main' as const },
     { href: '/dashboard/posts', icon: FileText, label: 'Posts', show: true, section: 'main' as const },
     { href: '/dashboard/media', icon: Images, label: 'Media', show: can(role, 'posts:create'), section: 'main' as const },
-    { href: '/dashboard/posts/new', icon: PlusCircle, label: 'New Post', show: true, section: 'main' as const },
     { href: '/dashboard/settings/ai-providers', icon: Settings, label: 'Settings', show: can(role, 'ai_providers:write'), section: 'main' as const },
     { href: '/dashboard/admin/users', icon: Users, label: 'Users', show: can(role, 'users:read'), section: 'admin' as const },
-    { href: '/dashboard/admin/categories', icon: FolderOpen, label: 'Categories', show: can(role, 'categories:write'), section: 'admin' as const },
-    { href: '/dashboard/admin/tags', icon: Tag, label: 'Tags', show: can(role, 'tags:write'), section: 'admin' as const },
     { href: '/dashboard/comments', icon: MessageSquare, label: 'Comments', show: can(role, 'comments:delete:all'), section: 'admin' as const },
     { href: '/dashboard/admin/newsletter', icon: Mail, label: 'Newsletter', show: can(role, 'users:read'), section: 'admin' as const },
   ]
@@ -76,6 +74,7 @@ export function Sidebar({ profile }: SidebarProps) {
             Main
           </p>
           {mainItems.map((item) => {
+            if (item.href === '/dashboard/posts') return <PostsNavigation key={item.href} pathname={pathname} role={role} />
             const Icon = item.icon
             const isActive = pathname === item.href
             return (
@@ -91,11 +90,6 @@ export function Sidebar({ profile }: SidebarProps) {
               >
                 <Icon className={cn('h-4 w-4 shrink-0', isActive ? 'text-white' : 'text-slate-500 group-hover:text-white')} />
                 {item.label}
-                {item.href === '/dashboard/posts/new' && (
-                  <span className="ml-auto text-[10px] font-semibold bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">
-                    New
-                  </span>
-                )}
               </Link>
             )
           })}

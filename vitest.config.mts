@@ -101,6 +101,7 @@ export default defineConfig({
         'features/comments/components/DeleteCommentButton.tsx',
         // components
         'components/dashboard/RoleBadge.tsx',
+        'components/dashboard/PostsNavigation.tsx',
         'components/dashboard/PostTable/utils.ts',
         // api routes
         'app/api/posts/route.ts',

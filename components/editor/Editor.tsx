@@ -72,6 +72,8 @@ export function Editor({ value, onChange, className, editorId, id, labelledBy, d
         return true
       },
       attributes: {
+        spellcheck: 'true',
+        lang: 'en',
         class: 'prose prose-sm sm:prose-base max-w-none min-h-[300px] p-4',
         role: 'textbox',
         'aria-multiline': 'true',
