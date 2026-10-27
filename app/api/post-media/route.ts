@@ -34,6 +34,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get('content-type') ?? ''
     let editorId: unknown
     let file: FormDataEntryValue | null = null
+    let intent: FormDataEntryValue | null = null
     let url: unknown
     if (contentType.startsWith('application/json')) {
       const values = JSON.parse(body.toString()) as Record<string, unknown>
@@ -43,12 +44,14 @@ export async function POST(request: Request) {
       const form = await new Response(body, { headers: { 'content-type': contentType } }).formData()
       editorId = form.get('editorId')
       file = form.get('file')
+      intent = form.get('intent')
     } else return failure('Use the image picker or paste an image in the editor.', 400)
     if (editorId !== profile.id) return failure('The signed-in account changed. Sign in with the account that opened this editor, then retry.', 403)
     if (url !== undefined) {
       if (typeof url !== 'string' || !url || url.length > 2048 || !isCoverImageAllowed(url)) return failure(COVER_IMAGE_ERROR, 422)
       return Response.json({ src: url })
     }
+    if (intent !== null && intent !== 'editor' && intent !== 'library') return failure('Invalid upload intent.', 400)
     if (!(file instanceof File)) return failure('Choose an image file.', 400)
     let optimized: Awaited<ReturnType<typeof optimizeImage>>
     try { optimized = await optimizeImage(file) } catch (error) {
@@ -58,7 +61,7 @@ export async function POST(request: Request) {
       return failure(message, 422)
     }
     try {
-      const stored = await storeImage(profile.id, optimized.data)
+      const stored = await storeImage(profile.id, optimized.data, { filename: file.name, width: optimized.width, height: optimized.height, library: intent === 'library' })
       return Response.json({ ...stored, width: optimized.width, height: optimized.height })
     } catch (error) {
       return failure(error instanceof ImageStorageError ? error.message : storageUnavailable, 503)

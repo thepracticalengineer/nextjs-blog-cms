@@ -9,7 +9,7 @@ export const storageUnavailable = 'Image storage is unavailable. Retry shortly o
 export class ImageStorageError extends Error {}
 
 /** DB reservation + immutable storage writes enforce reuse across server instances. */
-export async function storeImage(ownerId: string, bytes: Buffer) {
+export async function storeImage(ownerId: string, bytes: Buffer, metadata: { filename: string; width: number; height: number; library: boolean }) {
   const db = createServiceClient()
   // Constant-size indexed readiness check; downloads/hashing happen offline.
   const { data: pending, error: pendingError } = await db.from('post_media').select('path')
@@ -30,5 +30,10 @@ export async function storeImage(ownerId: string, bytes: Buffer) {
   const { error: uploadError } = await bucket.upload(media.path, bytes, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })
   const reused = !!uploadError && (uploadError.statusCode === '409' || ['Duplicate', 'ResourceAlreadyExists'].includes(storageCode(uploadError)))
   if (uploadError && !reused) throw new ImageStorageError('Image upload failed. Check your connection and retry. Your writing is preserved.')
+  const { data: completed, error: completionError } = await db.rpc('complete_post_media', {
+    p_owner_id: ownerId, p_path: media.path, p_filename: [...metadata.filename].slice(0, 255).join(''),
+    p_width: metadata.width, p_height: metadata.height, p_byte_size: bytes.byteLength, p_library: metadata.library,
+  })
+  if (completionError || completed !== true) throw new ImageStorageError(storageUnavailable)
   return { src: media.url, reused }
 }

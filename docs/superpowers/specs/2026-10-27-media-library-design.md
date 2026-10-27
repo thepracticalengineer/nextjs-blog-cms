@@ -1,0 +1,11 @@
+# Owner-only media library (#256)
+
+Implement the issue on the existing Next.js/Supabase upload foundation. Authors and administrators can browse and manage only assets owned by their authenticated profile. Public object URLs remain public. Never expose another owner's private reference information.
+
+Builder decisions: images only (existing JPEG/PNG/WebP validation and optimized WebP storage), no original retention, captions/descriptions are library metadata only. Removal means reversible archive for all assets, never physical deletion; existing references and URLs remain valid. Archive and restore are owner-only. Intentional library uploads and picker selections receive durable retention distinct from historical post retention. Existing editor uploads remain transient until saved or intentionally selected. Metadata changes never rewrite posts; picker copies default alt and dimensions with per-occurrence overrides.
+
+Extend post_media with UUID asset identifiers, confirmed upload status, stable upload metadata, editable metadata, durable library retention and archive state. Reservations are not listed until storage is confirmed. Migration indexes existing objects without changing paths; unavailable historical filename/dimensions/date are shown as unknown. Ownership comes from authenticated session, never client owner arguments; verify original editor account for reads and writes. Mutations enforce same origin and existing MFA/session checks. SQL operations preserve shared cleanup/save locks and tombstones.
+
+Dashboard: Media navigation, search, grid/list views, sort, active/archived filter, bounded pagination, multiple-file upload queue with per-file progress/failure/retry, detail preview and metadata form, copy URL, archive/restore. Editor: Upload, Media Library and Insert from URL choices in shared cover/inline dialog; library uses the same browse component. Existing file, paste/drop, URL, description, dismissal and retry behavior remains intact.
+
+Verify with ownership tests including administrators, account changes, retention and archive/dedup races, metadata preservation, backfill, isolated browser desktop/mobile/keyboard/failure flows, full unit suite, typecheck, lint, build, and docs checks. No production writes or deployment.

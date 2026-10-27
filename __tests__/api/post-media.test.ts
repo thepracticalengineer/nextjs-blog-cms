@@ -37,6 +37,7 @@ beforeEach(() => {
   legacyRows.mockResolvedValue({ data: [], error: null })
   const reservations = new Map<string, { path: string; url: string }>()
   rpc.mockImplementation(async (_name, args) => {
+    if (_name === 'complete_post_media') return { data: true, error: null }
     const key = `${args.p_owner_id}:${args.p_content_sha256}`
     if (!reservations.has(key)) reservations.set(key, { path: args.p_path, url: args.p_url })
     return { data: reservations.get(key), error: null }
@@ -192,4 +193,24 @@ it('does not expose unexpected storage/client exceptions to the browser', async 
   const response = await POST(request(await fixture()))
   expect(response.status).toBe(503)
   expect(await response.json()).toEqual({ error: 'Image storage is unavailable. Retry shortly or ask an administrator to check image storage.' })
+})
+
+it('confirms metadata only after storage succeeds and persists library intent', async () => {
+  const form = new FormData()
+  form.set('file', await fixture()); form.set('editorId', actor); form.set('intent', 'library')
+  expect((await POST(new Request('http://localhost/api/post-media', { method: 'POST', headers: { origin: 'http://localhost' }, body: form }))).status).toBe(200)
+  expect(rpc).toHaveBeenCalledWith('complete_post_media', expect.objectContaining({ p_owner_id: actor, p_library: true, p_filename: 'cover.png', p_width: 48, p_height: 32 }))
+  rpc.mockClear()
+  upload.mockResolvedValueOnce({ error: { message: 'offline' } })
+  expect((await POST(request(await fixture()))).status).toBe(503)
+  expect(rpc.mock.calls.some(([name]) => name === 'complete_post_media')).toBe(false)
+})
+
+it('does not return a URL when cleanup wins before completion', async () => {
+  rpc.mockImplementation(async name => name === 'reserve_post_media'
+    ? { data: { path: `${actor}/asset.webp`, url: 'https://test/image.webp' }, error: null }
+    : { data: false, error: null })
+  const res = await POST(request(await fixture()))
+  expect(res.status).toBe(503)
+  expect(await res.json()).not.toHaveProperty('src')
 })
