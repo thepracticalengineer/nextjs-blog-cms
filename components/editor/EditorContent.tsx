@@ -1,3 +1,5 @@
+import { parseVideoUrl, videoAttributes, VIDEO_HELP } from '@/lib/editor-video'
+import { sanitizeEditorHtml } from '@/lib/editor-html'
 import { parseAllowedLinkUrl } from '@/lib/editor-link-url'
 import { imageDimension } from '@/features/posts/media/validation'
 
@@ -124,6 +126,15 @@ function renderNode(node: TipTapNode): string {
     case 'tableRow': return `<tr>${inner}</tr>`
     case 'tableHeader': return `<th class="border border-border px-3 py-2 bg-muted font-semibold text-left">${inner}</th>`
     case 'tableCell': return `<td class="border border-border px-3 py-2">${inner}</td>`
+    case 'youtube':
+    case 'video': {
+      const video = parseVideoUrl(node.attrs?.src)
+      if (!video || video.type !== node.type) return '<p>Video unavailable: invalid URL.</p>'
+      const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+      const attributes = Object.entries(videoAttributes(video)).map(([key, value]) => `${key}="${escape(value)}"`).join(' ')
+      const tag = video.type === 'youtube' ? 'iframe' : 'video'
+      return `<div><${tag} ${attributes}></${tag}><p class="article-video-help">${VIDEO_HELP} <a href="${escape(video.source)}" target="_blank" rel="noopener noreferrer">Open video source</a></p></div>`
+    }
     case 'image': {
       const src = sanitizeSrc(node.attrs?.src)
       if (!src) return ''
@@ -148,7 +159,7 @@ export function renderEditorHtml(content: string): string {
   try {
     return renderNode(JSON.parse(content) as TipTapNode)
   } catch {
-    return content
+    return sanitizeEditorHtml(content)
   }
 }
 

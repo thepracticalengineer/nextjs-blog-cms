@@ -425,3 +425,8 @@ also included in the shared MFA API matrix.
 uses the dedicated full-stack environment above for actual upload/storage,
 metadata editing, editor reuse, public URL preservation after archive, and author/admin
 cross-owner HTTP denial. The main browser CI project discovers this test automatically.
+
+## Editor videos
+
+See [video verification](../features/post-videos.md#verification) for URL security,
+serialization, persistence boundary and isolated desktop/mobile browser checks.

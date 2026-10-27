@@ -59,3 +59,14 @@ describe('private unsaved reader preview', () => {
     expect(createClient).not.toHaveBeenCalled()
   })
 })
+it('keeps safe players in authenticated previews and strips playback overrides', async () => {
+  const content = JSON.stringify({ type: 'doc', content: [
+    { type: 'youtube', attrs: { src: 'https://youtu.be/aqz-KE-bpKQ?autoplay=1' } },
+    { type: 'video', attrs: { src: 'https://cdn.example/movie.webm?token=abc', autoplay: true } },
+  ] })
+  const result = await previewPost(content, 'author-a')
+  expect(result.content).toContain('https://www.youtube-nocookie.com/embed/aqz-KE-bpKQ')
+  expect(result.content).toContain('<video')
+  expect(result.content).toContain('controls')
+  expect(result.content).not.toContain('autoplay')
+})
