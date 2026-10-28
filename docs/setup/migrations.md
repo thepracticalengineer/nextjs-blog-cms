@@ -20,6 +20,7 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261019140000_comment_reactions.sql` | Private reaction rows, MFA/eligibility RPCs and shared change budgets; migrate before deploying [comment reactions](../features/comment-reactions.md) |
 | `20261020070000_article_reactions.sql` | Private article reaction rows, aggregate/own-selection RPCs and change budgets; migrate before deploying [article reactions](../features/article-reactions.md) |
 | `20261020134445_retire_legacy_ai_api.sql` | Revoke developer keys, freeze legacy AI writes and retain owner read/export access; inventory consumers, announce cutoff and drain retries before migration/deploy |
+| `20261028101334_add_page_content_model.sql` | Private working pages, public snapshots, admin/MFA authorization and atomic revision/retry contracts; apply before deploying [Pages server functions](../features/pages.md) |
 
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 
