@@ -2,7 +2,7 @@
 
 | Role   | Access                                          |
 | ------ | ----------------------------------------------- |
-| Admin  | Full control (users, posts, roles, comments; own provider settings) |
+| Admin  | Full control (users, posts, pages, roles, comments; own provider settings) |
 | Author | Create and manage own posts, delete own comments |
 
 Session clients enforce Supabase RLS. Service-role clients bypass RLS and must perform explicit authentication, ownership and role checks. Authors and admins manage only their own encrypted provider keys in Settings → AI Providers, with cookie authentication and MFA. External developer keys are revoked and their API/UI is retired; admins receive no cross-owner provider-key access.
@@ -56,3 +56,17 @@ returned. The endpoint uses the supplied cookie token only for remote revocation
 without trusting its contents for application authorization.
 
 See [MFA verification and recovery](mfa.md) for authenticator selection, recoverable failures, sign-out and administrator-assisted recovery.
+
+## Pages capabilities
+
+`pages:create`, `pages:read`, `pages:update` and `pages:publish` are admin-only.
+`pages:publish` covers explicit publication and unpublication. Authors' existing
+`posts:publish` does not grant any page-management access. Signup policy remains
+unchanged; #111 is a separate product decision.
+
+Server actions check the session capability and MFA; the authenticated database
+RPC independently derives the actor from `auth.uid()` and checks the current
+profile role and MFA. Direct table writes are revoked even for authenticated
+admins. Private working rows require admin/MFA SELECT access; published snapshots
+are readable by everyone. Retry receipts and slug reservations are private.
+See [Pages contracts and rollout](pages.md).

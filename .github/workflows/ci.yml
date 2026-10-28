@@ -274,6 +274,10 @@ jobs:
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/post_lists.sql
       - name: Verify atomic post rollback and retry contracts
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/atomic_posts.sql
+      - name: Verify page privacy, atomic publication and retries
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/pages.sql
+          node database/tests/pages-concurrency.mjs
       - name: Verify taxonomy merges and aliases
         run: docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/tag_taxonomy.sql
       - name: Verify image retention and cleanup permissions
@@ -284,6 +288,10 @@ jobs:
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/media_library.sql
           node database/tests/media-library-concurrency.mjs
           node database/tests/media-library-upgrade.mjs
+      - name: Verify comment write protection and concurrency
+        run: |
+          docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/comment_writes.sql
+          node database/tests/comment-writes-concurrency.mjs
       - name: Verify comment reaction eligibility, privacy and concurrency
         run: |
           docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/comment_reactions.sql

@@ -5,10 +5,12 @@ ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public can read comments"
   ON public.comments FOR SELECT USING (true);
 
--- Authenticated users can insert their own comments only
-CREATE POLICY "Authenticated users can create comments"
-  ON public.comments FOR INSERT
-  WITH CHECK (auth.uid() = author_id);
+-- Creates must use public.create_comment (migration 20261028140526), which
+-- enforces identity/MFA, publication, normalization, budgets and retry receipts.
+-- No direct inserts/upserts/updates from untrusted Data API clients.
+REVOKE ALL ON public.comments FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.comments TO anon, authenticated;
+GRANT DELETE ON public.comments TO authenticated;
 
 -- Any authenticated user can delete their own comment
 CREATE POLICY "Users can delete own comments"

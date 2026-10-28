@@ -2,6 +2,10 @@ import type { Role, Permission } from './types'
 
 const rolePermissions: Record<Role, Permission[]> = {
   admin: [
+    'pages:create',
+    'pages:read',
+    'pages:update',
+    'pages:publish',
     'posts:create',
     'posts:read:own',
     'posts:read:all',
