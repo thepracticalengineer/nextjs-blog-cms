@@ -1,6 +1,6 @@
 // __tests__/components/CommentForm.test.tsx
 import { beforeEach, describe, it, expect, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { createComment } from '@/features/comments/actions'
 import { CommentForm } from '@/features/comments/components/CommentForm'
 
@@ -72,14 +72,14 @@ it('retains draft and request ID after a rejected write, then rotates after succ
  await waitFor(() => expect(createComment).toHaveBeenCalledTimes(3))
  expect(vi.mocked(createComment).mock.calls[2][3]).not.toBe(requestId)
 })
-it('preserves rate-limited drafts and uses a new ID for changed text', async () => {
+it('preserves failed drafts and uses a new ID for changed text', async () => {
  const { createComment } = await import('@/features/comments/actions')
- vi.mocked(createComment).mockClear().mockResolvedValue({ error: 'Too many comments. Try again in 42 seconds.' })
+ vi.mocked(createComment).mockClear().mockResolvedValue({ error: 'Could not post your comment. Try again.' })
  render(<CommentForm postId="post-1" postSlug="test-post" authorName="Jane" />)
  const input = screen.getByRole('textbox')
  fireEvent.change(input, { target: { value: 'hello' } })
  fireEvent.click(screen.getByRole('button', { name: /post comment/i }))
- expect(await screen.findByRole('alert')).toHaveTextContent('42 seconds')
+ expect(await screen.findByRole('alert')).toHaveTextContent('Try again')
  expect(input).toHaveValue('hello')
  const first = vi.mocked(createComment).mock.calls[0][3]
  fireEvent.change(input, { target: { value: 'changed' } })
@@ -125,4 +125,28 @@ it('starts a new operation if the mounted form moves to another article', async 
  fireEvent.click(screen.getByRole('button', { name: /post comment/i }))
  await waitFor(() => expect(createComment).toHaveBeenCalledTimes(2))
  expect(vi.mocked(createComment).mock.calls[1][3]).not.toBe(firstId)
+})
+
+it('blocks repeated writes during the server cooldown and retries with the same ID', async () => {
+ vi.useFakeTimers()
+ try {
+  vi.mocked(createComment).mockResolvedValueOnce({ error: 'Try again in 42 seconds.', retryAfterSeconds: 42 })
+  render(<CommentForm postId="post-1" postSlug="first" authorName="Jane" />)
+  const input = screen.getByRole('textbox')
+  fireEvent.change(input, { target: { value: 'Keep this draft' } })
+  await act(async () => { fireEvent.submit(input.closest('form')!) })
+  const button = screen.getByRole('button', { name: /post comment/i })
+  expect(button).toBeDisabled()
+  expect(input).toHaveValue('Keep this draft')
+  expect(input).not.toHaveAttribute('readonly')
+  await act(async () => { fireEvent.submit(input.closest('form')!); await vi.advanceTimersByTimeAsync(41_999) })
+  expect(createComment).toHaveBeenCalledTimes(1)
+  expect(button).toBeDisabled()
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  expect(button).toBeEnabled()
+  await act(async () => { fireEvent.submit(input.closest('form')!) })
+  expect(createComment).toHaveBeenCalledTimes(2)
+  expect(vi.mocked(createComment).mock.calls[1][3]).toBe(vi.mocked(createComment).mock.calls[0][3])
+  expect(input).toHaveValue('')
+ } finally { vi.useRealTimers() }
 })

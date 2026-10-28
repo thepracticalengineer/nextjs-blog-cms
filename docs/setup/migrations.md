@@ -20,8 +20,9 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261019140000_comment_reactions.sql` | Private reaction rows, MFA/eligibility RPCs and shared change budgets; migrate before deploying [comment reactions](../features/comment-reactions.md) |
 | `20261020070000_article_reactions.sql` | Private article reaction rows, aggregate/own-selection RPCs and change budgets; migrate before deploying [article reactions](../features/article-reactions.md) |
 | `20261020134445_retire_legacy_ai_api.sql` | Revoke developer keys, freeze legacy AI writes and retain owner read/export access; inventory consumers, announce cutoff and drain retries before migration/deploy |
+| `20261028101334_add_page_content_model.sql` | Private working pages, public snapshots, admin/MFA authorization and atomic revision/retry contracts; apply before deploying [Pages server functions](../features/pages.md) |
 
-Apply `20261028082621_protect_comment_writes.sql` before deploying the protected
+Apply `20261028140526_protect_comment_writes.sql` before deploying the protected
 comment form/action. It revokes direct comment inserts and updates, so old clients
 will fail safely during rollout. Pause comment submissions, migrate, deploy the
 matching application, then resume. Historical comments are retained unchanged;

@@ -5,7 +5,7 @@ ALTER TABLE public.comments ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public can read comments"
   ON public.comments FOR SELECT USING (true);
 
--- Creates must use public.create_comment (migration 20261028082621), which
+-- Creates must use public.create_comment (migration 20261028140526), which
 -- enforces identity/MFA, publication, normalization, budgets and retry receipts.
 -- No direct inserts/upserts/updates from untrusted Data API clients.
 REVOKE ALL ON public.comments FROM PUBLIC, anon, authenticated;

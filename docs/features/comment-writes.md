@@ -10,11 +10,15 @@ receipt contract before it is enabled.
 
 Each account may create **5 comments per 60 seconds** and **30 per hour**, across
 all articles, tabs and application instances. These are fixed windows starting at
-the account's first successful write after each previous window expires. The
+the account's first successful write after each previous window expires. These
+are not rolling limits: unused capacity at the end of one window can be followed
+by a fresh budget at the start of the next (for example, four comments at second
+59 and five at second 60 after an initial comment at second 0). The
 limits are independent: exhausting either blocks a new comment until both allow
 it. The database returns `COMMENT_RATE_LIMIT` with seconds until retry in the
-error detail; the action returns safe text and `retryAfterSeconds`. Failed writes,
-validation failures and acknowledged retries consume no budget. Deletion does not
+error detail; the action returns safe text and `retryAfterSeconds`. The form
+disables submission until that delay expires, retains the request ID, and keeps
+the draft editable. Failed writes, validation failures and acknowledged retries consume no budget. Deletion does not
 refund it. Deletion remains available under existing own/admin and MFA rules so
 readers can remove their content even when they cannot post again.
 
@@ -48,8 +52,11 @@ replay. Reusing the ID with a different article or text returns
 `COMMENT_REQUEST_CONFLICT`. IDs are scoped to the authenticated account. Minimal
 private receipts survive comment or article deletion indefinitely, so late retries
 acknowledge the original operation without resurrecting removed content. Account
-deletion removes receipts and budgets. Receipts store IDs and the hash, not comment
-text; neither receipts nor budgets are readable by public/authenticated clients.
+deletion removes receipts and budgets. Receipts store IDs, the hash and a creation
+timestamp, not comment text; neither receipts nor budgets are readable by
+public/authenticated clients. The timestamp supports diagnostics and any separately
+reviewed future retention policy. No automatic expiry is enabled, since deleting
+receipts would weaken the delayed-retry guarantee.
 
 UI, action and database normalize CRLF and CR line endings to LF, trim ECMAScript
 leading/trailing whitespace (including non-breaking spaces and BOM), and enforce
@@ -61,7 +68,7 @@ a `NOT VALID` constraint that still checks all new/updated rows, including impor
 
 ## Deployment and verification
 
-Pause comment submissions, apply `20261028082621_protect_comment_writes.sql`, deploy
+Pause comment submissions, apply `20261028140526_protect_comment_writes.sql`, deploy
 the matching application, then resume. The migration deliberately makes old direct
 insert clients fail safely; there is no compatibility bypass. Do not restore direct
 insert grants on application rollback. No new secret, background cleanup or external

@@ -1,7 +1,7 @@
 // features/comments/components/CommentForm.tsx
 'use client'
 
-import { useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -27,6 +27,7 @@ interface CommentFormProps {
 export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) {
   const pending = useRef(false)
   const submission = useRef<{ postId: string; content: string; id: string } | null>(null)
+  const [retryAt, setRetryAt] = useState<number | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const { register, handleSubmit, reset, control, formState: { errors, isSubmitting } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -34,6 +35,12 @@ export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) 
   })
 
   const content = useWatch({ control, name: 'content', defaultValue: '' })
+
+  useEffect(() => {
+    if (retryAt === null) return
+    const timer = setTimeout(() => setRetryAt(null), Math.max(0, retryAt - Date.now()))
+    return () => clearTimeout(timer)
+  }, [retryAt])
 
   async function onSubmit(values: FormValues) {
     setSaveError(null)
@@ -45,6 +52,7 @@ export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) 
       const result = await createComment(postId, values.content, postSlug, submission.current.id)
       if (result.error) {
         setSaveError(result.error)
+        if (result.retryAfterSeconds) setRetryAt(Date.now() + result.retryAfterSeconds * 1000)
       } else {
         submission.current = null
         toast.success('Comment posted!')
@@ -59,7 +67,7 @@ export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) 
     event.preventDefault()
     // Guard before asynchronous validation so a second submit cannot finish
     // React Hook Form's pending state while the first write is still running.
-    if (pending.current) return
+    if (pending.current || retryAt !== null) return
     pending.current = true
     try {
       await handleSubmit(onSubmit)(event)
@@ -103,7 +111,7 @@ export function CommentForm({ postId, postSlug, authorName }: CommentFormProps) 
         {saveError && <p role="alert" className="text-sm text-destructive">{saveError}</p>}
         <div className="flex justify-between items-center">
           <span className="text-xs text-muted-foreground">{commentLength(content ?? '')} / 2,000</span>
-          <Button type="submit" size="sm" disabled={isSubmitting}>
+          <Button type="submit" size="sm" disabled={isSubmitting || retryAt !== null}>
             {isSubmitting ? 'Posting...' : 'Post Comment'}
           </Button>
         </div>

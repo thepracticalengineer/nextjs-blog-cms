@@ -9,9 +9,25 @@ import { z } from 'zod'
 import { commentContentSchema } from './validation'
 import { authorizeSession, getProfile } from '@/lib/auth/session'
 
+type CommentWriteResult =
+  | { data: { id: string }; error?: never; retryAfterSeconds?: never }
+  | { error: string; retryAfterSeconds?: number; data?: never }
+
 const saveError = 'Could not post your comment. Your draft is kept; try again.'
 
-export async function createComment(postId: unknown, content: unknown, postSlug: string, requestId: unknown) {
+function commentWriteError(error: { message: string; details?: string }) {
+  if (error.message === 'COMMENT_RATE_LIMIT') {
+    const seconds = Number(error.details)
+    const retryAfterSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.min(3600, Math.ceil(seconds)) : 60
+    return { error: `Too many comments. Try again in ${retryAfterSeconds} seconds. Your draft is kept.`, retryAfterSeconds }
+  }
+  if (error.message === 'COMMENT_UNAVAILABLE') return { error: 'This article is no longer available for comments. Your draft is kept.' }
+  if (error.message === 'COMMENT_REQUEST_CONFLICT') return { error: 'This submission was already used for different text. Reload before submitting a new comment.' }
+  if (error.message === 'COMMENT_AUTH_REQUIRED') return { error: 'Sign in and complete two-factor authentication, then retry.' }
+  return { error: saveError }
+}
+
+export async function createComment(postId: unknown, content: unknown, postSlug: string, requestId: unknown): Promise<CommentWriteResult> {
   const parsed = commentContentSchema.safeParse(content)
   if (!parsed.success) return { error: parsed.error.issues[0].message }
   if (!z.uuid().safeParse(postId).success || !z.uuid().safeParse(requestId).success) {
@@ -24,20 +40,11 @@ export async function createComment(postId: unknown, content: unknown, postSlug:
     const { data, error } = await supabase.rpc('create_comment', {
       p_post_id: postId, p_content: parsed.data, p_request_id: requestId,
     })
-    if (error) {
-      if (error.message === 'COMMENT_RATE_LIMIT') {
-        const seconds = Number(error.details)
-        const retryAfterSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.min(3600, Math.ceil(seconds)) : 60
-        return { error: `Too many comments. Try again in ${retryAfterSeconds} seconds. Your draft is kept.`, retryAfterSeconds }
-      }
-      if (error.message === 'COMMENT_UNAVAILABLE') return { error: 'This article is no longer available for comments. Your draft is kept.' }
-      if (error.message === 'COMMENT_REQUEST_CONFLICT') return { error: 'This submission was already used for different text. Reload before submitting a new comment.' }
-      if (error.message === 'COMMENT_AUTH_REQUIRED') return { error: 'Sign in and complete two-factor authentication, then retry.' }
-      return { error: saveError }
-    }
-    if (!z.object({ id: z.uuid() }).safeParse(data).success) return { error: saveError }
+    if (error) return commentWriteError(error)
+    const result = z.object({ id: z.uuid() }).safeParse(data)
+    if (!result.success) return { error: saveError }
     revalidatePath(`/blog/${postSlug}`)
-    return { data }
+    return { data: result.data }
   } catch {
     return { error: saveError }
   }

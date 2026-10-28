@@ -85,6 +85,7 @@ DO $$ DECLARE first_id text; result jsonb; detail text; BEGIN
 END $$;
 RESET ROLE;
 DO $$ BEGIN
+ ASSERT (SELECT bool_and(created_at >= transaction_timestamp() AND created_at <= clock_timestamp()) FROM auth_private.comment_write_receipts WHERE user_id='15700000-0000-4000-8000-000000000001'), 'Receipt timestamp missing or invalid';
  ASSERT (SELECT minute_used=5 AND hour_used=5 FROM auth_private.comment_write_budgets WHERE user_id='15700000-0000-4000-8000-000000000001'), 'Failed/replayed operations charged';
  BEGIN
   INSERT INTO public.comments(post_id,author_id,content) VALUES('15700000-0000-4000-8000-000000000010','15700000-0000-4000-8000-000000000001',E' \t');

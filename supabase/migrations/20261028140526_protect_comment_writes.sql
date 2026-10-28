@@ -38,6 +38,7 @@ CREATE TABLE auth_private.comment_write_receipts (
  post_id uuid NOT NULL,
  content_hash bytea NOT NULL,
  comment_id uuid NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
  PRIMARY KEY (user_id, request_id)
 );
 ALTER TABLE auth_private.comment_write_receipts ENABLE ROW LEVEL SECURITY;

@@ -27,11 +27,13 @@ test('lost responses preserve drafts and IDs; intentional identical submissions 
  expect(requests[2]).not.toBe(requests[0])
 })
 test('validation, limit guidance and recovery at 320px', async ({ page }) => {
+ await page.clock.install({ time: new Date('2026-10-28T00:00:00Z') })
+ await page.clock.pauseAt(new Date('2026-10-28T00:00:01Z'))
  await page.setViewportSize({ width: 320, height: 640 })
  let limited = true, writes = 0
  await page.route('**/__comments', async route => {
   writes++
-  await route.fulfill({ json: limited ? { error: 'Too many comments. Try again in 42 seconds. Your draft is kept.' } : { data: { id: 'saved' } } })
+  await route.fulfill({ json: limited ? { error: 'Too many comments. Try again in 42 seconds. Your draft is kept.', retryAfterSeconds: 42 } : { data: { id: 'saved' } } })
  })
  await page.goto(path)
  const input = page.getByRole('textbox', { name: 'Comment content' })
@@ -49,6 +51,13 @@ test('validation, limit guidance and recovery at 320px', async ({ page }) => {
  await submit.click()
  await expect(page.getByRole('alert')).toContainText('42 seconds')
  await expect(input).toHaveValue('😀'.repeat(2000))
+ await expect(submit).toBeDisabled()
+ await input.evaluate(element => element.closest('form')!.requestSubmit())
+ expect(writes).toBe(1)
+ await page.clock.fastForward(41_999)
+ await expect(submit).toBeDisabled()
+ await page.clock.fastForward(1)
+ await expect(submit).toBeEnabled()
  limited = false
  await submit.focus()
  await page.keyboard.press('Enter')
