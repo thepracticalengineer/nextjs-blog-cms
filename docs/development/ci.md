@@ -133,8 +133,11 @@ CI, coverage reporting, PR title/branch policy, merge ancestry audit,
 release/promotion/synchronization, Dependabot, and the issue #65 toolchain
 follow-up remain active. Before cleanup, ordinary CI run
 [40653443159](https://github.com/thepracticalengineer/nextjs-blog-cms/actions/runs/40653443159)
-passed. Verify post-cleanup PR event delivery on the documentation PR; offline
-tests alone do not establish hosted check delivery.
+passed. After cleanup, [PR #297](https://github.com/thepracticalengineer/nextjs-blog-cms/pull/297)
+triggered [CI run 40655771656](https://github.com/thepracticalengineer/nextjs-blog-cms/actions/runs/40655771656),
+PR title, PR branch policy, and Vercel preview checks. This confirms PR event
+delivery; consult the linked checks for their final outcomes. Offline tests
+alone do not establish hosted check delivery.
 
 ### Required branch protection rollout
 
