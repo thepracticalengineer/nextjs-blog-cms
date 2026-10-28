@@ -440,3 +440,15 @@ sidebar and Tailwind styles on desktop/mobile, keyboard disclosure, child naviga
 and refresh. This isolated harness stubs Next navigation and sign-out, uses no Auth
 or database, and does not establish deployed authorization. CI runs it in the
 isolated harness group. Existing server page/action permission checks remain in place.
+
+## Pages persistence
+
+Run `pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts`
+for document validation, action guards, retry/error mapping and read boundaries.
+CI runs `database/tests/pages.sql` (rolled back) and
+`node database/tests/pages-concurrency.mjs` against its disposable migrated
+Supabase database. They exercise anonymous/author/admin/MFA access, direct-write
+denial, snapshot isolation, stale saves/publication, retry identity and real
+multi-connection create/save/publish/slug races. See [Pages verification](../features/pages.md#verification)
+for local target restrictions. No Pages browser UI or public route exists in this
+issue; browser delivery and renderer integration remain separate work.

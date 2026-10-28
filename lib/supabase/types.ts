@@ -39,6 +39,54 @@ export type Database = {
   }
   public: {
     Tables: {
+      pages: {
+        Row: {
+          id: string
+          title: string
+          slug: string
+          seo_title: string
+          seo_description: string
+          document: Json
+          status: 'draft' | 'published'
+          revision: string
+          created_at: string
+          updated_at: string
+          created_by: string | null
+          updated_by: string | null
+          published_at: string | null
+          published_by: string | null
+        }
+        Insert: never // All writes go through write_page_atomic.
+        Update: never
+        Relationships: []
+      }
+      page_snapshots: {
+        Row: {
+          page_id: string
+          title: string
+          slug: string
+          seo_title: string
+          seo_description: string
+          document: Json
+          revision: string
+          published_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [{ foreignKeyName: "page_snapshots_page_id_fkey"; columns: ["page_id"]; isOneToOne: true; referencedRelation: "pages"; referencedColumns: ["id"] }]
+      }
+      page_slug_reservations: {
+        Row: { slug: string; page_id: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      page_write_requests: {
+        Row: { actor_id: string; request_key: string; request: Json; page_id: string; created_at: string }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       auth_attempt_buckets: {
         Row: { bucket_key: string; attempts: number; expires_at: string }
         Insert: { bucket_key: string; attempts: number; expires_at: string }
@@ -373,6 +421,10 @@ export type Database = {
       }
     }
     Functions: {
+      write_page_atomic: {
+        Args: { p_operation: string; p_request_key: string; p_values?: Json | null; p_page_id?: string | null; p_expected_revision?: string | null }
+        Returns: Json
+      }
       get_article_reactions: { Args: { p_post_id: string }; Returns: Json }
       set_article_reaction: {
         Args: { p_post_id: string; p_reaction: string; p_selected: boolean }

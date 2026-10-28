@@ -1,6 +1,10 @@
 export type Role = 'admin' | 'author'
 
 export type Permission =
+  | 'pages:create'
+  | 'pages:read'
+  | 'pages:update'
+  | 'pages:publish'
   | 'posts:create'
   | 'posts:read:own'
   | 'posts:read:all'
