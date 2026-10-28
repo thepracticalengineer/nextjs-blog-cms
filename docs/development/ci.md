@@ -92,6 +92,52 @@ promotion. Protect develop and require review of these scripts/workflows.
 
 ## Hosted rollout
 
+### Copilot workflow retirement
+
+Issues [#217](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/217)
+and [#218](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/218)
+were audited on October 28, 2026. Copilot code review (workflow `247293082`)
+has 50 historical runs; Copilot cloud agent (`264568052`) has three. Both last
+ran on April 22, 2026. Neither has repository workflow YAML on main or develop,
+and no Copilot-specific configuration files were found under `.github/`.
+
+The repository's automatic code review page showed **No rulesets**. The sole
+repository ruleset was disabled and contained no review or status-check rules;
+main and develop had no classic branch protection. No open PRs, Copilot-assigned
+open issues, or active agent sessions (with the author filter removed) were
+present. These observations establish no current dependency on either workflow;
+they do not replace the separate branch-protection rollout below.
+
+Applied through GitHub settings:
+
+- Repository Copilot code review: MCP tool use and custom instructions **Off**;
+  **Block reviews requested with an external Copilot license On**. Copilot
+  approvals were already disabled by the organization. No automatic review
+  ruleset was created. This external-license restriction is not a universal
+  prohibition on reviews using organization-provided licenses.
+- Repository cloud agent: **Allow automations Off**. Workflow approval and
+  security validation controls were preserved.
+- Organization cloud-agent repository access: changed from **All repositories**
+  to **Selected repositories**, excluding this CMS and preserving the other
+  existing repository's access. Future repositories now require explicit opt-in.
+- Repository MCP configuration was already empty; no secrets, environments,
+  historical runs, branches, or PRs were deleted.
+
+GitHub's supported workflow-disable endpoint returned HTTP 422,
+`Unable to disable this workflow.`, for both dynamic workflow IDs. Their Actions
+entries remain `active` in the API despite the settings cleanup. Preserve these
+historical entries; do not delete runs to hide them or add replacement YAML.
+Recheck GitHub's controls if support for disabling these dynamic workflows changes.
+
+CI, coverage reporting, PR title/branch policy, merge ancestry audit,
+release/promotion/synchronization, Dependabot, and the issue #65 toolchain
+follow-up remain active. Before cleanup, ordinary CI run
+[40653443159](https://github.com/thepracticalengineer/nextjs-blog-cms/actions/runs/40653443159)
+passed. Verify post-cleanup PR event delivery on the documentation PR; offline
+tests alone do not establish hosted check delivery.
+
+### Required branch protection rollout
+
 Repository files cannot activate hosted rulesets. Maintainers must apply these
 changes alongside rollout; no App bypass or new credentials are needed:
 
