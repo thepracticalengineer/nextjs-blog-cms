@@ -90,7 +90,7 @@ CREATE TABLE public.page_snapshots (
  CONSTRAINT page_snapshots_valid_values CHECK (pages_private.valid_values(jsonb_build_object(
    'title',title,'slug',slug,'seo_title',seo_title,'seo_description',seo_description,'document',document)))
 );
--- Reserve every claimed page slug. Post URL reservations remain independent.
+-- Reserve current working/live slugs. Post URL reservations remain independent.
 CREATE TABLE public.page_slug_reservations (
  slug text PRIMARY KEY,
  page_id uuid NOT NULL REFERENCES public.pages(id) ON DELETE CASCADE
@@ -185,6 +185,11 @@ BEGIN
  ELSIF p_operation='unpublish' THEN
    DELETE FROM public.page_snapshots WHERE page_id=page.id;
  END IF;
+ -- Prune only after the snapshot transition, under the same page lock and
+ -- transaction. A failed save cannot release the current working/live slug.
+ DELETE FROM public.page_slug_reservations r
+ WHERE r.page_id=page.id AND r.slug<>page.slug
+   AND NOT EXISTS (SELECT 1 FROM public.page_snapshots s WHERE s.page_id=page.id AND s.slug=r.slug);
  INSERT INTO public.page_write_requests(actor_id,request_key,request,page_id) VALUES(actor,p_request_key,request,page.id);
  RETURN jsonb_build_object('page',to_jsonb(page),'replayed',false);
 END;

@@ -13,14 +13,19 @@ const query = async statement => (await exec('docker', ['exec', container, 'psql
 const actor = randomUUID()
 const slug = `pages-race-${randomUUID()}`
 const values = { title: 'Race', slug, seo_title: '', seo_description: '', document: { version: 1, blocks: [] } }
-const write = async (operation, key, payload = null, page = null) => JSON.parse(await query(`
-  BEGIN; SET LOCAL ROLE authenticated;
-  SET LOCAL request.jwt.claims = '${JSON.stringify({ sub: actor, role: 'authenticated', aal: 'aal1' })}';
-  SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payload ? `${sql(JSON.stringify(payload))}::jsonb` : 'NULL'},${page ? `${sql(page.id)}::uuid,${sql(page.revision)}::uuid` : 'NULL,NULL'});
-  COMMIT;
-`))
+const write = async (operation, key, payload = null, page = null) => {
+  const payloadSql = payload ? `${sql(JSON.stringify(payload))}::jsonb` : 'NULL'
+  const pageSql = page ? `${sql(page.id)}::uuid,${sql(page.revision)}::uuid` : 'NULL,NULL'
+  return JSON.parse(await query(`
+    BEGIN; SET LOCAL ROLE authenticated;
+    SET LOCAL request.jwt.claims = '${JSON.stringify({ sub: actor, role: 'authenticated', aal: 'aal1' })}';
+    SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payloadSql},${pageSql});
+    COMMIT;
+  `))
+}
 try {
-  await query(`INSERT INTO auth.users(id,email) VALUES(${sql(actor)},${sql(`${actor}@example.test`)}); UPDATE public.profiles SET role='admin' WHERE id=${sql(actor)}`)
+  const email = `${actor}@example.test`
+  await query(`INSERT INTO auth.users(id,email) VALUES(${sql(actor)},${sql(email)}); UPDATE public.profiles SET role='admin' WHERE id=${sql(actor)}`)
   const creates = await Promise.all(Array.from({ length: 12 }, () => write('create', 'create', values)))
   assert.equal(creates.filter(result => !result.replayed).length, 1)
   assert.equal(new Set(creates.map(result => result.page.id)).size, 1)
@@ -43,7 +48,23 @@ try {
   assert.equal(clash.filter(result => result.status === 'rejected' && result.reason.stderr.includes('PAGE_SLUG_CONFLICT')).length, 1)
   assert.equal(Number(await query(`SELECT count(*) FROM public.pages WHERE created_by=${sql(actor)}`)), 2)
   assert.equal(Number(await query(`SELECT count(*) FROM public.page_write_requests WHERE actor_id=${sql(actor)} AND request_key LIKE 'clash-%'`)), 1)
-  console.log('Pages: concurrent creation/retries, stale saves, publication retries and slug conflicts passed')
+  // A simultaneous draft rename must never make its still-live slug claimable.
+  const published = publications[0].page
+  const renamed = `${slug}-renamed`
+  const liveRace = await Promise.allSettled([
+    write('save', 'rename-live', { ...values, slug: renamed }, published),
+    ...Array.from({ length: 8 }, (_, index) => write('create', `steal-live-${index}`, values)),
+  ])
+  assert.equal(liveRace[0].status, 'fulfilled')
+  assert.equal(liveRace.slice(1).filter(result => result.status === 'rejected' && result.reason.stderr.includes('PAGE_SLUG_CONFLICT')).length, 8)
+  const draft = liveRace[0].value.page
+  assert.equal(Number(await query(`SELECT count(*) FROM public.page_slug_reservations WHERE page_id=${sql(page.id)}`)), 2)
+  // Once publication retires the old live slug, another page can claim it.
+  await write('publish', 'publish-renamed', null, draft)
+  const reused = await write('create', 'reuse-retired-live', values)
+  assert.notEqual(reused.page.id, page.id)
+  assert.equal(Number(await query(`SELECT count(*) FROM public.page_slug_reservations WHERE page_id=${sql(page.id)}`)), 1)
+  console.log('Pages: concurrent creation/retries, stale saves, publication retries, slug conflicts and live-slug retention/release passed')
 } finally {
   await query(`DELETE FROM public.pages WHERE created_by=${sql(actor)}; DELETE FROM auth.users WHERE id=${sql(actor)}`)
 }

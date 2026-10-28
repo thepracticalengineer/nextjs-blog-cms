@@ -83,7 +83,39 @@ BEGIN
   RAISE EXCEPTION 'Direct snapshot write accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
+-- A page reserves only its current working and live slugs, not typing history.
+DO $$ DECLARE
+ values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}';
+ page jsonb; live jsonb; replay jsonb;
+BEGIN
+ page := public.write_page_atomic('create','life-create',values)->'page';
+ page := public.write_page_atomic('save','life-b',jsonb_set(values,'{slug}','"lifecycle-b"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ PERFORM public.write_page_atomic('create','reuse-a',values);
+ page := public.write_page_atomic('publish','life-publish-b',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ live := page;
+ page := public.write_page_atomic('save','life-c',jsonb_set(values,'{slug}','"lifecycle-c"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ page := public.write_page_atomic('save','life-d',jsonb_set(values,'{slug}','"lifecycle-d"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ PERFORM public.write_page_atomic('create','reuse-c',jsonb_set(values,'{slug}','"lifecycle-c"'));
+ replay := public.write_page_atomic('save','life-c',jsonb_set(values,'{slug}','"lifecycle-c"'),(live->>'id')::uuid,(live->>'revision')::uuid);
+ ASSERT replay->>'replayed' = 'true' AND replay->'page' = page, 'Retry reclaimed released slug';
+ BEGIN
+  PERFORM public.write_page_atomic('create','steal-live-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+  RAISE EXCEPTION 'Live slug released before publication';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
+ page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+ page := public.write_page_atomic('save','life-e',jsonb_set(values,'{slug}','"lifecycle-e"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ page := public.write_page_atomic('unpublish','life-unpublish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ PERFORM public.write_page_atomic('create','reuse-d',jsonb_set(values,'{slug}','"lifecycle-d"'));
+ BEGIN
+  PERFORM public.write_page_atomic('create','steal-working-e',jsonb_set(values,'{slug}','"lifecycle-e"'));
+  RAISE EXCEPTION 'Current working slug released';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
 RESET ROLE;
+DO $$ BEGIN
+ ASSERT NOT EXISTS (SELECT page_id FROM public.page_slug_reservations GROUP BY page_id HAVING count(*) > 2), 'Reservation history leaked';
+END $$;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
  ASSERT (SELECT count(*) FROM public.page_snapshots WHERE slug='pages-about') = 1;

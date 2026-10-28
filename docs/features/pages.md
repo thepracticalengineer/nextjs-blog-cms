@@ -53,7 +53,8 @@ schema migration and matching validator/renderer release; never silently drop
 unknown blocks, coerce versions or replace unsupported content with an empty doc.
 
 `getPublishedPage(slug)` reads only snapshots and validates stored documents
-before handing them to a future renderer. `getPage(id)` does the same for private
+before handing them to a future renderer. It uses the anonymous cookie-free client,
+so public reads do not force request-bound dynamic rendering. `getPage(id)` does the same for private
 working data after authorization. Invalid/unsupported stored data returns
 `PAGE_UNSUPPORTED_DOCUMENT`, never a working-copy fallback. Paragraph text must
 be rendered as escaped text, not HTML. No rendering or HTML conversion is included
@@ -90,12 +91,14 @@ unpublished page. A replay response can therefore include edits made since the
 original request. Receipts are retained without expiry. Database role/MFA checks
 happen before replay lookup so revoked permissions cannot retrieve a prior result.
 
-Each claimed slug remains reserved to its page, including previous working slugs
-and slugs of unpublished pages. Renaming a draft cannot release a live slug to
-another page. Collision returns `PAGE_SLUG_CONFLICT` with no partial write.
+Each page reserves its current working slug and, when different, its live snapshot
+slug. Saving releases abandoned working slugs; publishing or unpublishing releases
+previous live slugs that are no longer used by the working copy. Pruning happens
+atomically with the write. Renaming a draft cannot release a still-live slug to
+another page. Retries never reclaim previously released slugs. Collision returns `PAGE_SLUG_CONFLICT` with no partial write.
 These reservations are separate from post routes: there is no new public route,
 redirect or shared root-path claim. Routing delivery must decide site-path
-conflicts before exposing pages. No delete/release operation is included.
+conflicts before exposing pages. There is no page delete operation or historical page redirect reservation.
 
 ## Rollout
 

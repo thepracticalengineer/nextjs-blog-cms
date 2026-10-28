@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 // Installed Zod and PostgreSQL both count Unicode code points.
 const text = (maximum: number) => z.string().max(maximum)
-  .refine(value => !/[\u0000\uD800-\uDFFF]/u.test(value), 'Text must be valid PostgreSQL Unicode')
+  .refine(value => value.isWellFormed() && !value.includes(String.fromCharCode(0)), 'Text must be valid PostgreSQL Unicode')
 
 // Version 1 is intentionally a small storage contract. New block types require
 // an explicit schema migration and renderer support; arbitrary HTML is not a block.

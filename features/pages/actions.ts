@@ -11,9 +11,10 @@ export async function writePage(input: unknown): Promise<PageResult<{ page: Page
   const parsed = pageWriteSchema.safeParse(input)
   if (!parsed.success) return pageFailure('PAGE_INVALID_INPUT')
   const request = parsed.data
-  const permission = request.operation === 'create' ? 'pages:create'
-    : request.operation === 'save' ? 'pages:update' : 'pages:publish'
-  const { failure } = await authorizeSession(permission)
+  const permission = {
+    create: 'pages:create', save: 'pages:update', publish: 'pages:publish', unpublish: 'pages:publish',
+  } as const
+  const { failure } = await authorizeSession(permission[request.operation])
   if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
   const client = await createClient()
   try {
