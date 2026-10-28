@@ -5,29 +5,49 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { can } from '@/lib/permissions'
 import type { Role } from '@/lib/permissions'
-import { getProfile } from '@/lib/auth/session'
+import { z } from 'zod'
+import { commentContentSchema } from './validation'
+import { authorizeSession, getProfile } from '@/lib/auth/session'
 
-const MAX_COMMENT_LENGTH = 2000
+type CommentWriteResult =
+  | { data: { id: string }; error?: never; retryAfterSeconds?: never }
+  | { error: string; retryAfterSeconds?: number; data?: never }
 
-export async function createComment(postId: string, content: string, postSlug: string) {
-  const profile = await getProfile()
-  if (!profile) return { error: 'You must be signed in to comment' }
+const saveError = 'Could not post your comment. Your draft is kept; try again.'
 
-  const trimmedContent = content.trim()
-  if (trimmedContent.length === 0) return { error: 'Comment cannot be empty' }
-  if (trimmedContent.length > MAX_COMMENT_LENGTH) return { error: 'Comment is too long' }
+function commentWriteError(error: { message: string; details?: string }) {
+  if (error.message === 'COMMENT_RATE_LIMIT') {
+    const seconds = Number(error.details)
+    const retryAfterSeconds = Number.isFinite(seconds) && seconds > 0 ? Math.min(3600, Math.ceil(seconds)) : 60
+    return { error: `Too many comments. Try again in ${retryAfterSeconds} seconds. Your draft is kept.`, retryAfterSeconds }
+  }
+  if (error.message === 'COMMENT_UNAVAILABLE') return { error: 'This article is no longer available for comments. Your draft is kept.' }
+  if (error.message === 'COMMENT_REQUEST_CONFLICT') return { error: 'This submission was already used for different text. Reload before submitting a new comment.' }
+  if (error.message === 'COMMENT_AUTH_REQUIRED') return { error: 'Sign in and complete two-factor authentication, then retry.' }
+  return { error: saveError }
+}
 
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('comments')
-    .insert({ post_id: postId, author_id: profile.id, content: trimmedContent })
-    .select()
-    .single()
-
-  if (error) return { error: error.message }
-
-  revalidatePath(`/blog/${postSlug}`)
-  return { data }
+export async function createComment(postId: unknown, content: unknown, postSlug: string, requestId: unknown): Promise<CommentWriteResult> {
+  const parsed = commentContentSchema.safeParse(content)
+  if (!parsed.success) return { error: parsed.error.issues[0].message }
+  if (!z.uuid().safeParse(postId).success || !z.uuid().safeParse(requestId).success) {
+    return { error: 'Invalid comment request. Reload the page and try again.' }
+  }
+  try {
+    const { failure } = await authorizeSession()
+    if (failure) return { error: failure.error }
+    const supabase = await createClient()
+    const { data, error } = await supabase.rpc('create_comment', {
+      p_post_id: postId, p_content: parsed.data, p_request_id: requestId,
+    })
+    if (error) return commentWriteError(error)
+    const result = z.object({ id: z.uuid() }).safeParse(data)
+    if (!result.success) return { error: saveError }
+    revalidatePath(`/blog/${postSlug}`)
+    return { data: result.data }
+  } catch {
+    return { error: saveError }
+  }
 }
 
 export async function deleteComment(id: string, postSlug: string) {

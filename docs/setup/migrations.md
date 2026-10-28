@@ -22,6 +22,14 @@ Apply all ordered `supabase/migrations/` before deploying current application co
 | `20261020134445_retire_legacy_ai_api.sql` | Revoke developer keys, freeze legacy AI writes and retain owner read/export access; inventory consumers, announce cutoff and drain retries before migration/deploy |
 | `20261028101334_add_page_content_model.sql` | Private working pages, public snapshots, admin/MFA authorization and atomic revision/retry contracts; apply before deploying [Pages server functions](../features/pages.md) |
 
+Apply `20261028140526_protect_comment_writes.sql` before deploying the protected
+comment form/action. It revokes direct comment inserts and updates, so old clients
+will fail safely during rollout. Pause comment submissions, migrate, deploy the
+matching application, then resume. Historical comments are retained unchanged;
+the new normalized-content constraint is enforced for new writes without scanning
+or rewriting old rows. Keep the RPC-only permissions on application rollback.
+See [comment protection and verification](../features/comment-writes.md).
+
 Earlier migrations install the base schema, comments, keys, AI and newsletter tables. Retain their order and migration history. Read [dependency migrations](../dependency-upgrade.md), [password recovery](../features/password-recovery.md), [author privacy](../features/public-author-profiles.md), [slug behavior](../features/publication-and-slugs.md), [atomic write contracts](../api/publication-and-writes.md), and [newsletter upgrade instructions](../features/newsletter.md) before deployment. SQL fixtures in `database/tests/` must run only against migrated disposable databases.
 
 The post-list migration adds a stored generated column, computing reading time for

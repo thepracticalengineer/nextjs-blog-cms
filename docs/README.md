@@ -37,6 +37,7 @@
 
 - [Client auth state, profile requests and retry](features/client-auth-state.md)
 - [Article reactions](features/article-reactions.md)
+- [Comment write protection](features/comment-writes.md)
 - [Comment reactions](features/comment-reactions.md)
 - [Roles and permissions](features/roles-and-permissions.md)
 - [AI Providers and retired assistant](features/ai-assistant.md)
