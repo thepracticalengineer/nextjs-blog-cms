@@ -69,4 +69,8 @@ RPC independently derives the actor from `auth.uid()` and checks the current
 profile role and MFA. Direct table writes are revoked even for authenticated
 admins. Private working rows require admin/MFA SELECT access; published snapshots
 are readable by everyone. Retry receipts and slug reservations are private.
+Page image uploads, URL checks and owner-scoped library requests explicitly
+require `pages:update` when using `?context=page`. The same owner and MFA checks
+apply; admin page access does not grant access to another account's media.
+
 See [Pages contracts and rollout](pages.md).

@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { mediaContextUrl, type MediaContext } from '../context'
 import type { MediaAsset } from '../library-types'
 import { assetName, assetSize, mediaMutation, mediaRequest } from '../library-client'
 import { MediaSessionBoundary } from './MediaSessionBoundary'
@@ -14,11 +15,11 @@ import { MediaDetails } from './MediaDetails'
 
 type Page = { assets: MediaAsset[]; total: number; page: number; pageSize: number }
 const selectClass = 'h-9 min-w-0 rounded-md border bg-background px-2 text-sm focus-visible:outline-2 focus-visible:outline-ring'
-type LibraryProps = Readonly<{ editorId: string; onSelect?: (asset: MediaAsset) => void; onSelecting?: (busy: boolean) => void; refresh?: number }>
+type LibraryProps = Readonly<{ editorId: string; context?: MediaContext; onSelect?: (asset: MediaAsset) => void; onSelecting?: (busy: boolean) => void; refresh?: number }>
 export function MediaLibrary(props: LibraryProps) {
   return <MediaSessionBoundary editorId={props.editorId}><LibraryContent {...props} /></MediaSessionBoundary>
 }
-function LibraryContent({ editorId, onSelect, onSelecting, refresh = 0 }: LibraryProps) {
+function LibraryContent({ editorId, onSelect, onSelecting, refresh = 0, context = 'post' }: LibraryProps) {
   const id = useId()
   const [query, setQuery] = useState('')
   const [search, setSearch] = useState('')
@@ -35,7 +36,7 @@ function LibraryContent({ editorId, onSelect, onSelecting, refresh = 0 }: Librar
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; onSelecting?.(false) } }, [onSelecting])
   const params = new URLSearchParams({ editorId, q: search, sort, filter: onSelect ? 'active' : filter, page: String(page) })
-  const url = `/api/post-media/library?${params}`
+  const url = mediaContextUrl(`/api/post-media/library?${params}`, context)
   const key = `${url}:${revision}:${refresh}`
   useEffect(() => {
     const controller = new AbortController()
@@ -54,7 +55,7 @@ function LibraryContent({ editorId, onSelect, onSelecting, refresh = 0 }: Librar
     onSelecting?.(true)
     setSelectionError('')
     try {
-      const { asset: pinned } = await mediaMutation(asset.id, editorId, {}, true)
+      const { asset: pinned } = await mediaMutation(asset.id, editorId, {}, true, undefined, context)
       if (!pinned?.id || !pinned.url) throw new Error('Image selection failed. Refresh the library and retry.')
       if (mounted.current) onSelect(pinned)
     } catch (error) { if (mounted.current) setSelectionError((error as Error).message) }
@@ -85,7 +86,7 @@ function LibraryContent({ editorId, onSelect, onSelecting, refresh = 0 }: Librar
     {selectionError && <p role="alert">{selectionError}</p>}
     {busy && <output>Preparing image…</output>}
     {data && data.total > 0 && <nav aria-label="Media pagination" className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="outline" disabled={data.page <= 1} onClick={() => setPage(data.page - 1)}>Previous</Button><span className="text-sm">Page {data.page} of {Math.max(1, Math.ceil(data.total / data.pageSize))}</span><Button type="button" variant="outline" disabled={data.page * data.pageSize >= data.total} onClick={() => setPage(data.page + 1)}>Next</Button></nav>}
-    {selected && <MediaDetails key={selected} id={selected} editorId={editorId} onClose={() => setSelected(undefined)} onChanged={() => setRevision(value => value + 1)} />}
+    {selected && <MediaDetails context={context} key={selected} id={selected} editorId={editorId} onClose={() => setSelected(undefined)} onChanged={() => setRevision(value => value + 1)} />}
   </section>
 }
 

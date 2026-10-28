@@ -35,6 +35,28 @@ describe('page actions', () => {
       p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id,
     })
   })
+  it('enforces configured image hosts at writes and both stored read boundaries', async () => {
+    const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://unconfigured.invalid/image.png' } }] } }
+    expect((await writePage({ operation: 'create', requestKey: 'image', values: { ...values, document } })).error?.code).toBe('PAGE_INVALID_INPUT')
+    expect(mocks.rpc).not.toHaveBeenCalled()
+    mocks.maybeSingle.mockResolvedValue({ data: { ...row, document }, error: null })
+    expect((await getPage(id)).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    mocks.maybeSingle.mockResolvedValue({ data: { ...values, document, page_id: id, revision: id, published_at: row.created_at }, error: null })
+    expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
+    expect((await writePage({ operation: 'publish', requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    expect(mocks.rpc).toHaveBeenCalledOnce()
+  })
+  it('accepts relative image paths and configured remote hosts on the server', async () => {
+    vi.stubEnv('IMAGE_REMOTE_HOSTS', 'images.example.test')
+    try {
+      for (const src of ['/image.png', 'https://images.example.test/image.png']) {
+        const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src } }] } }
+        mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: false }, error: null })
+        expect((await writePage({ operation: 'create', requestKey: src, values: { ...values, document } })).error).toBeNull()
+      }
+    } finally { vi.unstubAllEnvs() }
+  })
   it('rejects invalid inputs without persistence', async () => {
     expect((await writePage({ operation: 'create', requestKey: 'key', values: { ...values, document: { version: 99, blocks: [] } } })).error?.code).toBe('PAGE_INVALID_INPUT')
     expect((await getPage('invalid')).error?.code).toBe('PAGE_INVALID_INPUT')

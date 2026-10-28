@@ -78,3 +78,29 @@ it('reports malformed JSON explicitly before any service access', async () => {
  expect(await res.json()).toEqual({ error: 'Invalid JSON in media request.' })
  expect(createServiceClient).not.toHaveBeenCalled()
 })
+
+it('authorizes page listing and selection explicitly while retaining owner scope', async () => {
+ expect((await GET(new Request(`http://localhost/api/post-media/library?editorId=${owner}&context=page`))).status).toBe(200)
+ expect(authorizeSession).toHaveBeenCalledWith('pages:update')
+ expect(rpc).toHaveBeenCalledWith('list_media_library', expect.objectContaining({ p_owner_id: owner }))
+ const req = new Request(`http://localhost/api/post-media/library/${id}/select?context=page`, { method: 'POST', headers: { origin: 'http://localhost' }, body: JSON.stringify({ editorId: owner }) })
+ expect((await POST(req, { params: Promise.resolve({ id }) })).status).toBe(404)
+ expect(authorizeSession).toHaveBeenLastCalledWith('pages:update')
+ expect(rpc).toHaveBeenCalledWith('mutate_media_library', { p_owner_id: owner, p_id: id, p_changes: {}, p_select: true })
+})
+it.each(['FORBIDDEN', 'MFA_REQUIRED'] as const)('denies page library %s without privileged access', async code => {
+ vi.mocked(authorizeSession).mockResolvedValueOnce({ profile: null, failure: { code, error: 'Denied', status: 403 } })
+ expect((await GET(new Request(`http://localhost/api/post-media/library?editorId=${owner}&context=page`))).status).toBe(403)
+ expect(authorizeSession).toHaveBeenCalledWith('pages:update')
+ expect(createServiceClient).not.toHaveBeenCalled()
+})
+it('rejects ambiguous page context and changed accounts before library access', async () => {
+ for (const query of ['context=other', 'context=', 'context=page&context=post']) {
+  expect((await GET(new Request(`http://localhost/api/post-media/library?editorId=${owner}&${query}`))).status).toBe(400)
+ }
+ expect(authorizeSession).not.toHaveBeenCalled()
+ expect((await GET(new Request('http://localhost/api/post-media/library?editorId=other&context=page'))).status).toBe(403)
+ const req = new Request(`http://localhost/api/post-media/library/${id}/select?context=page`, { method: 'POST', headers: { origin: 'http://localhost' }, body: JSON.stringify({ editorId: owner, context: 'post' }) })
+ expect((await POST(req, { params: Promise.resolve({ id }) })).status).toBe(400)
+ expect(createServiceClient).not.toHaveBeenCalled()
+})

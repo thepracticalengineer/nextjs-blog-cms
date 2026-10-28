@@ -1,3 +1,4 @@
+import { mediaContextUrl, type MediaContext } from './context'
 import type { MediaAsset } from './library-types'
 
 export async function mediaRequest<T>(url: string, options?: RequestInit): Promise<T> {
@@ -6,8 +7,8 @@ export async function mediaRequest<T>(url: string, options?: RequestInit): Promi
   if (!response.ok) throw new Error(result.error ?? 'Media request failed. Retry shortly.')
   return result as T
 }
-export function mediaMutation(id: string, editorId: string, values: Record<string, unknown>, select = false, signal?: AbortSignal) {
-  return mediaRequest<{ asset: MediaAsset }>(`/api/post-media/library/${encodeURIComponent(id)}${select ? '/select' : ''}`, {
+export function mediaMutation(id: string, editorId: string, values: Record<string, unknown>, select = false, signal?: AbortSignal, context: MediaContext = 'post') {
+  return mediaRequest<{ asset: MediaAsset }>(mediaContextUrl(`/api/post-media/library/${encodeURIComponent(id)}${select ? '/select' : ''}`, context), {
     signal, method: select ? 'POST' : 'PATCH', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ ...values, editorId }),
   })

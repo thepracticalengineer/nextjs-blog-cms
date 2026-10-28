@@ -90,3 +90,13 @@ it('uses the same nonblank display name as title sorting', async () => {
   expect(assetName({ ...asset, title: '   ', original_filename: ' circuit.png ' })).toBe('circuit.png')
   expect(assetName({ ...asset, title: '', original_filename: ' ' })).toBe('Untitled image')
 })
+
+it('carries page authorization through library browsing and selection', async () => {
+ const select = vi.fn()
+ fetcher.mockResolvedValueOnce(Response.json({ assets: [asset], total: 1, page: 1, pageSize: 24 })).mockResolvedValueOnce(Response.json({ asset }))
+ render(<MediaLibrary context="page" editorId="owner-a" onSelect={select} />)
+ fireEvent.click(await screen.findByRole('button', { name: 'Select Circuit' }))
+ await waitFor(() => expect(select).toHaveBeenCalledWith(asset))
+ expect(new URL(fetcher.mock.calls[0][0], 'http://localhost').searchParams.get('context')).toBe('page')
+ expect(fetcher.mock.calls[1][0]).toBe('/api/post-media/library/asset-a/select?context=page')
+})

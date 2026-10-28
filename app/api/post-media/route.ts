@@ -1,3 +1,4 @@
+import { mediaContext } from '@/features/posts/media/context'
 import { authorizeApi } from '@/lib/auth/api'
 import { ImageStorageError, storageUnavailable, storeImage } from '@/features/posts/media/store'
 import { isCoverImageAllowed, COVER_IMAGE_ERROR } from '@/lib/cover-images'
@@ -9,7 +10,9 @@ export const runtime = 'nodejs'
 const failure = (error: string, status: number) => Response.json({ error }, { status })
 
 export async function POST(request: Request) {
-  const { profile, response } = await authorizeApi('posts:create')
+  const context = mediaContext(request)
+  if (!context) return failure('Invalid media context.', 400)
+  const { profile, response } = await authorizeApi(context === 'page' ? 'pages:update' : 'posts:create')
   if (response) return response
   // Cookie-authenticated uploads must originate in this application.
   if (request.headers.get('origin') !== new URL(request.url).origin) return failure('Upload from the editor in this application.', 403)
@@ -38,10 +41,12 @@ export async function POST(request: Request) {
     let url: unknown
     if (contentType.startsWith('application/json')) {
       const values = JSON.parse(body.toString()) as Record<string, unknown>
+      if (Object.hasOwn(values, 'context')) return failure('Supply media context in the query only.', 400)
       editorId = values.editorId
       url = values.url
     } else if (contentType.startsWith('multipart/form-data')) {
       const form = await new Response(body, { headers: { 'content-type': contentType } }).formData()
+      if (form.has('context')) return failure('Supply media context in the query only.', 400)
       editorId = form.get('editorId')
       file = form.get('file')
       intent = form.get('intent')
@@ -61,7 +66,8 @@ export async function POST(request: Request) {
       return failure(message, 422)
     }
     try {
-      const stored = await storeImage(profile.id, optimized.data, { filename: file.name, width: optimized.width, height: optimized.height, library: intent === 'library' })
+      // Page documents are not post-media cleanup references; retain their uploads durably.
+      const stored = await storeImage(profile.id, optimized.data, { filename: file.name, width: optimized.width, height: optimized.height, library: context === 'page' || intent === 'library' })
       return Response.json({ ...stored, width: optimized.width, height: optimized.height })
     } catch (error) {
       return failure(error instanceof ImageStorageError ? error.message : storageUnavailable, 503)

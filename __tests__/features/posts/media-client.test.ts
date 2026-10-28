@@ -87,3 +87,15 @@ describe('image transfer client', () => {
     await expect(readImageDimensions('/board.webp', controller.signal)).rejects.toThrow('could not be loaded')
   })
 })
+
+it('routes page uploads and URL validation through explicit page authorization context', async () => {
+ const signal = new AbortController().signal
+ const promise = uploadImage(file(), 'admin-a', vi.fn(), signal, 'editor', 'page')
+ expect(xhr.open).toHaveBeenCalledWith('POST', '/api/post-media?context=page')
+ xhr.onload?.()
+ await promise
+ const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ src: '/image.webp' }) })
+ vi.stubGlobal('fetch', fetcher)
+ await validateImageUrl('/image.webp', 'admin-a', signal, 'page')
+ expect(fetcher).toHaveBeenCalledWith('/api/post-media?context=page', expect.objectContaining({ body: JSON.stringify({ url: '/image.webp', editorId: 'admin-a' }) }))
+})
