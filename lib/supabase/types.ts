@@ -422,7 +422,7 @@ export type Database = {
     }
     Functions: {
       write_page_atomic: {
-        Args: { p_operation: string; p_request_key: string; p_values?: Json | null; p_page_id?: string | null; p_expected_revision?: string | null }
+        Args: { p_operation: string; p_request_key: string; p_values?: Json | null; p_page_id?: string | null; p_expected_revision?: string | null; p_reviewed?: boolean }
         Returns: Json
       }
       get_article_reactions: { Args: { p_post_id: string }; Returns: Json }

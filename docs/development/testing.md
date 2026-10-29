@@ -468,5 +468,6 @@ for local target restrictions. Run `pnpm exec playwright test --config=e2e/page-
 page editor and shared renderer with isolated media fixtures. It checks serialized
 reload, structural editing/history, keyboard/drag ordering, bounded settings, image
 metadata and mobile stacking/overflow. No Auth or database is used by this harness;
-SQL assertions exercise real persistence separately. Full dashboard/public URL
-flows remain #288/#289.
+SQL assertions exercise real persistence separately. Dashboard workflows are covered by `pnpm exec playwright test --config=e2e/page-management.config.ts`; public URL flows remain #289.
+The management harness uses real components with synthetic actions. SQL tests
+cover actual persistence, explicit review and empty-content rejection.

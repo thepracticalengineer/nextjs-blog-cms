@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ authorize: vi.fn(), client: vi.fn(), publicClient: vi.fn(), rpc: vi.fn(), from: vi.fn(), maybeSingle: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/auth/session', () => ({ authorizeSession: mocks.authorize }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }))
@@ -27,11 +28,11 @@ describe('page actions', () => {
   })
   it.each(['create', 'save', 'publish', 'unpublish'] as const)('checks the %s capability and uses caller RPC', async operation => {
     const input = operation === 'create' ? { operation, requestKey: 'key', values } :
-      { operation, requestKey: 'key', pageId: id, expectedRevision: id, ...(operation === 'save' ? { values } : {}) }
+      { operation, requestKey: 'key', pageId: id, expectedRevision: id, ...(operation === 'publish' ? { reviewed: true } : {}), ...(operation === 'save' ? { values } : {}) }
     expect((await writePage(input)).data?.page).toEqual(row)
     expect(mocks.authorize).toHaveBeenCalledWith(operation === 'create' ? 'pages:create' : operation === 'save' ? 'pages:update' : 'pages:publish')
     expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', {
-      p_operation: operation, p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
+      p_operation: operation, p_reviewed: operation === 'publish', p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
       p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id,
     })
   })
@@ -43,9 +44,10 @@ describe('page actions', () => {
     expect((await getPage(id)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { path: [0] } })
     mocks.maybeSingle.mockResolvedValue({ data: { ...values, document, page_id: id, revision: id, published_at: row.created_at }, error: null })
     expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    mocks.maybeSingle.mockResolvedValue({ data: { ...row, document }, error: null })
     mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
-    expect((await writePage({ operation: 'publish', requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
-    expect(mocks.rpc).toHaveBeenCalledOnce()
+    expect((await writePage({ operation: 'publish', reviewed: true, requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
+    expect(mocks.rpc).not.toHaveBeenCalled()
   })
   it('identifies the first disallowed nested image only after authorization', async () => {
     const document = { version: 2, content: { type: 'doc', content: [{ type: 'section', content: [{ type: 'image', attrs: { src: '/allowed.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/first.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/second.png' } }] }] } }
@@ -112,4 +114,9 @@ describe('page actions', () => {
     expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNAVAILABLE')
     expect(mocks.from.mock.calls.every(call => call[0] === 'page_snapshots')).toBe(true)
   })
+})
+
+it('pins management mutations to the account that opened the editor', async () => {
+  expect((await writePage({ operation: 'create', requestKey: 'account-switch', values }, '28800000-0000-4000-8000-000000000002')).error?.code).toBe('PAGE_FORBIDDEN')
+  expect(mocks.rpc).not.toHaveBeenCalled()
 })
