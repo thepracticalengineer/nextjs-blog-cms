@@ -18,7 +18,7 @@ const existing = { pageId: z.uuid(), expectedRevision: z.uuid(), requestKey }
 export const pageWriteSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('create'), requestKey, values: pageValuesSchema }),
   z.strictObject({ operation: z.literal('save'), ...existing, values: pageValuesSchema }),
-  z.strictObject({ operation: z.literal('publish'), ...existing }),
+  z.strictObject({ operation: z.literal('publish'), ...existing, reviewed: z.literal(true) }),
   z.strictObject({ operation: z.literal('unpublish'), ...existing }),
 ])
 export type PageDocument = z.infer<typeof pageDocumentSchema>

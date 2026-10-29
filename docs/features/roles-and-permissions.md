@@ -74,3 +74,9 @@ require `pages:update` when using `?context=page`. The same owner and MFA checks
 apply; admin page access does not grant access to another account's media.
 
 See [Pages contracts and rollout](pages.md).
+
+Dashboard → Pages and its create/edit routes require the page capabilities.
+Publication additionally requires explicit review of the saved revision; this is
+checked in the database as well as the UI. Browser recovery is account-scoped,
+and page mutations reject an account switch since the editor opened. Preview
+is in the private dashboard; public page routing remains issue #289.

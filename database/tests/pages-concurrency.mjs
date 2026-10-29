@@ -12,14 +12,14 @@ const sql = value => `'${String(value).replaceAll("'", "''")}'`
 const query = async statement => (await exec('docker', ['exec', container, 'psql', '-U', user, '-d', database, '-qAt', '-v', 'ON_ERROR_STOP=1', '-c', statement])).stdout.trim()
 const actor = randomUUID()
 const slug = `pages-race-${randomUUID()}`
-const values = { title: 'Race', slug, seo_title: '', seo_description: '', document: { version: 1, blocks: [] } }
+const values = { title: 'Race', slug, seo_title: '', seo_description: '', document: { version: 1, blocks: [{ type: 'paragraph', text: 'Content' }] } }
 const write = async (operation, key, payload = null, page = null) => {
   const payloadSql = payload ? `${sql(JSON.stringify(payload))}::jsonb` : 'NULL'
   const pageSql = page ? `${sql(page.id)}::uuid,${sql(page.revision)}::uuid` : 'NULL,NULL'
   return JSON.parse(await query(`
     BEGIN; SET LOCAL ROLE authenticated;
     SET LOCAL request.jwt.claims = '${JSON.stringify({ sub: actor, role: 'authenticated', aal: 'aal1' })}';
-    SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payloadSql},${pageSql});
+    SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payloadSql},${pageSql},${operation === 'publish'});
     COMMIT;
   `))
 }

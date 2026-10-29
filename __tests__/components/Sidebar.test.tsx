@@ -33,7 +33,7 @@ it('opens the ordered admin submenu with keyboard and removes collapsed links fr
   await user.keyboard(' ')
   expect(toggle).toHaveAttribute('aria-expanded', 'false')
   await user.tab()
-  expect(screen.getByRole('link', { name: 'Media' })).toHaveFocus()
+  expect(screen.getByRole('link', { name: 'Pages' })).toHaveFocus()
 })
 
 it.each(['author', 'unknown'])('hides taxonomy links for %s', async role => {
@@ -42,6 +42,7 @@ it.each(['author', 'unknown'])('hides taxonomy links for %s', async role => {
   if (toggle) await userEvent.click(toggle)
   expect(screen.queryByRole('link', { name: 'Categories' })).not.toBeInTheDocument()
   expect(screen.queryByRole('link', { name: 'Tags' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('link', { name: 'Pages' })).not.toBeInTheDocument()
   if (role === 'author') {
     expect(screen.getByRole('link', { name: 'Add Post' })).toHaveAttribute('href', '/dashboard/posts/new')
   } else {
@@ -81,4 +82,10 @@ it('does not match unrelated route prefixes', () => {
   pathname = '/dashboard/posts-archive'
   render(<Sidebar profile={profile('admin')} />)
   expect(screen.getByRole('button', { name: 'Posts' })).toHaveAttribute('aria-expanded', 'false')
+})
+
+it('marks Pages active on its editor route', () => {
+  pathname = '/dashboard/pages/123/edit'
+  render(<Sidebar profile={profile('admin')} />)
+  expect(screen.getByRole('link', { name: 'Pages' })).toHaveAttribute('aria-current', 'page')
 })

@@ -66,7 +66,7 @@ export async function proxy(request: NextRequest) {
     return response
   }
   const isPostAction = request.method === 'POST' && request.headers.has('next-action') &&
-    (pathname === '/dashboard/posts' || pathname.startsWith('/dashboard/posts/') || pathname === '/dashboard/onboarding')
+    (pathname === '/dashboard/posts' || pathname.startsWith('/dashboard/posts/') || pathname === '/dashboard/onboarding' || pathname === '/dashboard/pages' || pathname.startsWith('/dashboard/pages/'))
 
   // ── /mfa page ──────────────────────────────────────────────────────────────
   if (pathname === '/mfa') {
@@ -88,6 +88,10 @@ export async function proxy(request: NextRequest) {
 
   // ── /dashboard routes ──────────────────────────────────────────────────────
   if (pathname.startsWith('/dashboard')) {
+    if (pathname === '/dashboard/pages' || pathname.startsWith('/dashboard/pages/')) {
+      supabaseResponse.headers.set('Cache-Control', 'private, no-store, max-age=0')
+      supabaseResponse.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    }
     if (!user) return isPostAction ? denyPostAction(401) : redirectWithCookies(`/login?next=${encodeURIComponent(safeReturnPath(pathname + request.nextUrl.search))}`)
 
     // Enforce MFA for users who have it enrolled.

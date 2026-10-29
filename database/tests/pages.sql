@@ -5,6 +5,8 @@ DO $$ DECLARE
  bad jsonb; deep jsonb := '{"type":"paragraph"}'; i integer;
 BEGIN
  ASSERT pages_private.valid_document(good), 'Valid v2 layout rejected';
+ ASSERT NOT pages_private.publishable_document(good), 'Missing image alt accepted';
+ ASSERT pages_private.publishable_document('{"version":2,"content":{"type":"doc","content":[{"type":"image","attrs":{"src":"/test.png","alt":"Workshop"}}]}}'), 'Accessible image-only page rejected';
  ASSERT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1000))));
  ASSERT NOT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1001))));
  ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[]}}');
@@ -47,10 +49,18 @@ DO $$ DECLARE
 BEGIN
  original := public.write_page_atomic('create','v2-create',payload)->'page';
  ASSERT original->'document' = payload->'document';
- published := public.write_page_atomic('publish','v2-publish',NULL,(original->>'id')::uuid,(original->>'revision')::uuid)->'page';
+ BEGIN
+   PERFORM public.write_page_atomic('publish','missing-review',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+   RAISE EXCEPTION 'Missing human review accepted';
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_REVIEW_REQUIRED'; END;
+ published := public.write_page_atomic('publish','v2-publish',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true)->'page';
  ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
  saved := public.write_page_atomic('save','v2-save',jsonb_set(payload,'{document,content,content}','[]'),(original->>'id')::uuid,(published->>'revision')::uuid)->'page';
  ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid), 'v2 save changed snapshot';
+ BEGIN
+   PERFORM public.write_page_atomic('publish','empty-content',NULL,(saved->>'id')::uuid,(saved->>'revision')::uuid,true);
+   RAISE EXCEPTION 'Empty page published';
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_NOT_READY'; END;
  replay := public.write_page_atomic('create','v2-create',payload);
  ASSERT replay->'page' = saved AND replay->>'replayed' = 'true';
  PERFORM public.write_page_atomic('unpublish','v2-unpublish',NULL,(saved->>'id')::uuid,(saved->>'revision')::uuid);
@@ -84,7 +94,7 @@ BEGIN
   RAISE EXCEPTION 'Changed retry accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_RETRY_CONFLICT'; END;
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Draft exposed';
- result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true);
  published := result->'page';
  ASSERT published->>'status' = 'published';
  ASSERT (SELECT title = 'About' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
@@ -97,7 +107,7 @@ BEGIN
   RAISE EXCEPTION 'Stale save accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_STALE'; END;
  BEGIN
-  PERFORM public.write_page_atomic('publish','stale-publish',NULL,(original->>'id')::uuid,(published->>'revision')::uuid);
+  PERFORM public.write_page_atomic('publish','stale-publish',NULL,(original->>'id')::uuid,(published->>'revision')::uuid,true);
   RAISE EXCEPTION 'Stale publish accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_STALE'; END;
  BEGIN
@@ -110,10 +120,10 @@ BEGIN
  result := public.write_page_atomic('unpublish','unpublish-1',NULL,(original->>'id')::uuid,(saved->>'revision')::uuid);
  current_page := result->'page';
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Unpublish left live row';
- result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true);
  ASSERT result->>'replayed' = 'true';
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Old publish retry republished page';
- result := public.write_page_atomic('publish','publish-2',NULL,(original->>'id')::uuid,(current_page->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-2',NULL,(original->>'id')::uuid,(current_page->>'revision')::uuid,true);
  current_page := result->'page';
  ASSERT (SELECT title = 'Private edit' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
  -- Rename working copy; live slug and its reservation must survive.
@@ -134,13 +144,13 @@ BEGIN
 END $$;
 -- A page reserves only its current working and live slugs, not typing history.
 DO $$ DECLARE
- values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}';
+ values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[{"type":"paragraph","text":"Content"}]}}';
  page jsonb; live jsonb; replay jsonb;
 BEGIN
  page := public.write_page_atomic('create','life-create',values)->'page';
  page := public.write_page_atomic('save','life-b',jsonb_set(values,'{slug}','"lifecycle-b"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  PERFORM public.write_page_atomic('create','reuse-a',values);
- page := public.write_page_atomic('publish','life-publish-b',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ page := public.write_page_atomic('publish','life-publish-b',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true)->'page';
  live := page;
  page := public.write_page_atomic('save','life-c',jsonb_set(values,'{slug}','"lifecycle-c"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  page := public.write_page_atomic('save','life-d',jsonb_set(values,'{slug}','"lifecycle-d"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
@@ -151,7 +161,7 @@ BEGIN
   PERFORM public.write_page_atomic('create','steal-live-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
   RAISE EXCEPTION 'Live slug released before publication';
  EXCEPTION WHEN unique_violation THEN NULL; END;
- page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true)->'page';
  PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
  page := public.write_page_atomic('save','life-e',jsonb_set(values,'{slug}','"lifecycle-e"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  page := public.write_page_atomic('unpublish','life-unpublish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';

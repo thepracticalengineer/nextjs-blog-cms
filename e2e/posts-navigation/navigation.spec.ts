@@ -27,7 +27,7 @@ for (const role of ['admin', 'author']) {
     await expect(toggle).toHaveAttribute('aria-expanded', 'false')
     await expect(page.getByRole('link', { name: 'All Posts', exact: true })).toBeHidden()
     await page.keyboard.press('Tab')
-    await expect(page.getByRole('link', { name: 'Media', exact: true })).toBeFocused()
+    await expect(page.getByRole('link', { name: role === 'admin' ? 'Pages' : 'Media', exact: true })).toBeFocused()
     await toggle.focus()
     await page.keyboard.press('Enter')
     await page.keyboard.press('Tab')

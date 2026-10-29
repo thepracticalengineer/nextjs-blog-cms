@@ -1,6 +1,8 @@
 export type PageImageIssue = { src: string; path: number[] }
-export type PageResult<T> = { data: T; error: null } | { data: null; error: { code: string; message: string; image?: PageImageIssue } }
+export type PageResult<T> = { data: T; error: null } | { data: null; error: { code: string; message: string; image?: PageImageIssue; writeAttempted?: false } }
 const messages = {
+  PAGE_REVIEW_REQUIRED: 'Confirm that you personally reviewed this revision before publishing.',
+  PAGE_NOT_READY: 'Add meaningful content and alternative text for every image before publishing.',
   PAGE_IMAGE_NOT_ALLOWED: 'An image uses a host that is not allowed. Replace the image or restore its configured host.',
   PAGE_INVALID_INPUT: 'The page request is invalid. No changes were saved.',
   PAGE_INVALID_DOCUMENT: 'The page document is invalid or unsupported. No changes were saved.',

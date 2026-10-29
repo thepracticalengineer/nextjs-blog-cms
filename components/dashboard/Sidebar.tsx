@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Images, FileText, Users, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
+  LayoutDashboard, Images, FileText, PanelsTopLeft, Users, LogOut, MonitorX, Menu, X, MessageSquare, Loader2, Settings, UserCircle, Mail,
 } from 'lucide-react'
 import { PostsNavigation } from './PostsNavigation'
 import { useSignOut } from '@/components/auth/use-signout'
@@ -35,6 +35,7 @@ export function Sidebar({ profile }: SidebarProps) {
     { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', show: true, section: 'main' as const },
     { href: '/dashboard/profile', icon: UserCircle, label: 'Profile', show: true, section: 'main' as const },
     { href: '/dashboard/posts', icon: FileText, label: 'Posts', show: true, section: 'main' as const },
+    { href: '/dashboard/pages', icon: PanelsTopLeft, label: 'Pages', show: can(role, 'pages:read'), section: 'main' as const },
     { href: '/dashboard/media', icon: Images, label: 'Media', show: can(role, 'posts:create'), section: 'main' as const },
     { href: '/dashboard/settings/ai-providers', icon: Settings, label: 'Settings', show: can(role, 'ai_providers:write'), section: 'main' as const },
     { href: '/dashboard/admin/users', icon: Users, label: 'Users', show: can(role, 'users:read'), section: 'admin' as const },
@@ -76,11 +77,12 @@ export function Sidebar({ profile }: SidebarProps) {
           {mainItems.map((item) => {
             if (item.href === '/dashboard/posts') return <PostsNavigation key={item.href} pathname={pathname} role={role} />
             const Icon = item.icon
-            const isActive = pathname === item.href
+            const isActive = pathname === item.href || (item.href === '/dashboard/pages' && pathname.startsWith('/dashboard/pages/'))
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? 'page' : undefined}
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
                   isActive

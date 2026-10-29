@@ -195,3 +195,15 @@ it('keeps an onboarding outage in place for server-action requests', async () =>
   expect(response.headers.get('location')).toBeNull()
   expectRefresh(response)
 })
+
+it('marks dashboard page previews private and non-indexable', async () => {
+  const response = await proxy(request('/dashboard/pages/new'))
+  expect(response.headers.get('cache-control')).toBe('private, no-store, max-age=0')
+  expect(response.headers.get('x-robots-tag')).toBe('noindex, nofollow')
+})
+it('rejects expired page actions in place so recovery remains mounted', async () => {
+  getUser.mockResolvedValue({ data: { user: null } })
+  const response = await proxy(new NextRequest('https://example.com/dashboard/pages/new', { method: 'POST', headers: { 'next-action': 'page-write' } }))
+  expect(response.status).toBe(401)
+  expect(response.headers.get('location')).toBeNull()
+})

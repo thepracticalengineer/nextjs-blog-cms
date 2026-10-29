@@ -27,7 +27,7 @@
 
 ## Features
 
-- [Pages block editor, data model, permissions and rollout](features/pages.md)
+- [Pages management, publishing, block editor and rollout](features/pages.md)
 
 - [Signup onboarding, private preferences and rollout](features/onboarding.md)
 
