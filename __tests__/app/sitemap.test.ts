@@ -45,6 +45,25 @@ it('does not report an incomplete sitemap as success on a later database failure
   await expect(sitemap()).rejects.toMatchObject({ message: 'database unavailable' })
 })
 it('does not include empty taxonomy or author archives when there are no published posts', async () => {
-  state.fetch.mockResolvedValue(Response.json([]))
+  state.fetch.mockImplementation(async () => Response.json([]))
   expect((await sitemap()).map(entry => entry.url)).toEqual(['https://www.example.com', 'https://www.example.com/blog'])
+})
+it('includes only current published page URLs across every batch with publication timestamps', async () => {
+  state.fetch.mockImplementation(async (input: RequestInfo | URL) => {
+    const url = new URL(String(input))
+    if (!url.pathname.endsWith('/page_snapshots')) return Response.json([])
+    expect(url.searchParams.get('select')).toBe('page_id,slug,published_at')
+    const offset = Number(url.searchParams.get('offset') || 0)
+    const limit = Number(url.searchParams.get('limit'))
+    const rows = Array.from({ length: 1005 }, (_, i) => ({ page_id: String(i), slug: `page-${i}`, published_at: '2026-10-29T00:00:00Z' }))
+    return Response.json([...rows, { page_id: 'reserved', slug: 'blog', published_at: '2026-10-29T00:00:00Z' }].slice(offset, offset + limit))
+  })
+  const entries = await sitemap()
+  expect(entries.filter(entry => entry.url.includes('/page-'))).toHaveLength(1005)
+  expect(entries.find(entry => entry.url.endsWith('/page-1004'))?.lastModified).toEqual(new Date('2026-10-29T00:00:00Z'))
+  expect(entries.find(entry => entry.url.endsWith('/blog'))?.priority).toBe(0.9)
+})
+it('fails instead of serving a partial sitemap when snapshot reads fail', async () => {
+  state.fetch.mockImplementation(async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith('/page_snapshots') ? Response.json({ message: 'snapshot outage' }, { status: 500 }) : Response.json([]))
+  await expect(sitemap()).rejects.toMatchObject({ message: 'snapshot outage' })
 })

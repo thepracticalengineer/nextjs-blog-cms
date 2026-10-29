@@ -142,7 +142,16 @@ BEGIN
   RAISE EXCEPTION 'Direct snapshot write accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
--- A page reserves only its current working and live slugs, not typing history.
+DO $$ DECLARE slug text; payload jsonb := '{"title":"Reserved","slug":"about","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}';
+BEGIN
+ FOREACH slug IN ARRAY ARRAY['blog','dashboard','authors','api','auth','login','register','mfa','forgot-password','reset-password','confirm-email','onboarding-unavailable','newsletter','screenshots','sitemap','robots','favicon'] LOOP
+  BEGIN
+   PERFORM public.write_page_atomic('create','reserved-'||slug,jsonb_set(payload,'{slug}',to_jsonb(slug)));
+   RAISE EXCEPTION 'Reserved path accepted';
+  EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_RESERVED_URL'; END;
+ END LOOP;
+END $$;
+-- Draft-only typing history is released; published URL history is permanent.
 DO $$ DECLARE
  values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[{"type":"paragraph","text":"Content"}]}}';
  page jsonb; live jsonb; replay jsonb;
@@ -161,23 +170,68 @@ BEGIN
   PERFORM public.write_page_atomic('create','steal-live-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
   RAISE EXCEPTION 'Live slug released before publication';
  EXCEPTION WHEN unique_violation THEN NULL; END;
- page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true)->'page';
- PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+ BEGIN
+  PERFORM public.write_page_atomic('publish','life-confirm',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true);
+  RAISE EXCEPTION 'URL changed without consent';
+ EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_URL_CONFIRMATION_REQUIRED'; END;
+ page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,true)->'page';
+ ASSERT public.resolve_page_path('LIFECYCLE-B')->>'slug' = 'lifecycle-d';
+ ASSERT public.resolve_page_path('lifecycle-c') IS NULL, 'Draft URL leaked';
+ BEGIN
+  PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+  RAISE EXCEPTION 'Published history released';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
  page := public.write_page_atomic('save','life-e',jsonb_set(values,'{slug}','"lifecycle-e"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  page := public.write_page_atomic('unpublish','life-unpublish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
- PERFORM public.write_page_atomic('create','reuse-d',jsonb_set(values,'{slug}','"lifecycle-d"'));
+ ASSERT public.resolve_page_path('lifecycle-b') IS NULL;
+ ASSERT public.resolve_page_path('lifecycle-d') IS NULL;
+ ASSERT public.resolve_page_path('lifecycle-e') IS NULL;
+ BEGIN
+  PERFORM public.write_page_atomic('create','reuse-d',jsonb_set(values,'{slug}','"lifecycle-d"'));
+  RAISE EXCEPTION 'Published history released';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
  BEGIN
   PERFORM public.write_page_atomic('create','steal-working-e',jsonb_set(values,'{slug}','"lifecycle-e"'));
   RAISE EXCEPTION 'Current working slug released';
  EXCEPTION WHEN unique_violation THEN NULL; END;
+ page := public.write_page_atomic('publish','life-republish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,true)->'page';
+ ASSERT public.resolve_page_path('lifecycle-b')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('lifecycle-d')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('lifecycle-e')->>'slug' = 'lifecycle-e';
+ BEGIN
+  PERFORM public.write_page_atomic('publish','life-republish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,false);
+  RAISE EXCEPTION 'Consent identity changed on retry';
+ EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_RETRY_CONFLICT'; END;
 END $$;
 RESET ROLE;
 DO $$ BEGIN
- ASSERT NOT EXISTS (SELECT page_id FROM public.page_slug_reservations GROUP BY page_id HAVING count(*) > 2), 'Reservation history leaked';
+ ASSERT (SELECT count(*) FROM public.page_slug_reservations WHERE slug IN ('lifecycle-b','lifecycle-d','lifecycle-e'))=3, 'Published reservations lost';
 END $$;
+-- Simulate an acknowledged-before-upgrade create whose response was lost.
+INSERT INTO public.pages(id,title,slug,seo_title,seo_description,document)
+VALUES('28900000-0000-4000-8000-000000000001','Legacy','blog','','','{"version":1,"blocks":[]}');
+INSERT INTO public.page_write_requests(actor_id,request_key,request,page_id)
+VALUES('28600000-0000-4000-8000-000000000001','legacy-reserved',
+ '{"operation":"create","values":{"title":"Legacy","slug":"blog","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}},"page_id":null,"revision":null}',
+ '28900000-0000-4000-8000-000000000001');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE result jsonb;
+BEGIN
+ result := public.write_page_atomic('create','legacy-reserved','{"title":"Legacy","slug":"blog","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}');
+ ASSERT result->>'replayed' = 'true';
+ ASSERT result->'page'->>'slug' = 'blog';
+ ASSERT public.resolve_page_path('blog') IS NULL;
+END $$;
+RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
  ASSERT (SELECT count(*) FROM public.page_snapshots WHERE slug='pages-about') = 1;
+ ASSERT public.resolve_page_path('pages-about')->>'title' = 'Private edit';
+ ASSERT public.resolve_page_path('pages-renamed') IS NULL, 'Pending URL leaked';
+ ASSERT public.resolve_page_path('lifecycle-b')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('missing-page') IS NULL;
+ ASSERT public.resolve_page_path('BLOG') IS NULL;
+ BEGIN PERFORM * FROM public.page_slug_reservations; RAISE EXCEPTION 'Private reservation leak'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM * FROM public.pages; RAISE EXCEPTION 'Anonymous draft read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM public.write_page_atomic('create','anon','{}'); RAISE EXCEPTION 'Anonymous write'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM * FROM public.page_write_requests; RAISE EXCEPTION 'Receipt leak'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;

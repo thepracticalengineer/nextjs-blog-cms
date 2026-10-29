@@ -110,3 +110,30 @@ test('a rejected image can be corrected and a rejected duplicate stays in place'
   await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
   await expect(page.getByText(/Draft saved/)).toBeVisible()
 })
+
+test('published URL changes require separate confirmation and keep View Page on the live URL', async ({ page }) => {
+  let saved = structuredClone(fixturePage)
+  const requests: PageWrite[] = []
+  await page.route('**/fixture/write', async route => {
+    const request: PageWrite = route.request().postDataJSON(); requests.push(request)
+    saved = { ...saved, ...('values' in request ? request.values : {}), revision: randomUUID() }
+    if (request.operation === 'publish') saved = { ...saved, status: 'published', published_slug: saved.slug }
+    await route.fulfill({ json: { data: { page: saved, replayed: false }, error: null } })
+  })
+  await page.goto(url)
+  await page.getByRole('checkbox', { name: /personally reviewed/ }).check()
+  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await expect(page.getByRole('link', { name: 'View Page' })).toHaveAttribute('href', '/about-us')
+  await page.getByLabel('URL slug').fill('contact-us')
+  await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
+  await expect(page.getByRole('checkbox', { name: /Change the published URL/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'View Page' })).toHaveAttribute('href', '/about-us')
+  await page.getByRole('checkbox', { name: /personally reviewed/ }).check()
+  const update = page.getByRole('button', { name: 'Update published page' })
+  await expect(update).toBeDisabled()
+  await page.getByRole('checkbox', { name: /Change the published URL/ }).focus()
+  await page.keyboard.press('Space')
+  await update.click()
+  await expect(page.getByRole('link', { name: 'View Page' })).toHaveAttribute('href', '/contact-us')
+  expect(requests.at(-1)).toMatchObject({ operation: 'publish', reviewed: true, confirmUrlChange: true })
+})

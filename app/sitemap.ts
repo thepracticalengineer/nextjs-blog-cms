@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
+import { isPageSlug } from '@/features/pages/urls'
 import { siteUrl } from '@/lib/metadata'
 
 interface SitemapPost {
@@ -49,6 +50,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     // A database outage must not become a successful but incomplete sitemap.
     if (error) throw error
     for (const post of data ?? []) addPost(post)
+    if (!data || data.length < batchSize) break
+  }
+  for (let offset = 0; ; offset += batchSize) {
+    const { data, error } = await supabase.from('page_snapshots')
+      .select('page_id, slug, published_at').order('page_id').range(offset, offset + batchSize - 1)
+    if (error) throw error
+    for (const page of data ?? []) {
+      if (isPageSlug(page.slug)) add(`/${page.slug}`, page.published_at, 0.7)
+    }
     if (!data || data.length < batchSize) break
   }
   return [...entries.values()]

@@ -13,13 +13,13 @@ const query = async statement => (await exec('docker', ['exec', container, 'psql
 const actor = randomUUID()
 const slug = `pages-race-${randomUUID()}`
 const values = { title: 'Race', slug, seo_title: '', seo_description: '', document: { version: 1, blocks: [{ type: 'paragraph', text: 'Content' }] } }
-const write = async (operation, key, payload = null, page = null) => {
+const write = async (operation, key, payload = null, page = null, confirm = false) => {
   const payloadSql = payload ? `${sql(JSON.stringify(payload))}::jsonb` : 'NULL'
   const pageSql = page ? `${sql(page.id)}::uuid,${sql(page.revision)}::uuid` : 'NULL,NULL'
   return JSON.parse(await query(`
     BEGIN; SET LOCAL ROLE authenticated;
     SET LOCAL request.jwt.claims = '${JSON.stringify({ sub: actor, role: 'authenticated', aal: 'aal1' })}';
-    SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payloadSql},${pageSql},${operation === 'publish'});
+    SELECT public.write_page_atomic(${sql(operation)},${sql(key)},${payloadSql},${pageSql},${operation === 'publish'},${confirm});
     COMMIT;
   `))
 }
@@ -59,12 +59,16 @@ try {
   assert.equal(liveRace.slice(1).filter(result => result.status === 'rejected' && result.reason.stderr.includes('PAGE_SLUG_CONFLICT')).length, 8)
   const draft = liveRace[0].value.page
   assert.equal(Number(await query(`SELECT count(*) FROM public.page_slug_reservations WHERE page_id=${sql(page.id)}`)), 2)
-  // Once publication retires the old live slug, another page can claim it.
-  await write('publish', 'publish-renamed', null, draft)
-  const reused = await write('create', 'reuse-retired-live', values)
-  assert.notEqual(reused.page.id, page.id)
-  assert.equal(Number(await query(`SELECT count(*) FROM public.page_slug_reservations WHERE page_id=${sql(page.id)}`)), 1)
-  console.log('Pages: concurrent creation/retries, stale saves, publication retries, slug conflicts and live-slug retention/release passed')
+  // Publishing the rename never releases historical claims, even during races.
+  const historyRace = await Promise.allSettled([
+    write('publish', 'publish-renamed', null, draft, true),
+    ...Array.from({ length: 8 }, (_, index) => write('create', `steal-history-${index}`, values)),
+  ])
+  assert.equal(historyRace[0].status, 'fulfilled')
+  assert.equal(historyRace.slice(1).filter(result => result.status === 'rejected' && result.reason.stderr.includes('PAGE_SLUG_CONFLICT')).length, 8)
+  assert.equal(Number(await query(`SELECT count(*) FROM public.page_slug_reservations WHERE page_id=${sql(page.id)}`)), 2)
+  assert.equal(JSON.parse(await query(`SELECT public.resolve_page_path(${sql(slug)})`)).slug, renamed)
+  console.log('Pages: concurrent creation/retries, stale saves, publication retries, slug conflicts and permanent URL retention passed')
 } finally {
   await query(`DELETE FROM public.pages WHERE created_by=${sql(actor)}; DELETE FROM auth.users WHERE id=${sql(actor)}`)
 }
