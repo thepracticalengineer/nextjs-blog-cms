@@ -28,12 +28,17 @@ export type PageEditorProps = {
 }
 
 export function PageEditor(props: PageEditorProps) {
-  const parsed = pageDocumentSchema.safeParse(props.document)
-  if (!parsed.success) return <p role="alert">This page document is unsupported. Its saved content has not been changed.</p>
-  // Validate the upgrade before mounting Tiptap; never silently discard legacy content over the new limits.
-  const upgraded = { version: 2, content: toPageEditorDocument(parsed.data) }
-  if (!pageDocumentSchema.safeParse(upgraded).success) return <p role="alert">This document exceeds the block editor limits. Its saved content has not been changed.</p>
-  return <PageEditorCanvas {...props} />
+  // The document is an initial value: subsequent parent renders must not revalidate
+  // or clone the entire tree on the typing path. A revision key loads new content.
+  const [initial] = useState(() => {
+    const parsed = pageDocumentSchema.safeParse(props.document)
+    if (!parsed.success) return { error: 'This page document is unsupported. Its saved content has not been changed.' }
+    const upgraded = { version: 2 as const, content: toPageEditorDocument(parsed.data) }
+    if (!pageDocumentSchema.safeParse(upgraded).success) return { error: 'This document exceeds the block editor limits. Its saved content has not been changed.' }
+    return { document: upgraded }
+  })
+  if (!initial.document) return <p role="alert">{initial.error}</p>
+  return <PageEditorCanvas {...props} document={initial.document} />
 }
 
 function PageEditorCanvas({ document, editorId, onChange }: PageEditorProps) {

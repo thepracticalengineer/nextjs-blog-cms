@@ -115,6 +115,26 @@ configuration is deliberately kept out of the browser bundle. Direct SQL/RPC
 validation enforces safe URL shapes; server reads fail closed for images outside
 the current deployment allowlist.
 
+### Image-host failures and recovery
+
+After authorization, page saves and private reads identify a disallowed image with
+`PAGE_IMAGE_NOT_ALLOWED` and `error.image: { src, path }`. `path` lists zero-based
+indices through the document's nested `content` arrays, so `[0, 1]` identifies the
+second child of the first top-level block. The first offending image is returned
+in document order. Treat the source as text in error UI; never interpret it as
+HTML. A create/save request with this error is rejected before persistence.
+
+Private `getPage` and public `getPublishedPage` reads both remain fail-closed if a
+previously configured image host is removed. The private error identifies the
+image; the public error remains `PAGE_UNSUPPORTED_DOCUMENT` without its source or
+path. Saved content is retained unchanged. To repair such an existing page,
+restore the trusted host in the deployment's image allowlist, open the page,
+replace/remove its image and save, then remove the host again. Unsaved editor
+input can be repaired directly using the returned image path. Mutation-response
+errors (including exact retries) do not imply rollback: if an existing result is
+blocked by changed host configuration, keep the request key and reconcile it
+after restoring access rather than assuming the mutation did not run.
+
 ## Editor and rendering integration
 
 `features/pages/editor/PageEditor.tsx` accepts an initial `document`, the current
@@ -130,8 +150,13 @@ the same operation. Duplicate/delete, design settings and column preset changes
 participate in undo/redo. Reducing columns appends removed columns' content to the
 last retained column. Individual columns cannot be duplicated/deleted, preventing
 invalid preset counts. The rich text toolbar includes links; button labels and
-links are edited in block settings. Invalid edits/pastes preserve the previous
-document and show an error.
+links are edited in block settings. The clipboard parser preserves page buttons
+and their layout wrappers during
+copy/cut and paste. Pasted website link presentation attributes are normalized to
+the supported safe values; unsupported list numbering styles become decimal,
+invalid list starts become 1, and nonnumeric/out-of-range image dimensions are
+dropped. Text and supported blocks are retained. Unsafe URLs, malformed layouts
+or oversized edits still preserve the previous document and show an error.
 
 `features/pages/PageContent.tsx` renders both versions using escaped React text
 and semantic elements. Its CSS and layout hooks are shared with Tiptap, scoped to

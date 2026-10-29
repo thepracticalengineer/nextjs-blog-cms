@@ -5,6 +5,7 @@ import Link from '@tiptap/extension-link'
 import { Plugin } from '@tiptap/pm/state'
 import { pageDocumentSchema, layoutDefaults, isSafePageHref } from '../document'
 import { getPageLayoutProps } from '../layout'
+import { normalizePageClipboardHTML } from './clipboard'
 
 function layoutDOM(type: 'section' | 'columns' | 'column', attrs: Record<string, unknown>) {
   const { className, ...props } = getPageLayoutProps(type, attrs)
@@ -38,11 +39,13 @@ const Columns = Node.create({
 const PageButton = Node.create({
   name: 'button', group: 'block', atom: true,
   addAttributes: () => ({
-    label: { default: 'Learn more', rendered: false }, href: { default: '/', rendered: false },
-    variant: { default: 'solid', rendered: false }, align: { default: 'left', rendered: false },
+    label: { default: 'Learn more', rendered: false, parseHTML: element => element.querySelector(':scope > a')?.textContent ?? '' },
+    href: { default: '/', rendered: false, parseHTML: element => element.querySelector(':scope > a')?.getAttribute('href') ?? '' },
+    variant: { default: 'solid', rendered: false, parseHTML: element => element.querySelector(':scope > a')?.getAttribute('data-variant') ?? 'solid' },
+    align: { default: 'left', rendered: false, parseHTML: element => element.getAttribute('data-align') ?? 'left' },
   }),
   // Plain pasted links remain rich-text links, never implicitly become buttons.
-  parseHTML: () => [],
+  parseHTML: () => [{ tag: 'div[data-page-block="button"]' }],
   renderHTML: ({ node }) => ['div', { 'data-page-block': 'button', 'data-align': node.attrs.align },
     ['a', { href: node.attrs.href, 'data-variant': node.attrs.variant, tabindex: '-1' }, node.attrs.label]],
 })
@@ -51,11 +54,15 @@ const PageButton = Node.create({
 export function createPageExtensions(onInvalid?: () => void) {
   return [
     StarterKit.configure({ link: false, trailingNode: false }),
-    Link.configure({ openOnClick: false, autolink: false, isAllowedUri: isSafePageHref, HTMLAttributes: { rel: 'noopener noreferrer', target: null, class: null } }),
+    Link.extend({
+      addAttributes() { return { ...this.parent?.(), title: { default: null, parseHTML: element => element.getAttribute('title') } } },
+    }).configure({ openOnClick: false, autolink: false, isAllowedUri: isSafePageHref, HTMLAttributes: { rel: 'noopener noreferrer', target: null, class: null } }),
     Image.extend({
       addAttributes() {
         return { ...this.parent?.(),
           width: { default: null }, height: { default: null }, assetId: { default: null },
+          alt: { default: null, parseHTML: element => element.getAttribute('alt') },
+          title: { default: null, parseHTML: element => element.getAttribute('title') },
         }
       },
       renderHTML({ HTMLAttributes }) {
@@ -66,12 +73,15 @@ export function createPageExtensions(onInvalid?: () => void) {
     Extension.create({
       name: 'pageDocumentGuard',
       addProseMirrorPlugins() {
-        return [new Plugin({ filterTransaction(transaction) {
-          if (!transaction.docChanged) return true
-          const valid = pageDocumentSchema.safeParse({ version: 2, content: transaction.doc.toJSON() }).success
-          if (!valid) onInvalid?.()
-          return valid
-        } })]
+        return [new Plugin({
+          props: { transformPastedHTML: normalizePageClipboardHTML },
+          filterTransaction(transaction) {
+            if (!transaction.docChanged) return true
+            const valid = pageDocumentSchema.safeParse({ version: 2, content: transaction.doc.toJSON() }).success
+            if (!valid) onInvalid?.()
+            return valid
+          },
+        })]
       },
     }),
   ]

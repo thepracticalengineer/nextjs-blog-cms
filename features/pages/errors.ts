@@ -1,5 +1,7 @@
-export type PageResult<T> = { data: T; error: null } | { data: null; error: { code: string; message: string } }
+export type PageImageIssue = { src: string; path: number[] }
+export type PageResult<T> = { data: T; error: null } | { data: null; error: { code: string; message: string; image?: PageImageIssue } }
 const messages = {
+  PAGE_IMAGE_NOT_ALLOWED: 'An image uses a host that is not allowed. Replace the image or restore its configured host.',
   PAGE_INVALID_INPUT: 'The page request is invalid. No changes were saved.',
   PAGE_INVALID_DOCUMENT: 'The page document is invalid or unsupported. No changes were saved.',
   PAGE_UNSUPPORTED_DOCUMENT: 'This page uses an invalid or unsupported document. Upgrade support before opening it.',
@@ -16,4 +18,10 @@ export function pageFailure(code: keyof typeof messages): { data: null; error: {
 export function pageDatabaseFailure(error: { message: string }) {
   const code = error.message
   return pageFailure(Object.hasOwn(messages, code) ? code as keyof typeof messages : 'PAGE_UNAVAILABLE')
+}
+
+/** Private, authorized responses may identify the image; public reads stay generic. */
+export function pageImageFailure(image: PageImageIssue) {
+  const failure = pageFailure('PAGE_IMAGE_NOT_ALLOWED')
+  return { ...failure, error: { ...failure.error, image } }
 }

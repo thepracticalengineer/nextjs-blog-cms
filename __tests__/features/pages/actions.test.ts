@@ -37,15 +37,23 @@ describe('page actions', () => {
   })
   it('enforces configured image hosts at writes and both stored read boundaries', async () => {
     const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://unconfigured.invalid/image.png' } }] } }
-    expect((await writePage({ operation: 'create', requestKey: 'image', values: { ...values, document } })).error?.code).toBe('PAGE_INVALID_INPUT')
+    expect((await writePage({ operation: 'create', requestKey: 'image', values: { ...values, document } })).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { src: 'https://unconfigured.invalid/image.png', path: [0] } })
     expect(mocks.rpc).not.toHaveBeenCalled()
     mocks.maybeSingle.mockResolvedValue({ data: { ...row, document }, error: null })
-    expect((await getPage(id)).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    expect((await getPage(id)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { path: [0] } })
     mocks.maybeSingle.mockResolvedValue({ data: { ...values, document, page_id: id, revision: id, published_at: row.created_at }, error: null })
     expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
     mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
-    expect((await writePage({ operation: 'publish', requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    expect((await writePage({ operation: 'publish', requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
     expect(mocks.rpc).toHaveBeenCalledOnce()
+  })
+  it('identifies the first disallowed nested image only after authorization', async () => {
+    const document = { version: 2, content: { type: 'doc', content: [{ type: 'section', content: [{ type: 'image', attrs: { src: '/allowed.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/first.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/second.png' } }] }] } }
+    const input = { operation: 'save', requestKey: 'image-save', pageId: id, expectedRevision: id, values: { ...values, document } }
+    expect((await writePage(input)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { src: 'https://blocked.invalid/first.png', path: [0, 1] } })
+    expect(mocks.client).not.toHaveBeenCalled()
+    mocks.authorize.mockResolvedValue({ profile: null, failure: { code: 'FORBIDDEN', error: 'Denied' } })
+    expect((await writePage(input)).error).toEqual({ code: 'FORBIDDEN', message: 'Denied' })
   })
   it('accepts relative image paths and configured remote hosts on the server', async () => {
     vi.stubEnv('IMAGE_REMOTE_HOSTS', 'images.example.test')

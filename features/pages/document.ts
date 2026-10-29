@@ -11,6 +11,8 @@ export const layoutDefaults = { width: 'wide', background: 'default', padding: '
 export const columnPresets = ['one', 'equal-two', 'wide-left', 'wide-right', 'equal-three'] as const
 const columnCounts = { one: 1, 'equal-two': 2, 'wide-left': 2, 'wide-right': 2, 'equal-three': 3 } as const
 const text = (max: number) => z.string().max(max).refine(value => value.isWellFormed() && !value.includes('\0'))
+const textNodeSchema = text(10000).min(1)
+const documentEncoder = new TextEncoder()
 const v1 = z.strictObject({ version: z.literal(1), blocks: z.array(z.strictObject({ type: z.literal('paragraph'), text: text(10000) })).max(500) })
 export type PageDocumentV1 = z.infer<typeof v1>
 export type PageDocument = PageDocumentV1 | PageDocumentV2
@@ -60,7 +62,7 @@ function validV2(value: unknown): value is PageDocumentV2 {
     if (!attrSchemas[type as keyof typeof attrSchemas].safeParse(n.attrs === undefined ? {} : n.attrs).success) return false
     if (!parent ? type !== 'doc' : parent === 'columns' ? type !== 'column' : ['paragraph', 'heading'].includes(parent) ? !['text', 'hardBreak'].includes(type) : parent === 'codeBlock' ? type !== 'text' : ['bulletList', 'orderedList'].includes(parent) ? type !== 'listItem' : !flow.has(type)) return false
     if (type === 'text') {
-      if (!text(10000).min(1).safeParse(n.text).success || n.content !== undefined) return false
+      if (!textNodeSchema.safeParse(n.text).success || n.content !== undefined) return false
     } else if (n.text !== undefined) return false
     if (n.marks !== undefined && (!['text', 'hardBreak'].includes(type) || parent === 'codeBlock' || !Array.isArray(n.marks) || n.marks.length > 6 || !n.marks.every(mark => markSchema.safeParse(mark).success) || new Set(n.marks.map(mark => mark.type)).size !== n.marks.length)) return false
     if (n.content !== undefined && !Array.isArray(n.content)) return false
@@ -73,7 +75,7 @@ function validV2(value: unknown): value is PageDocumentV2 {
     for (const child of children) stack.push({ node: child, parent: type, depth: depth + 1 })
   }
   // Traversal bounds make serialization safe even for hostile cyclic input.
-  try { return new TextEncoder().encode(JSON.stringify(value)).length <= 256 * 1024 } catch { return false }
+  try { return documentEncoder.encode(JSON.stringify(value)).length <= 256 * 1024 } catch { return false }
 }
 export const pageDocumentSchema = z.union([v1, z.custom<PageDocumentV2>(validV2, 'Invalid page document')])
 

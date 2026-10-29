@@ -182,3 +182,58 @@ test('relative rich text links persist through the page link dialog', async ({ p
   await expect(canvas.locator('a')).toHaveAttribute('href', '/about')
   await expect(page.getByRole('region', { name: 'Published fixture' }).getByRole('link', { name: '/about' })).toHaveAttribute('href', '/about')
 })
+
+test('cut and paste preserves a section containing columns and a button', async ({ page }) => {
+  await page.getByRole('button', { name: 'Load layout fixture', exact: true }).click()
+  await page.getByRole('button', { name: 'Select Column 1', exact: true }).click()
+  await page.getByRole('button', { name: 'Add Button', exact: true }).click()
+  await page.getByLabel('Label', { exact: true }).fill('Visit about')
+  await page.getByLabel('Link', { exact: true }).fill('/about')
+  await page.getByLabel('Style', { exact: true }).selectOption('outline')
+  await page.getByRole('button', { name: 'Apply button', exact: true }).click()
+  await page.getByRole('button', { name: 'Save fixture', exact: true }).click()
+  const before = await page.getByLabel('Saved document').textContent()
+  await page.getByRole('button', { name: 'Select Section 1', exact: true }).click()
+  const canvas = page.locator('[contenteditable="true"]')
+  await canvas.focus()
+  // Use browser ClipboardEvents/DataTransfer through ProseMirror's real handlers.
+  // This avoids relying on the host OS clipboard or granting clipboard permissions.
+  const clipboard = await canvas.evaluate(element => {
+    const data = new DataTransfer()
+    element.dispatchEvent(new ClipboardEvent('cut', { clipboardData: data, bubbles: true, cancelable: true }))
+    return { html: data.getData('text/html'), text: data.getData('text/plain') }
+  })
+  expect(clipboard.html).toContain('data-page-block="button"')
+  await expect(canvas.locator('[data-page-block="button"]')).toHaveCount(0)
+  await canvas.evaluate((element, copied) => {
+    const data = new DataTransfer()
+    data.setData('text/html', copied.html)
+    data.setData('text/plain', copied.text)
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  }, clipboard)
+  await expect(canvas.locator('[data-page-block="button"] a')).toHaveAttribute('href', '/about')
+  await expect(canvas.locator('[data-page-block="button"] a')).toHaveAttribute('data-variant', 'outline')
+  await page.getByRole('button', { name: 'Save fixture', exact: true }).click()
+  expect(await page.getByLabel('Saved document').textContent()).toBe(before)
+  await page.getByRole('button', { name: 'Reload saved', exact: true }).click()
+  await expect(canvas.locator('[data-page-block="button"] a')).toHaveText('Visit about')
+})
+
+test('pastes common website formatting without losing text, lists or images', async ({ page }) => {
+  const canvas = page.locator('[contenteditable="true"]')
+  await canvas.click()
+  await page.keyboard.press('Control+a')
+  await canvas.evaluate(element => {
+    const data = new DataTransfer()
+    data.setData('text/html', '<p><a href="/about" class="web-link" rel="ugc noopener" target="_top">Pasted website text</a></p><ol type="a" start="0"><li><p>List entry</p></li></ol><img src="/diagram.png" width="100%" height="400" alt="Diagram">')
+    element.dispatchEvent(new ClipboardEvent('paste', { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(canvas.getByRole('link', { name: 'Pasted website text' })).toHaveAttribute('href', '/about')
+  await expect(canvas.locator('ol')).toHaveText('List entry')
+  await expect(canvas.getByAltText('Diagram')).toHaveAttribute('height', '400')
+  await page.getByRole('button', { name: 'Save fixture', exact: true }).click()
+  const saved = JSON.parse(await page.getByLabel('Saved document').textContent() ?? '{}')
+  expect(saved.content.content[0].content[0].marks[0].attrs).toMatchObject({ class: null, target: null, rel: 'noopener noreferrer' })
+  expect(saved.content.content[1].attrs).toMatchObject({ type: null, start: 1 })
+  expect(saved.content.content[2].attrs).toMatchObject({ width: null, height: 400 })
+})
