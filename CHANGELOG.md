@@ -1,5 +1,14 @@
 # Changelog
 
+## [3.5.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.4.0...v3.5.0) (2026-10-29)
+
+
+### Features
+
+* **pages:** add management and safe publishing workflows ([#306](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/306)) ([58656a9](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/58656a9db33261a2630c57323d4baf3ce0dbce0b))
+* **pages:** add public page URLs redirects and SEO ([#307](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/307)) ([5f7af78](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/5f7af7887458614a1d106e07dabb44817bdd5e65))
+* **pages:** add section and column block editor ([#302](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/302)) ([288b654](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/288b654ceb686f7b6f2e8efbc7e6bd7ceb0cf4de))
+
 ## [3.4.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.3.0...v3.4.0) (2026-10-28)
 
 
