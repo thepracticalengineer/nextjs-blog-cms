@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
+import { mediaContextUrl, type MediaContext } from '../context'
 import type { MediaAsset } from '../library-types'
 import { assetName, assetSize, mediaMutation, mediaRequest } from '../library-client'
 
 type Metadata = Pick<MediaAsset, 'title' | 'alt_text' | 'caption' | 'description'>
-export function MediaDetails({ id, editorId, onClose, onChanged }: Readonly<{ id: string; editorId: string; onClose: () => void; onChanged: (asset: MediaAsset) => void }>) {
+export function MediaDetails({ id, editorId, onClose, onChanged, context = 'post' }: Readonly<{ id: string; editorId: string; context?: MediaContext; onClose: () => void; onChanged: (asset: MediaAsset) => void }>) {
   const formId = useId()
   const [asset, setAsset] = useState<MediaAsset>()
   const [values, setValues] = useState<Metadata>()
@@ -23,15 +24,15 @@ export function MediaDetails({ id, editorId, onClose, onChanged }: Readonly<{ id
   const pending = useRef(false)
   useEffect(() => {
     const controller = new AbortController()
-    mediaRequest<{ asset: MediaAsset }>(`/api/post-media/library/${encodeURIComponent(id)}?${new URLSearchParams({ editorId })}`, { signal: controller.signal }).then(async ({ asset: loaded }) => {
+    mediaRequest<{ asset: MediaAsset }>(mediaContextUrl(`/api/post-media/library/${encodeURIComponent(id)}?${new URLSearchParams({ editorId })}`, context), { signal: controller.signal }).then(async ({ asset: loaded }) => {
       if (controller.signal.aborted) return
       // Make the URL safe to copy, including manual copying from the read-only field.
       // Archived assets already have durable retention and must not be selected.
-      const asset = loaded.archived_at ? loaded : (await mediaMutation(id, editorId, {}, true, controller.signal)).asset
+      const asset = loaded.archived_at ? loaded : (await mediaMutation(id, editorId, {}, true, controller.signal, context)).asset
       if (!controller.signal.aborted) { setAsset(asset); setValues({ title: asset.title, alt_text: asset.alt_text, caption: asset.caption, description: asset.description }); setError('') }
     }).catch(error => { if (!controller.signal.aborted) setError(error.message) })
     return () => controller.abort()
-  }, [id, editorId, revision])
+  }, [id, editorId, revision, context])
   const dirty = !!asset && !!values && Object.entries(values).some(([key, value]) => asset[key as keyof Metadata] !== value)
   function close() {
     if (pending.current) return
@@ -43,7 +44,7 @@ export function MediaDetails({ id, editorId, onClose, onChanged }: Readonly<{ id
     pending.current = true
     setBusy(true); setError(''); setStatus('')
     try {
-      const { asset: updated } = await mediaMutation(id, editorId, archive === undefined ? values : { archived: archive })
+      const { asset: updated } = await mediaMutation(id, editorId, archive === undefined ? values : { archived: archive }, false, undefined, context)
       setAsset(updated)
       if (archive === undefined) { setValues({ title: updated.title, alt_text: updated.alt_text, caption: updated.caption, description: updated.description }); setStatus('Metadata saved. Existing articles are unchanged.') }
       else { setConfirmArchive(false); setStatus(archive ? 'Image archived. Existing URLs still work.' : 'Image restored to your library.') }

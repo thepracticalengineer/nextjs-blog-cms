@@ -236,3 +236,40 @@ it('fails safely when confirmed upload identity cannot be read', async () => {
  completedAsset.mockResolvedValueOnce({ data: null, error: null })
  expect((await POST(request(await fixture()))).status).toBe(503)
 })
+
+describe('page media authorization and durable ownership', () => {
+ const pageRequest = (body: BodyInit, type?: string, query = 'context=page') => new Request(`http://localhost/api/post-media?${query}`, { method: 'POST', headers: { origin: 'http://localhost', ...(type ? { 'content-type': type } : {}) }, body })
+ it('requires pages:update for URL checks and retains uploads in the existing owner store', async () => {
+  const form = new FormData()
+  form.set('file', await fixture()); form.set('editorId', actor)
+  expect((await POST(pageRequest(form))).status).toBe(200)
+  expect(authorizeSession).toHaveBeenCalledWith('pages:update')
+  expect(rpc).toHaveBeenCalledWith('complete_post_media', expect.objectContaining({ p_owner_id: actor, p_library: true }))
+  expect((await POST(pageRequest(JSON.stringify({ editorId: actor, url: 'https://images.example.com/photo.jpg' }), 'application/json'))).status).toBe(200)
+  expect(authorizeSession).toHaveBeenLastCalledWith('pages:update')
+ })
+ it.each(['FORBIDDEN', 'MFA_REQUIRED'] as const)('denies %s before storage', async code => {
+  vi.mocked(authorizeSession).mockResolvedValueOnce({ profile: null, failure: { code, status: 403, error: 'Denied' } })
+  expect((await POST(pageRequest(JSON.stringify({ editorId: actor, url: 'https://images.example.com/photo.jpg' }), 'application/json'))).status).toBe(403)
+  expect(authorizeSession).toHaveBeenCalledWith('pages:update')
+  expect(createServiceClient).not.toHaveBeenCalled()
+ })
+ it('rejects unknown, empty, duplicate and body contexts without storage', async () => {
+  for (const query of ['context=other', 'context=', 'context=post&context=page']) {
+   expect((await POST(pageRequest('{}', 'application/json', query))).status).toBe(400)
+  }
+  expect(authorizeSession).not.toHaveBeenCalled()
+  expect((await POST(pageRequest(JSON.stringify({ editorId: actor, context: 'page', url: 'https://images.example.com/photo.jpg' }), 'application/json', ''))).status).toBe(400)
+  const form = new FormData(); form.set('editorId', actor); form.set('context', 'page')
+  expect((await POST(pageRequest(form))).status).toBe(400)
+  expect(createServiceClient).not.toHaveBeenCalled()
+ })
+ it('rejects changed page editor accounts before storage', async () => {
+  expect((await POST(pageRequest(JSON.stringify({ editorId: 'other', url: 'https://images.example.com/photo.jpg' }), 'application/json'))).status).toBe(403)
+  expect(createServiceClient).not.toHaveBeenCalled()
+ })
+ it('keeps context-free post authorization', async () => {
+  await POST(request())
+  expect(authorizeSession).toHaveBeenCalledWith('posts:create')
+ })
+})

@@ -1,9 +1,10 @@
 import 'server-only'
 import { createStaticClient } from '@/lib/supabase/static'
+import { pageDocumentImagesAllowed } from './document-server'
 import { pageSnapshotSchema, pageValuesSchema, type PageSnapshot } from './schema'
 import { pageFailure, type PageResult } from './errors'
 
-/** The future renderer must use this validated snapshot, never a working page.
+/** Public renderers must use this validated snapshot, never a working page.
  * Paragraph text must be rendered as escaped text, never interpreted as HTML.
  * The anonymous client does not read cookies or require a request context.
  * No cache is introduced: publication consumers must design their invalidation.
@@ -17,7 +18,7 @@ export async function getPublishedPage(slug: string): Promise<PageResult<PageSna
     if (error) return pageFailure('PAGE_UNAVAILABLE')
     if (!data) return { data: null, error: null }
     const result = pageSnapshotSchema.safeParse(data)
-    return result.success ? { data: result.data, error: null } : pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    return result.success && pageDocumentImagesAllowed(result.data.document) ? { data: result.data, error: null } : pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
   }

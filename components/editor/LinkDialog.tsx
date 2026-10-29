@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-export function LinkDialog({ editor, triggerRef, onClose }: Readonly<{
+export function LinkDialog({ editor, triggerRef, onClose, linkPolicy }: Readonly<{
   editor: Editor
   triggerRef: RefObject<HTMLButtonElement | null>
   onClose: () => void
+  linkPolicy?: { validate: (value: string) => boolean; description: string }
 }>) {
   // Capture once, before the dialog takes DOM focus. Dismissal never dispatches a transaction.
   const [original] = useState(() => ({ selection: editor.state.selection, doc: editor.state.doc, href: editor.getAttributes('link').href as string | undefined }))
@@ -26,8 +27,9 @@ export function LinkDialog({ editor, triggerRef, onClose }: Readonly<{
     if (stale) return
     const parsed = parseAllowedLinkUrl(value)
     const hasWhitespaceOrControl = [...value].some(character => character.charCodeAt(0) <= 32 || character.charCodeAt(0) === 127)
-    if (!parsed || (parsed.protocol === 'mailto:' && !parsed.pathname) || hasWhitespaceOrControl) {
-      setError('Enter a valid http://, https://, or mailto: URL.')
+    const allowed = linkPolicy ? linkPolicy.validate(value) : !!parsed && (parsed.protocol !== 'mailto:' || !!parsed.pathname)
+    if (!allowed || hasWhitespaceOrControl) {
+      setError(linkPolicy?.description ?? 'Enter a valid http://, https://, or mailto: URL.')
       inputRef.current?.focus()
       return
     }
@@ -55,7 +57,7 @@ export function LinkDialog({ editor, triggerRef, onClose }: Readonly<{
     <DialogContent initialFocus={inputRef} finalFocus={triggerRef} className="max-h-[90dvh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>{original.href ? 'Edit link' : 'Insert link'}</DialogTitle>
-        <DialogDescription id={`${id}-help`}>Use an http://, https://, or mailto: URL. With no text selected, the URL becomes the link text.</DialogDescription>
+        <DialogDescription id={`${id}-help`}>{linkPolicy?.description ?? 'Use an http://, https://, or mailto: URL.'} With no text selected, the URL becomes the link text.</DialogDescription>
       </DialogHeader>
       <Label htmlFor={id}>URL</Label>
       <Input ref={inputRef} id={id} value={url} type="text" inputMode="url" autoComplete="off"

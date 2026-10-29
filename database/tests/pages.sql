@@ -1,11 +1,60 @@
 -- Run only against an isolated migrated database. All fixtures roll back.
 BEGIN;
+DO $$ DECLARE
+ good jsonb := '{"version":2,"content":{"type":"doc","content":[{"type":"section","attrs":{"width":"wide","background":"muted"},"content":[{"type":"columns","attrs":{"preset":"equal-two"},"content":[{"type":"column","content":[{"type":"paragraph","content":[{"type":"text","text":"Hello 😀","marks":[{"type":"link","attrs":{"href":"/about","title":null,"target":"_blank","rel":"noopener noreferrer nofollow","class":null}}]}]}]},{"type":"column","content":[{"type":"image","attrs":{"src":"/test.png","alt":null,"title":null,"width":null,"height":null,"assetId":null}},{"type":"button","attrs":{"label":"Read","href":"https://example.test","variant":"outline"}}]}]}]}]}}';
+ bad jsonb; deep jsonb := '{"type":"paragraph"}'; i integer;
+BEGIN
+ ASSERT pages_private.valid_document(good), 'Valid v2 layout rejected';
+ ASSERT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1000))));
+ ASSERT NOT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1001))));
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[]}}');
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"hardBreak","marks":[{"type":"bold"}]}]}]}}');
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[{"type":"orderedList","attrs":{"start":1,"type":null},"content":[{"type":"listItem","content":[{"type":"paragraph"}]}]},{"type":"codeBlock","attrs":{"language":null},"content":[{"type":"text","text":"x"}]}]}}');
+ FOR bad IN SELECT value FROM jsonb_array_elements('[
+ {"type":"column"}, {"type":"text","text":"x"}, {"type":"html"},
+ {"type":"paragraph","attrs":{"style":"color:red"}},
+ {"type":"columns","content":[{"type":"column"}]},
+ {"type":"section","content":[{"type":"column"}]},
+ {"type":"heading","attrs":{"level":7}},
+ {"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]},
+ {"type":"image","attrs":{"src":"data:image/png;base64,ABC"}},
+ {"type":"image","attrs":{"src":"/ok.png","width":"10"}},
+ {"type":"paragraph","content":[{"type":"section"}]},
+ {"type":"orderedList","content":[]},
+ {"type":"button","attrs":{"label":"Read","href":"//evil.test"}},
+ {"type":"button","attrs":{"label":"Read","href":"/ok","onclick":"x"}}
+ ]') LOOP
+   ASSERT NOT pages_private.valid_document(jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_build_array(bad)))), 'Invalid node accepted: ' || bad::text;
+ END LOOP;
+ FOR i IN 1..13 LOOP deep := jsonb_build_object('type','section','content',jsonb_build_array(deep)); END LOOP;
+ ASSERT NOT pages_private.valid_document(jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_build_array(deep)))), 'Deep document accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph')))) INTO bad FROM generate_series(1,1500);
+ ASSERT NOT pages_private.valid_document(bad), 'Excess node count accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text',repeat(' ',10000))))))) INTO bad FROM generate_series(1,27);
+ ASSERT NOT pages_private.valid_document(bad), 'Oversize whitespace text accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text',repeat('😀',10000))))))) INTO bad FROM generate_series(1,7);
+ ASSERT NOT pages_private.valid_document(bad), 'Oversize UTF-8 accepted';
+END $$;
 INSERT INTO auth.users (id,email) VALUES
  ('28600000-0000-4000-8000-000000000001','pages-admin@example.test'),
  ('28600000-0000-4000-8000-000000000002','pages-author@example.test');
 UPDATE public.profiles SET role='admin' WHERE id='28600000-0000-4000-8000-000000000001';
 SELECT set_config('request.jwt.claims','{"sub":"28600000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
 SET LOCAL ROLE authenticated;
+DO $$ DECLARE
+ payload jsonb := '{"title":"Canvas","slug":"pages-v2","seo_title":"","seo_description":"","document":{"version":2,"content":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Published 😀"}]}]}}}';
+ original jsonb; published jsonb; saved jsonb; replay jsonb;
+BEGIN
+ original := public.write_page_atomic('create','v2-create',payload)->'page';
+ ASSERT original->'document' = payload->'document';
+ published := public.write_page_atomic('publish','v2-publish',NULL,(original->>'id')::uuid,(original->>'revision')::uuid)->'page';
+ ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
+ saved := public.write_page_atomic('save','v2-save',jsonb_set(payload,'{document,content,content}','[]'),(original->>'id')::uuid,(published->>'revision')::uuid)->'page';
+ ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid), 'v2 save changed snapshot';
+ replay := public.write_page_atomic('create','v2-create',payload);
+ ASSERT replay->'page' = saved AND replay->>'replayed' = 'true';
+ PERFORM public.write_page_atomic('unpublish','v2-unpublish',NULL,(saved->>'id')::uuid,(saved->>'revision')::uuid);
+END $$;
 DO $$ DECLARE
  payload jsonb := '{"title":"About","slug":"pages-about","seo_title":"","seo_description":"","document":{"version":1,"blocks":[{"type":"paragraph","text":"Live"}]}}';
  invalid jsonb; result jsonb; original jsonb; saved jsonb; published jsonb; current_page jsonb;

@@ -1,13 +1,14 @@
+import { mediaContextUrl, type MediaContext } from './context'
 import { imageFileError, type ImageValue } from './validation'
 
-export async function validateImageUrl(url: string, editorId: string, signal?: AbortSignal): Promise<string> {
-  const response = await fetch('/api/post-media', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, editorId }), signal })
+export async function validateImageUrl(url: string, editorId: string, signal?: AbortSignal, context: MediaContext = 'post'): Promise<string> {
+  const response = await fetch(mediaContextUrl('/api/post-media', context), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url, editorId }), signal })
   const result = await response.json().catch(() => { throw new Error('Image validation failed. Check your connection and retry.') })
   if (!response.ok || typeof result.src !== 'string') throw new Error(result.error ?? 'Image validation failed. Retry when connected.')
   return result.src
 }
 
-export function uploadImage(file: File, editorId: string, onProgress: (percent: number) => void, signal: AbortSignal, intent: 'editor' | 'library' = 'editor'): Promise<ImageValue> {
+export function uploadImage(file: File, editorId: string, onProgress: (percent: number) => void, signal: AbortSignal, intent: 'editor' | 'library' = 'editor', context: MediaContext = 'post'): Promise<ImageValue> {
   const error = imageFileError(file)
   if (error) return Promise.reject(new Error(error))
   return new Promise((resolve, reject) => {
@@ -15,7 +16,7 @@ export function uploadImage(file: File, editorId: string, onProgress: (percent: 
     const abort = () => xhr.abort()
     signal.addEventListener('abort', abort, { once: true })
     const finish = () => signal.removeEventListener('abort', abort)
-    xhr.open('POST', '/api/post-media')
+    xhr.open('POST', mediaContextUrl('/api/post-media', context))
     xhr.timeout = 120_000
     xhr.upload.onprogress = event => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)) }
     xhr.onload = () => {

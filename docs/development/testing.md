@@ -464,5 +464,9 @@ CI runs `database/tests/pages.sql` (rolled back) and
 Supabase database. They exercise anonymous/author/admin/MFA access, direct-write
 denial, snapshot isolation, stale saves/publication, retry identity and real
 multi-connection create/save/publish/slug races. See [Pages verification](../features/pages.md#verification)
-for local target restrictions. No Pages browser UI or public route exists in this
-issue; browser delivery and renderer integration remain separate work.
+for local target restrictions. Run `pnpm exec playwright test --config=e2e/page-editor.config.ts` for the real
+page editor and shared renderer with isolated media fixtures. It checks serialized
+reload, structural editing/history, keyboard/drag ordering, bounded settings, image
+metadata and mobile stacking/overflow. No Auth or database is used by this harness;
+SQL assertions exercise real persistence separately. Full dashboard/public URL
+flows remain #288/#289.

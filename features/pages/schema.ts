@@ -1,18 +1,11 @@
 import { z } from 'zod'
+import { pageDocumentSchema } from './document'
+export { pageDocumentSchema } from './document'
 
 // Installed Zod and PostgreSQL both count Unicode code points.
 const text = (maximum: number) => z.string().max(maximum)
   .refine(value => value.isWellFormed() && !value.includes(String.fromCharCode(0)), 'Text must be valid PostgreSQL Unicode')
 
-// Version 1 is intentionally a small storage contract. New block types require
-// an explicit schema migration and renderer support; arbitrary HTML is not a block.
-export const pageDocumentSchema = z.strictObject({
-  version: z.literal(1),
-  blocks: z.array(z.strictObject({
-    type: z.literal('paragraph'),
-    text: text(10000),
-  })).max(500),
-})
 export const pageValuesSchema = z.strictObject({
   title: text(200).refine(value => value.trim().length > 0),
   slug: z.string().min(1).max(120).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),

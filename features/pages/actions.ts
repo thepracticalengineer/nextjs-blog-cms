@@ -3,8 +3,9 @@
 import { z } from 'zod'
 import { authorizeSession } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
+import { findDisallowedPageImage } from './document-server'
 import { pageRecordSchema, pageWriteSchema, type Page } from './schema'
-import { pageDatabaseFailure, pageFailure, type PageResult } from './errors'
+import { pageDatabaseFailure, pageFailure, pageImageFailure, type PageResult } from './errors'
 
 /** Reuse a requestKey only for an exact retry, including expectedRevision. */
 export async function writePage(input: unknown): Promise<PageResult<{ page: Page; replayed: boolean }>> {
@@ -16,6 +17,8 @@ export async function writePage(input: unknown): Promise<PageResult<{ page: Page
   } as const
   const { failure } = await authorizeSession(permission[request.operation])
   if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
+  const inputImage = 'values' in request ? findDisallowedPageImage(request.values.document) : null
+  if (inputImage) return pageImageFailure(inputImage)
   const client = await createClient()
   try {
     const { data, error } = await client.rpc('write_page_atomic', {
@@ -29,6 +32,8 @@ export async function writePage(input: unknown): Promise<PageResult<{ page: Page
     if (!data) return pageFailure('PAGE_UNAVAILABLE')
     const result = z.object({ page: pageRecordSchema, replayed: z.boolean() }).safeParse(data)
     if (!result.success) return pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    const image = findDisallowedPageImage(result.data.page.document)
+    if (image) return pageImageFailure(image)
     return { data: result.data, error: null }
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
@@ -45,7 +50,9 @@ export async function getPage(id: string): Promise<PageResult<Page | null>> {
     if (error) return pageFailure('PAGE_UNAVAILABLE')
     if (!data) return { data: null, error: null }
     const result = pageRecordSchema.safeParse(data)
-    return result.success ? { data: result.data, error: null } : pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    if (!result.success) return pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    const image = findDisallowedPageImage(result.data.document)
+    return image ? pageImageFailure(image) : { data: result.data, error: null }
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
   }

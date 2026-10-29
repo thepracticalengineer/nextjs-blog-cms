@@ -1,4 +1,5 @@
 import 'server-only'
+import { mediaContext } from './context'
 import { authorizeApi } from '@/lib/auth/api'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { MediaAsset, MediaLibraryPage } from './library-types'
@@ -72,9 +73,11 @@ async function mutateLibrary(ownerId: string, id: string | undefined, changes: R
   return data ? mediaResponse({ asset: assetDto(data) }) : fail('Image not found or unavailable.', 404)
 }
 
-/** All entry points authorize before parsing or constructing a privileged client. */
+/** All entry points authorize before parsing request bodies or constructing a privileged client. */
 export async function libraryRequest(request: Request, id?: string, select = false) {
-  const { profile, response } = await authorizeApi('posts:create')
+  const context = mediaContext(request)
+  if (!context) return fail('Invalid media context.')
+  const { profile, response } = await authorizeApi(context === 'page' ? 'pages:update' : 'posts:create')
   if (response) return response
   const mutation = request.method !== 'GET'
   if (mutation && request.headers.get('origin') !== new URL(request.url).origin) return fail('Use the media library in this application.', 403)

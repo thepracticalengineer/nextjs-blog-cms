@@ -18,8 +18,8 @@ inheriting ordinary authors' post-publishing access.
 
 ### Phase 1: Pages MVP
 
-- [ ] [Page model and permissions #286](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/286): dedicated page persistence, versioned block content, private working drafts, published snapshots and atomic saves.
-- [ ] [Section and column editor #287](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/287): block insertion/reordering, layout settings, media integration, responsive preview and matching public rendering.
+- [x] [Page model and permissions #286](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/286): dedicated page persistence, versioned block content, private working drafts, published snapshots and atomic saves.
+- [x] [Section and column editor #287](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/287): block insertion/reordering, layout settings, media integration, responsive preview and matching public rendering.
 - [ ] [Public URLs and SEO #289](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/289): reserved application paths, conflict-safe page URLs, redirects, canonical metadata and published-only sitemap entries.
 - [ ] [Page management and publishing #288](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/288): dashboard listing, creation, duplication, recovery, private preview, human-reviewed publication and unpublishing.
 
