@@ -244,6 +244,8 @@ are reserved: `blog`, `dashboard`, `authors`, `api`, `auth`, `login`, `register`
 `favicon`. The grammar additionally excludes framework and static endpoints such
 as `_next`, `.well-known`, `sitemap.xml` and `favicon.ico`. Add future root namespaces
 to both the TypeScript guard and a migration before deploying those routes.
+A filesystem regression test checks root routes (including route groups) and
+claimable static asset names against the TypeScript reservation set.
 
 Save Draft can prepare a new URL without moving the live page. Publishing a changed
 URL requires the separate confirmation checkbox and `confirmUrlChange: true`
@@ -263,8 +265,10 @@ and publication. There is no public fallback to retained working data.
 Canonical, title, description, Open Graph and Twitter metadata derive only from
 the snapshot and the configured `NEXT_PUBLIC_SITE_URL` origin. Empty SEO title uses
 the published title; empty description suppresses the layout default. Social cards
-use the existing site logo convention. The sitemap pages through current snapshots
-and uses publication time, never draft update time or redirect aliases. Publish,
+use the existing site logo convention. The sitemap reads current snapshots in
+batches of 50 and applies the same schema and image-host validation as the public
+route, omitting snapshots that would return 404. It uses publication time, never
+draft update time or redirect aliases. Publish,
 unpublish and successful retries invalidate the page route pattern (all old/new
 URLs), `/sitemap.xml` and `/dashboard/pages`. Draft saves invalidate only the
 management listing. Dynamic public responses prevent stale withdrawn content from

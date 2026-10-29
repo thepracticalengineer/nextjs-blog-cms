@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/server'
-import { isPageSlug } from '@/features/pages/urls'
+import { readPublishedSnapshot } from '@/features/pages/published-snapshot'
 import { siteUrl } from '@/lib/metadata'
 
 interface SitemapPost {
@@ -52,14 +52,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     for (const post of data ?? []) addPost(post)
     if (!data || data.length < batchSize) break
   }
-  for (let offset = 0; ; offset += batchSize) {
+  // Snapshot validation includes document bodies; keep each response bounded.
+  const pageBatchSize = 50
+  for (let offset = 0; ; offset += pageBatchSize) {
     const { data, error } = await supabase.from('page_snapshots')
-      .select('page_id, slug, published_at').order('page_id').range(offset, offset + batchSize - 1)
+      .select('*').order('page_id').range(offset, offset + pageBatchSize - 1)
     if (error) throw error
-    for (const page of data ?? []) {
-      if (isPageSlug(page.slug)) add(`/${page.slug}`, page.published_at, 0.7)
+    for (const row of data ?? []) {
+      const page = readPublishedSnapshot(row)
+      if (page) add(`/${page.slug}`, page.published_at, 0.7)
     }
-    if (!data || data.length < batchSize) break
+    if (!data || data.length < pageBatchSize) break
   }
   return [...entries.values()]
 }

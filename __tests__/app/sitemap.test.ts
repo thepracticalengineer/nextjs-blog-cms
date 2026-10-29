@@ -3,6 +3,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import sitemap from '@/app/sitemap'
 
+vi.mock('server-only', () => ({}))
+const snapshot = (i: number) => ({ page_id: `28900000-0000-4000-8000-${String(i).padStart(12, '0')}`, revision: '28900000-0000-4000-8000-000000000001', slug: `page-${i}`, title: 'Published page', seo_title: '', seo_description: '', document: { version: 1, blocks: [{ type: 'paragraph', text: 'Public content' }] }, published_at: '2026-10-29T00:00:00Z' })
+
 const state = vi.hoisted(() => ({ fetch: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => createSupabaseClient('http://127.0.0.1:54321', 'test-anon', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: state.fetch } }) }))
 const post = (i: number) => ({ id: String(i), slug: `post-${i}`, updated_at: '2026-10-01T00:00:00Z',
@@ -52,11 +55,11 @@ it('includes only current published page URLs across every batch with publicatio
   state.fetch.mockImplementation(async (input: RequestInfo | URL) => {
     const url = new URL(String(input))
     if (!url.pathname.endsWith('/page_snapshots')) return Response.json([])
-    expect(url.searchParams.get('select')).toBe('page_id,slug,published_at')
+    expect(url.searchParams.get('select')).toBe('*')
     const offset = Number(url.searchParams.get('offset') || 0)
     const limit = Number(url.searchParams.get('limit'))
-    const rows = Array.from({ length: 1005 }, (_, i) => ({ page_id: String(i), slug: `page-${i}`, published_at: '2026-10-29T00:00:00Z' }))
-    return Response.json([...rows, { page_id: 'reserved', slug: 'blog', published_at: '2026-10-29T00:00:00Z' }].slice(offset, offset + limit))
+    const rows = Array.from({ length: 1005 }, (_, i) => snapshot(i))
+    return Response.json([...rows, { ...snapshot(1005), slug: 'blog' }].slice(offset, offset + limit))
   })
   const entries = await sitemap()
   expect(entries.filter(entry => entry.url.includes('/page-'))).toHaveLength(1005)
@@ -66,4 +69,22 @@ it('includes only current published page URLs across every batch with publicatio
 it('fails instead of serving a partial sitemap when snapshot reads fail', async () => {
   state.fetch.mockImplementation(async (input: RequestInfo | URL) => new URL(String(input)).pathname.endsWith('/page_snapshots') ? Response.json({ message: 'snapshot outage' }, { status: 500 }) : Response.json([]))
   await expect(sitemap()).rejects.toMatchObject({ message: 'snapshot outage' })
+})
+
+it('omits snapshots that the public route cannot render, including removed image hosts', async () => {
+  vi.stubEnv('IMAGE_REMOTE_HOSTS', 'allowed.example.test')
+  const imageDocument = (src: string) => ({ version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src, alt: 'Published image' } }] } })
+  const rows = [
+    snapshot(0),
+    { ...snapshot(1), document: imageDocument('https://removed.example.test/image.png') },
+    { ...snapshot(2), document: { version: 99, blocks: [] } },
+    { ...snapshot(3), document: imageDocument('https://allowed.example.test/image.png') },
+    { ...snapshot(4), document: imageDocument('/local-image.png') },
+    { ...snapshot(5), title: '' },
+  ]
+  state.fetch.mockImplementation(async (input: RequestInfo | URL) => Response.json(new URL(String(input)).pathname.endsWith('/page_snapshots') ? rows : []))
+  expect((await sitemap()).map(entry => entry.url)).toEqual([
+    'https://www.example.com', 'https://www.example.com/blog',
+    'https://www.example.com/page-0', 'https://www.example.com/page-3', 'https://www.example.com/page-4',
+  ])
 })

@@ -2,8 +2,8 @@ import 'server-only'
 import { cache } from 'react'
 import { createStaticClient } from '@/lib/supabase/static'
 import { publicPageMetadata } from '@/lib/metadata'
-import { pageDocumentImagesAllowed } from './document-server'
-import { pageSnapshotSchema, type PageSnapshot } from './schema'
+import { readPublishedSnapshot } from './published-snapshot'
+import type { PageSnapshot } from './schema'
 import { normalizePagePath } from './urls'
 
 /** Request-local deduplication keeps HTML and metadata on the same snapshot.
@@ -17,8 +17,7 @@ export const resolvePublicPage = cache(async (path: string): Promise<PageSnapsho
   const { data, error } = await client.rpc('resolve_page_path', { p_slug: slug })
   if (error) throw new Error('Public pages unavailable')
   if (!data) return null
-  const result = pageSnapshotSchema.safeParse(data)
-  return result.success && pageDocumentImagesAllowed(result.data.document) ? result.data : null
+  return readPublishedSnapshot(data)
 })
 
 export function publishedPageMetadata(page: PageSnapshot) {
