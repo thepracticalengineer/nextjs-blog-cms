@@ -123,7 +123,9 @@ After authorization, page saves and private reads identify a disallowed image wi
 indices through the document's nested `content` arrays, so `[0, 1]` identifies the
 second child of the first top-level block. The first offending image is returned
 in document order. Treat the source as text in error UI; never interpret it as
-HTML. A create/save request with this error is rejected before persistence.
+HTML. An input-image failure reports `writeAttempted: false` because that attempt is
+rejected before persistence. A blocked mutation response omits this marker: the
+write may already have committed.
 
 Private `getPage` and public `getPublishedPage` reads both remain fail-closed if a
 previously configured image host is removed. The private error identifies the
@@ -305,7 +307,8 @@ same request key. Retry never changes payload or silently creates another page.
 
 Stale writes preserve input and require loading the latest saved revision before
 retrying. Load latest first retains current input in recovery. A replay returning
-newer saved content also blocks implicit overwriting. Links, browser traversal,
+newer saved content also blocks implicit overwriting. Replayed publication state
+is conservatively reconciled without claiming another editor changed it. Links, browser traversal,
 reload and shared sign-out controls warn before leaving unsaved work. Duplication
 stores a new create request with a distinct UUID-derived slug, creates an unpublished
 draft and opens its recoverable editor; a lost result can only retry that same
@@ -321,3 +324,17 @@ HTTP actions without database, Auth, mail or webhooks; it cannot establish hoste
 Auth behavior. Run the existing Pages SQL and concurrency suites on a disposable
 migrated database to verify actual authorization, locks, review/readiness and
 snapshot/retry contracts. Public navigation remains unverified until #289.
+
+### Correcting rejected requests and list navigation
+
+A first-attempt preflight rejection unlocks the editor for correction. An image
+error after an unresolved earlier attempt retains the exact request: restoring the
+configured image host and retrying confirms whether the original write committed.
+Never discard that identity just because the latest preflight did not call the RPC.
+A deterministically rejected duplicate stays on the source editor, shows its error,
+and retains an editable copy with no pending request in browser recovery.
+
+Title search uses an escaped case-insensitive regular expression so characters
+such as `*`, `%`, `_` and regex punctuation are literal substring text. Out-of-range
+bookmarks render an empty list with a First page link instead of a permanent load
+error; normal database failures still show an error.

@@ -55,7 +55,7 @@ describe('page actions', () => {
     expect((await writePage(input)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { src: 'https://blocked.invalid/first.png', path: [0, 1] } })
     expect(mocks.client).not.toHaveBeenCalled()
     mocks.authorize.mockResolvedValue({ profile: null, failure: { code: 'FORBIDDEN', error: 'Denied' } })
-    expect((await writePage(input)).error).toEqual({ code: 'FORBIDDEN', message: 'Denied' })
+    expect((await writePage(input)).error).toEqual({ code: 'FORBIDDEN', message: 'Denied', writeAttempted: false })
   })
   it('accepts relative image paths and configured remote hosts on the server', async () => {
     vi.stubEnv('IMAGE_REMOTE_HOSTS', 'images.example.test')
@@ -119,4 +119,19 @@ describe('page actions', () => {
 it('pins management mutations to the account that opened the editor', async () => {
   expect((await writePage({ operation: 'create', requestKey: 'account-switch', values }, '28800000-0000-4000-8000-000000000002')).error?.code).toBe('PAGE_FORBIDDEN')
   expect(mocks.rpc).not.toHaveBeenCalled()
+})
+
+it('distinguishes image input rejection from a blocked committed/replayed result', async () => {
+  const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://blocked.invalid/image.png' } }] } }
+  const rejected = await writePage({ operation: 'create', requestKey: 'invalid-image', values: { ...values, document } })
+  expect(rejected.error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', writeAttempted: false })
+  expect(mocks.rpc).not.toHaveBeenCalled()
+  mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
+  const committed = await writePage({ operation: 'create', requestKey: 'old-create', values })
+  expect(committed.error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
+  expect(committed.error).not.toHaveProperty('writeAttempted')
+})
+it('authorizes publication once before checking the deployment image policy', async () => {
+  await writePage({ operation: 'publish', reviewed: true, requestKey: 'reviewed', pageId: id, expectedRevision: id })
+  expect(mocks.authorize).toHaveBeenCalledExactlyOnceWith('pages:publish')
 })

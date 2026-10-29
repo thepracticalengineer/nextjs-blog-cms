@@ -84,3 +84,29 @@ test('stale save preserves input and navigation can be cancelled', async ({ page
   await page.getByRole('link', { name: 'All pages' }).click()
   await expect(page).toHaveURL(new RegExp('fixture.html$'))
 })
+
+test('a rejected image can be corrected and a rejected duplicate stays in place', async ({ page }) => {
+  let fail = true
+  await page.route('**/fixture/write', async route => {
+    const request: PageWrite = route.request().postDataJSON()
+    if (fail) {
+      await route.fulfill({ json: { data: null, error: { code: 'PAGE_IMAGE_NOT_ALLOWED', message: 'Replace the rejected image.', writeAttempted: false } } })
+      return
+    }
+    await route.fulfill({ json: { data: { page: { ...fixturePage, ...('values' in request ? request.values : {}) }, replayed: false }, error: null } })
+  })
+  await page.goto(url)
+  await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
+  await expect(page.getByText('Replace the rejected image.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Retry previous request' })).toHaveCount(0)
+  await expect(page.getByLabel('Title', { exact: true })).toBeEditable()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Duplicate', exact: true }).click()
+  await expect(page.getByText('Replace the rejected image.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save Draft', exact: true })).toBeEnabled()
+  await expect(page).toHaveURL(new RegExp('fixture.html$'))
+  fail = false
+  await page.getByLabel('Title', { exact: true }).fill('Corrected page')
+  await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
+  await expect(page.getByText(/Draft saved/)).toBeVisible()
+})

@@ -12,9 +12,10 @@ import { getPage, writePage } from '@/features/pages/actions'
 import { pageValuesSchema, type Page, type PageValues, type PageWrite } from '../schema'
 import { pageReadiness } from '../readiness'
 import { installNavigationGuard } from '@/features/posts/drafts/navigation'
+import { canCorrectWrite, writeErrorMessage, writeSuccessMessage, editorStatus } from './feedback'
 import { blankPage, pageValues, readPageRecovery, recoveryKey, storePageRecovery, type PageRecovery } from './recovery'
 
-export function PageManager({ accountId, documentId, initialPage }: { accountId: string; documentId: string; initialPage: Page | null }) {
+export function PageManager({ accountId, documentId, initialPage }: Readonly<{ accountId: string; documentId: string; initialPage: Page | null }>) {
   const router = useRouter()
   const auth = useAuth()
   const accountActive = !auth.loading && auth.user?.id === accountId
@@ -78,6 +79,7 @@ export function PageManager({ accountId, documentId, initialPage }: { accountId:
   }
   async function send(request: PageWrite) {
     if (running.current || !accountActive) return
+    const retrying = current.current.pending !== null
     // Durable exact request identity before dispatch prevents duplicate creates after reload.
     if (!persist(current.current.values, current.current.page, request)) return
     running.current = true; setBusy(true); setPending(request); current.current.pending = request
@@ -85,9 +87,9 @@ export function PageManager({ accountId, documentId, initialPage }: { accountId:
     try {
       const result = await writePage(request, accountId)
       if (result.error) {
-        setMessage(result.error.message)
+        setMessage(writeErrorMessage(result.error, retrying))
         // Unknown outcomes retain the exact request. Deterministic failures allow correction.
-        if (['PAGE_INVALID_INPUT', 'PAGE_INVALID_DOCUMENT', 'PAGE_STALE', 'PAGE_RETRY_CONFLICT', 'PAGE_SLUG_CONFLICT', 'PAGE_NOT_READY', 'PAGE_REVIEW_REQUIRED', 'PAGE_NOT_FOUND'].includes(result.error.code)) {
+        if (canCorrectWrite(result.error, retrying)) {
           setPending(null); current.current.pending = null; persist(current.current.values, current.current.page, null)
         }
         return
@@ -102,7 +104,7 @@ export function PageManager({ accountId, documentId, initialPage }: { accountId:
       // Never replace input: a replay may return a newer revision from another editor.
       const retained = persist(current.current.values, saved, null)
       if (retained && recoveredKey.current) { localStorage.removeItem(recoveredKey.current); recoveredKey.current = null }
-      setMessage(result.data.replayed ? 'Request confirmed. Your input is preserved; compare it with the latest saved page before saving again.' : request.operation === 'publish' ? 'Published snapshot updated. Public routing is pending #289.' : request.operation === 'unpublish' ? 'Page unpublished. Your working content is preserved.' : 'Draft saved. Published content is unchanged.')
+      setMessage(writeSuccessMessage(request.operation, result.data.replayed))
     } catch { setMessage('The result could not be confirmed. Retry the same request; your input is preserved.') }
     finally { running.current = false; setBusy(false) }
   }
@@ -141,21 +143,24 @@ export function PageManager({ accountId, documentId, initialPage }: { accountId:
     running.current = true; setBusy(true)
     try {
       const result = await writePage(request, accountId)
-      if (result.data) { copy.page = result.data.page; copy.pending = null; storePageRecovery(copy) }
+      if (result.error) {
+        setMessage(writeErrorMessage(result.error, false))
+        if (canCorrectWrite(result.error, false)) { copy.pending = null; storePageRecovery(copy); return }
+      } else { copy.page = result.data.page; copy.pending = null; storePageRecovery(copy) }
     } catch { /* The durable request remains available for exact retry. */ }
     finally { running.current = false; setBusy(false) }
     router.push(`/dashboard/pages/new?draft=${id}`)
   }
   const issues = pageReadiness(values)
   const blocked = !ready || !accountActive || busy || !!pending || copies.length > 0
-  if (auth.loading) return <p role="status">Verifying your account…</p>
+  if (auth.loading) return <output>Verifying your account…</output>
   if (!accountActive) return <p role="alert">Your account changed. Sign in with the original account and reopen this page to recover your work.</p>
   return <div className="flex min-w-0 flex-col gap-5">
     <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{page ? 'Edit Page' : 'Add Page'}</h1><Link className="underline" href="/dashboard/pages">All pages</Link></header>
-    <p role="status">{busy ? 'Saving…' : pending ? 'Request awaiting confirmation' : dirty ? 'Unsaved changes' : page ? `Saved · ${page.status}` : 'New private draft'}</p>
-    {storageError && <p role="alert">{storageError}</p>}{message && <p role="status">{message}</p>}
+    <output>{editorStatus(busy, !!pending, dirty, page)}</output>
+    {storageError && <p role="alert">{storageError}</p>}{message && <output>{message}</output>}
     {copies.length > 0 && <section className="flex flex-col gap-2 rounded-lg border p-4" aria-label="Recover page work"><h2 className="font-semibold">Private browser recovery available</h2>{copies.map(copy => <Button key={copy.writerId} variant="outline" onClick={() => recover(copy)}>Recover {copy.values.title || 'untitled page'} — {new Date(copy.updatedAt).toLocaleString()}</Button>)}{!copies.some(copy => copy.pending) && <Button variant="ghost" onClick={() => setCopies([])}>Continue with saved content</Button>}</section>}
-    {reconcile && <p role="alert">This retry returned a newer saved revision. Load the latest saved page before another save; your earlier input remains recoverable.</p>}
+    {reconcile && <p role="alert">This retry needs reconciliation with the current saved page. Load the latest saved page before another save; your earlier input remains recoverable.</p>}
     {pending && <Button disabled={busy} onClick={() => void send(pending)}>Retry previous request</Button>}
     <fieldset inert={blocked} disabled={blocked} className="flex min-w-0 flex-col gap-4">
       <legend className="sr-only">Page details and content</legend>

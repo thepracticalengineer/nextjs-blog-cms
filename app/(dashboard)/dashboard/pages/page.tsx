@@ -16,13 +16,13 @@ export default async function PagesPage({ searchParams }: { searchParams: Promis
     <form className="flex flex-wrap items-end gap-3">
       <label className="flex flex-col gap-1">Search titles<Input name="q" defaultValue={params.q} maxLength={200} /></label>
       <label className="flex flex-col gap-1">Status<select className="h-9 rounded-md border bg-background px-3" name="status" defaultValue={params.status ?? ''}><option value="">All statuses</option><option value="draft">Draft</option><option value="published">Published</option></select></label>
-      <button className={buttonVariants({ variant: 'outline' })}>Search</button>
+      <button type="submit" className={buttonVariants({ variant: 'outline' })}>Search</button>
     </form>
     {result.error ? <p role="alert">Pages could not be loaded. Reload to retry.</p> : <>
       <p>{result.data.count} pages</p>
       <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{['Title', 'Planned URL', 'Status', 'Updated', 'Actions'].map(label => <th className="p-3" key={label}>{label}</th>)}</tr></thead><tbody>{result.data.pages.map(page => <tr className="border-t" key={page.id}><td className="max-w-64 break-words p-3">{page.title}</td><td className="max-w-64 break-all p-3">/{page.slug}</td><td className="p-3">{page.status}</td><td className="whitespace-nowrap p-3">{new Date(page.updated_at).toISOString().slice(0, 10)}</td><td className="p-3"><Link className="underline" href={`/dashboard/pages/${page.id}/edit`}>Edit<span className="sr-only"> {page.title}</span></Link></td></tr>)}</tbody></table></div>
       {!result.data.pages.length && <p>No matching pages. Adjust the search or add a page.</p>}
-      <nav aria-label="Page list pagination" className="flex gap-4">{result.data.page > 1 && <Link href={href(result.data.page - 1)}>Previous</Link>}<span>Page {result.data.page}</span>{result.data.page * 20 < result.data.count && <Link href={href(result.data.page + 1)}>Next</Link>}</nav>
+      <nav aria-label="Page list pagination" className="flex gap-4">{result.data.page > 1 && <Link href={href(result.data.page - 1)}>Previous</Link>}<Link href={href(1)}>First page</Link><span>Page {result.data.page}</span>{result.data.page * 20 < result.data.count && <Link href={href(result.data.page + 1)}>Next</Link>}</nav>
     </>}
   </div>
 }

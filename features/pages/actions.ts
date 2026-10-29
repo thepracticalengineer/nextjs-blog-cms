@@ -17,16 +17,24 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
     create: 'pages:create', save: 'pages:update', publish: 'pages:publish', unpublish: 'pages:publish',
   } as const
   const { profile, failure } = await authorizeSession(permission[request.operation])
-  if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
-  if (expectedAccountId && profile.id !== expectedAccountId) return pageFailure('PAGE_FORBIDDEN')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error, writeAttempted: false } }
+  if (expectedAccountId && profile.id !== expectedAccountId) {
+    const rejected = pageFailure('PAGE_FORBIDDEN')
+    return { ...rejected, error: { ...rejected.error, writeAttempted: false } }
+  }
   const inputImage = 'values' in request ? findDisallowedPageImage(request.values.document) : null
-  if (inputImage) return pageImageFailure(inputImage)
-  if (request.operation === 'publish') {
-    const working = await getPage(request.pageId)
-    if (working.error) return working
-    if (!working.data) return pageFailure('PAGE_NOT_FOUND')
+  if (inputImage) {
+    const rejected = pageImageFailure(inputImage)
+    return { ...rejected, error: { ...rejected.error, writeAttempted: false } }
   }
   const client = await createClient()
+  // SQL cannot see the deployment's image allowlist. Read after authorization;
+  // a concurrent save is rejected by the RPC's locked expectedRevision check.
+  if (request.operation === 'publish') {
+    const working = await readAuthorizedPage(client, request.pageId)
+    if (working.error) return { ...working, error: { ...working.error, writeAttempted: false } }
+    if (!working.data) return pageFailure('PAGE_NOT_FOUND')
+  }
   try {
     const { data, error } = await client.rpc('write_page_atomic', {
       p_operation: request.operation,
@@ -38,12 +46,9 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
     })
     if (error) return pageDatabaseFailure(error)
     if (!data) return pageFailure('PAGE_UNAVAILABLE')
-    const result = z.object({ page: pageRecordSchema, replayed: z.boolean() }).safeParse(data)
-    if (!result.success) return pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
-    const image = findDisallowedPageImage(result.data.page.document)
-    if (image) return pageImageFailure(image)
-    revalidatePath('/dashboard/pages')
-    return { data: result.data, error: null }
+    const result = readWriteResponse(data)
+    if (!result.error) revalidatePath('/dashboard/pages')
+    return result
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
   }
@@ -53,7 +58,10 @@ export async function getPage(id: string): Promise<PageResult<Page | null>> {
   const { failure } = await authorizeSession('pages:read')
   if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
   if (!z.uuid().safeParse(id).success) return pageFailure('PAGE_INVALID_INPUT')
-  const client = await createClient()
+  return readAuthorizedPage(await createClient(), id)
+}
+
+async function readAuthorizedPage(client: Awaited<ReturnType<typeof createClient>>, id: string): Promise<PageResult<Page | null>> {
   try {
     const { data, error } = await client.from('pages').select('*').eq('id', id).maybeSingle()
     if (error) return pageFailure('PAGE_UNAVAILABLE')
@@ -65,4 +73,12 @@ export async function getPage(id: string): Promise<PageResult<Page | null>> {
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
   }
+}
+
+function readWriteResponse(data: unknown): PageResult<{ page: Page; replayed: boolean }> {
+  const result = z.object({ page: pageRecordSchema, replayed: z.boolean() }).safeParse(data)
+  if (!result.success) return pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+  const image = findDisallowedPageImage(result.data.page.document)
+  if (image) return pageImageFailure(image)
+  return { data: result.data, error: null }
 }
