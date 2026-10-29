@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.4.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.3.0...v3.4.0) (2026-10-28)
+
+
+### Features
+
+* **pages:** add dedicated content model and permissions ([39f45d8](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/39f45d8729b60434e60be8d42d11b9d788ba52c4))
+* **pages:** add dedicated content model and permissions ([1f9ca8d](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/1f9ca8d23012d4f3819ae80efe567f81bb03cd11))
+
+
+### Bug Fixes
+
+* **comments:** protect writes against spam and duplicate submissions ([#301](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/301)) ([50a21ad](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/50a21ada6c4d3c1631b783098f4bd5c9f0645b2b))
+
 ## [3.3.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.2.0...v3.3.0) (2026-10-27)
 
 
