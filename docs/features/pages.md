@@ -1,7 +1,10 @@
-# Pages data model
+# Pages management, publishing, public URLs and block editor
 
-Issue #286 adds a dedicated Pages domain in `features/pages/`. It does not add a
-page editor, dashboard navigation or public page route. Pages do not participate
+Issues #286–289 provide the dedicated Pages domain in `features/pages/`,
+atomic persistence, a reusable block editor and shared rendering. Administrators
+manage and publish pages; visitors read published snapshots at flat URLs such as
+`/about` and `/contact`, with permanent redirects and published-only SEO.
+Pages do not participate
 in post taxonomy, newsletters or retired AI/API workflows. Public signup still
 grants author access to posts; the contributor approval decision remains #111.
 
@@ -53,13 +56,135 @@ schema migration and matching validator/renderer release; never silently drop
 unknown blocks, coerce versions or replace unsupported content with an empty doc.
 
 `getPublishedPage(slug)` reads only snapshots and validates stored documents
-before handing them to a future renderer. It uses the anonymous cookie-free client,
+before handing them to `PageContent`. It uses the anonymous cookie-free client,
 so public reads do not force request-bound dynamic rendering. `getPage(id)` does the same for private
 working data after authorization. Invalid/unsupported stored data returns
-`PAGE_UNSUPPORTED_DOCUMENT`, never a working-copy fallback. Paragraph text must
-be rendered as escaped text, not HTML. No rendering or HTML conversion is included
-here. No application cache is introduced; future public routing must define cache
-invalidation for publish/unpublish and decide how page slugs map to site routes.
+`PAGE_UNSUPPORTED_DOCUMENT`, never a working-copy fallback. Paragraph text is rendered as escaped text, not HTML. The public route uses request-local deduplication with dynamic rendering and no
+cross-request page cache. Publication invalidates all page URLs and the sitemap.
+
+## Version 2 block documents
+
+Version 1 stays valid and readable; no existing rows or published snapshots are
+rewritten by the migration. Opening version 1 in the editor converts its paragraphs
+losslessly to Tiptap JSON. The next explicit save can persist version 2. Legacy
+documents exceeding the new limits are refused by the editor with their saved
+content intact; they are never silently truncated.
+
+```json
+{
+  "version": 2,
+  "content": {
+    "type": "doc",
+    "content": [{ "type": "section", "content": [
+      { "type": "paragraph", "content": [{ "type": "text", "text": "About our site." }] }
+    ] }]
+  }
+}
+```
+
+Supported blocks are section, columns, column, button, paragraph, heading (1–6),
+bullet/numbered lists and list items, quote, code, image and separator. Inline
+content supports text, hard breaks and bold, italic, underline, strike, code and
+link marks. Post-specific videos, tables, task lists and arbitrary HTML/CSS are
+not page blocks; existing post editing and rendering keep their existing schema.
+
+Containers use only these design values:
+
+| Setting | Allowed values |
+| --- | --- |
+| Width | `content` (48rem), `wide` (80rem), `full` (parent width) |
+| Background | `default`, `muted`, `accent` (existing theme tokens) |
+| Padding / gap | `none`, `sm`, `md`, `lg` |
+| Alignment | `left`, `center`, `right` |
+| Column preset | `one`, `equal-two`, `wide-left`, `wide-right`, `equal-three` |
+| Button style | `solid`, `outline` |
+
+Defaults are wide width, default background, medium padding/gap and left
+alignment. Columns default to two equal columns. Asymmetric presets are 2:1 or
+1:2. Columns stack at 640px and below; large padding also reduces on mobile.
+Columns may contain only column nodes and their count must match the preset.
+A column may appear only inside columns. Sections/columns contain at least one
+flow block. List items start with a paragraph.
+
+Version 2 allows at most 1,500 nodes, depth 12 (document root at zero), 256 KiB of
+compact UTF-8 JSON and 10,000 Unicode code points per text node. Attribute keys,
+node/mark types, link destinations and structural nesting are allowlisted in
+both TypeScript and PostgreSQL. Links accept HTTP(S), mailto, safe root-relative
+paths and fragments; scripts, protocol-relative URLs, credentials, backslashes
+and control/whitespace characters are rejected. Images additionally use the
+configured image host allowlist at server write/read boundaries. Deployment
+configuration is deliberately kept out of the browser bundle. Direct SQL/RPC
+validation enforces safe URL shapes; server reads fail closed for images outside
+the current deployment allowlist.
+
+### Image-host failures and recovery
+
+After authorization, page saves and private reads identify a disallowed image with
+`PAGE_IMAGE_NOT_ALLOWED` and `error.image: { src, path }`. `path` lists zero-based
+indices through the document's nested `content` arrays, so `[0, 1]` identifies the
+second child of the first top-level block. The first offending image is returned
+in document order. Treat the source as text in error UI; never interpret it as
+HTML. An input-image failure reports `writeAttempted: false` because that attempt is
+rejected before persistence. A blocked mutation response omits this marker: the
+write may already have committed.
+
+Private `getPage` and public `getPublishedPage` reads both remain fail-closed if a
+previously configured image host is removed. The private error identifies the
+image; the public error remains `PAGE_UNSUPPORTED_DOCUMENT` without its source or
+path. Saved content is retained unchanged. To repair such an existing page,
+restore the trusted host in the deployment's image allowlist, open the page,
+replace/remove its image and save, then remove the host again. Unsaved editor
+input can be repaired directly using the returned image path. Mutation-response
+errors (including exact retries) do not imply rollback: if an existing result is
+blocked by changed host configuration, keep the request key and reconcile it
+after restoring access rather than assuming the mutation did not run.
+
+## Editor and rendering integration
+
+`features/pages/editor/PageEditor.tsx` accepts an initial `document`, the current
+account's `editorId`, and `onChange(document)` for version 2 changes. The caller
+owns persistence through `writePage`; no editor operation publishes content.
+Remount with a page/revision key to deliberately load a different saved document.
+The editor does not replace unsaved input when a parent rerenders.
+
+The inserter adds inside a selected section/column or after another selected
+block. The nested outline selects blocks, supports sibling drag ordering and
+Alt + Arrow Up/Down, and retains keyboard focus after moves. Move buttons provide
+the same operation. Duplicate/delete, design settings and column preset changes
+participate in undo/redo. Reducing columns appends removed columns' content to the
+last retained column. Individual columns cannot be duplicated/deleted, preventing
+invalid preset counts. The rich text toolbar includes links; button labels and
+links are edited in block settings. The clipboard parser preserves page buttons
+and their layout wrappers during
+copy/cut and paste. Pasted website link presentation attributes are normalized to
+the supported safe values; unsupported list numbering styles become decimal,
+invalid list starts become 1, and nonnumeric/out-of-range image dimensions are
+dropped. Text and supported blocks are retained. Unsafe URLs, malformed layouts
+or oversized edits still preserve the previous document and show an error.
+
+`features/pages/PageContent.tsx` renders both versions using escaped React text
+and semantic elements. Its CSS and layout hooks are shared with Tiptap, scoped to
+`.page-canvas`, and independent of article prose styles. Editor Preview uses this
+same renderer with current unsaved content, entirely in memory. The dashboard
+must authorize the enclosing page and supply private working data only after
+`getPage`; the public route uses `resolvePublicPage`, which supplies validated snapshots only.
+Preview does not create a public URL or publish a snapshot.
+
+### Page media permissions and retention
+
+The editor reuses `ImageDialog` with `context="page"`. Upload, URL validation and
+library requests pass a strict query-only `?context=page`, explicitly requiring
+`pages:update` (admin plus existing MFA checks). An omitted context preserves post
+behavior. Unknown, duplicated or body-based contexts are rejected. Each request
+also verifies `editorId` against the current account; library reads and metadata
+mutations remain scoped to the asset owner even for administrators.
+
+Existing optimization, file/URL validation and owner-based hash reuse apply.
+Image nodes preserve asset IDs, dimensions and alternative text; changing a URL
+clears an obsolete asset ID. Library metadata is not overwritten by document-local
+alt text. Page uploads receive durable library retention because post orphan
+cleanup cannot inspect page documents. Images remain public at their URLs, and
+archiving does not delete stored files. See [image rules and library behavior](post-images.md).
 
 ## Atomic writes and retries
 
@@ -68,7 +193,8 @@ invalidation for publish/unpublish and decide how page slugs map to site routes.
 - `create`: `{ operation, requestKey, values }`; always creates a private draft.
 - `save`: `{ operation, requestKey, pageId, expectedRevision, values }`; replaces
   the complete working values, without publishing them.
-- `publish` / `unpublish`: `{ operation, requestKey, pageId, expectedRevision }`;
+- `publish`: `{ operation, requestKey, pageId, expectedRevision, reviewed: true, confirmUrlChange?: boolean }`;
+  `unpublish`: `{ operation, requestKey, pageId, expectedRevision }`;
   publishes exactly the expected working revision or removes its snapshot.
 
 `values` contains exactly `title`, `slug`, `seo_title`, `seo_description` and
@@ -91,27 +217,85 @@ unpublished page. A replay response can therefore include edits made since the
 original request. Receipts are retained without expiry. Database role/MFA checks
 happen before replay lookup so revoked permissions cannot retrieve a prior result.
 
-Each page reserves its current working slug and, when different, its live snapshot
-slug. Saving releases abandoned working slugs; publishing or unpublishing releases
-previous live slugs that are no longer used by the working copy. Pruning happens
-atomically with the write. Renaming a draft cannot release a still-live slug to
-another page. Retries never reclaim previously released slugs. Collision returns `PAGE_SLUG_CONFLICT` with no partial write.
-These reservations are separate from post routes: there is no new public route,
-redirect or shared root-path claim. Routing delivery must decide site-path
-conflicts before exposing pages. There is no page delete operation or historical page redirect reservation.
+Each page reserves its working slug and every URL at which it has been published.
+Abandoned draft-only slugs are released atomically; published slugs are retained
+indefinitely, including after unpublish. Collisions return `PAGE_SLUG_CONFLICT`
+without a partial write. Claims use the existing unique slug key and page lock;
+concurrent claims cannot acquire the same URL. Exact retries cannot reclaim an
+abandoned draft-only slug or repeat publication.
+
+## Public URLs, redirects and SEO
+
+`app/(public)/[slug]/page.tsx` resolves a single flat path using
+`resolve_page_path`. The database joins only formerly published reservations to
+current snapshots. Unknown, draft-only and unpublished pages return 404; working
+content and pending slug changes never enter HTML, metadata or redirects. Database
+outages fail as errors rather than successful empty content. Unsupported snapshots
+fail closed. Post, taxonomy, author and application routes retain their behavior.
+
+Stored slugs must already be canonical lowercase ASCII with single internal
+hyphens (no automatic rewrite on save). Incoming mixed-case paths normalize to
+lowercase and redirect directly to the current published destination. Next handles
+trailing-slash removal; percent-decoded separators, nested paths, whitespace,
+dots, underscores and double-encoded input are rejected. Root application names
+are reserved: `blog`, `dashboard`, `authors`, `api`, `auth`, `login`, `register`,
+`mfa`, `forgot-password`, `reset-password`, `confirm-email`,
+`onboarding-unavailable`, `newsletter`, `screenshots`, `sitemap`, `robots` and
+`favicon`. The grammar additionally excludes framework and static endpoints such
+as `_next`, `.well-known`, `sitemap.xml` and `favicon.ico`. Add future root namespaces
+to both the TypeScript guard and a migration before deploying those routes.
+A filesystem regression test checks root routes (including route groups) and
+claimable static asset names against the TypeScript reservation set.
+
+Save Draft can prepare a new URL without moving the live page. Publishing a changed
+URL requires the separate confirmation checkbox and `confirmUrlChange: true`
+(`p_confirm_url_change` in SQL), as well as editorial review. The database checks
+the last published slug under the revision lock, even after unpublish. Confirmation
+is bound to retry identity. A rename from A to B to C makes both A and B return a
+direct permanent 308 redirect to C, with no chain. View Page always uses the last
+published URL rather than the pending working slug.
+
+Unpublish removes the snapshot: current URLs and historical aliases all return
+404 while reservations remain private. Republish reactivates aliases and points
+them directly at the new snapshot. Pages currently have no trash, restore or
+delete operation. A future trash implementation must withdraw the snapshot and
+retain these reservations; restore must remain unpublished until explicit review
+and publication. There is no public fallback to retained working data.
+
+Canonical, title, description, Open Graph and Twitter metadata derive only from
+the snapshot and the configured `NEXT_PUBLIC_SITE_URL` origin. Empty SEO title uses
+the published title; empty description suppresses the layout default. Social cards
+use the existing site logo convention. The sitemap reads current snapshots in
+batches of 50 and applies the same schema and image-host validation as the public
+route, omitting snapshots that would return 404. It uses publication time, never
+draft update time or redirect aliases. Publish,
+unpublish and successful retries invalidate the page route pattern (all old/new
+URLs), `/sitemap.xml` and `/dashboard/pages`. Draft saves invalidate only the
+management listing. Dynamic public responses prevent stale withdrawn content from
+persisting in the application cache.
 
 ## Rollout
 
 1. Apply ordered migrations through
-   `20261028101334_add_page_content_model.sql` before deploying the server functions.
+   `20261029152514_page_public_urls.sql` before deploying public routing/server functions.
+   This backfills reservations and the last published slug from current snapshots;
+   previously released URLs and old unpublished history cannot be reconstructed.
+   Existing reserved-name drafts remain readable so an admin can rename them;
+   reserved-name snapshots are not exposed by the new resolver or sitemap.
+   Inventory such pages and deliberately rename/review/publish them before rollout.
+   The publication RPC now requires an explicit `p_reviewed: true`; older callers
+   omitting it fail closed. Save/create/unpublish retain their contracts.
    This is additive and does not backfill or modify posts, profile privacy,
    recovery copies, developer keys or signup roles.
 2. Run the checks below against a disposable migrated database with external mail
    and webhooks disabled. Verify author/anonymous denial and admin MFA access.
 3. Deploy the server code. Existing app code can coexist with the new tables;
    application rollback does not require deleting page data or migration history.
-4. Keep Pages UI, supported editor blocks and public routing behind their separate
-   deliveries. Do not expose working rows as a shortcut for preview/publication.
+   Code predating version 2 cannot edit/render version 2 rows; retain version 2
+   reader support when rolling back, or keep those pages unavailable without
+   rewriting their documents.
+4. Verify a published URL, a historical redirect and an unpublished 404; check
+   canonical metadata and sitemap. Do not expose working rows for public preview.
 
 ## Verification
 
@@ -119,6 +303,7 @@ conflicts before exposing pages. There is no page delete operation or historical
 pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/pages.sql
 node database/tests/pages-concurrency.mjs
+pnpm exec playwright test --config=e2e/page-editor.config.ts
 pnpm run typecheck
 pnpm run lint
 pnpm run docs:check
@@ -131,5 +316,81 @@ database in that container. `PAGES_TEST_USER=supabase_admin` is supported for a
 schema clone owned by that local role. No hosted target or arbitrary database
 name is accepted. SQL fixtures roll back; concurrent fixtures use random IDs and
 remove their pages/users in `finally`. The suites perform no external requests.
-CI runs both database suites after migrations. Browser UI/route verification is
-not applicable until those separate deliverables exist.
+CI runs both database suites after migrations. The isolated browser suite mounts
+the real editor and renderer at desktop/mobile sizes with local media fixtures.
+It checks editing and serialized reload, nesting, undo/redo, keyboard/drag moves,
+settings, media metadata, layout parity and overflow. It performs no Auth, database
+or external requests. The SQL suite separately checks real version 2 save/read,
+snapshot isolation and malformed documents. URL lifecycle SQL and public-route unit tests cover redirects, snapshot privacy and SEO. The management harness verifies the real
+editor workflow with fixture action responses; SQL tests independently verify persistence.
+
+## Dashboard workflow and private recovery
+
+Dashboard → Pages is admin-only, with title search, draft/published filtering,
+20-row server pagination and stable updated-time/ID ordering. The list excludes
+page bodies. Add Page uses a stable draft UUID in the URL. Edit routes, server
+actions and database writes enforce admin/MFA access independently.
+
+Save Draft requires a nonblank title, valid lowercase flat slug, supported blocks
+and bounded SEO fields. It never changes a published snapshot. Publish/Update
+requires a saved revision, meaningful text or an image, alternative text on every
+image, allowed image hosts and explicit human review of that saved revision.
+There is no article word-count/excerpt requirement. SEO title and description are
+optional: an empty title falls back to the page title, and an empty description is
+omitted by public routing. Field bounds remain 200/500
+characters. Every edit and successful mutation clears the review checkbox.
+Database publication checks run under the page lock and reject missing review,
+empty content or missing image alternatives. A client cannot bypass these checks
+by calling the RPC directly. Existing snapshots are not retroactively withdrawn.
+
+Private Preview renders current unsaved content in memory using `PageContent`,
+inside the authorized dashboard. It creates no public preview token or URL.
+Dashboard page responses use private/no-store headers and noindex/nofollow;
+metadata is generic, not draft-derived. Uploaded images retain their existing
+public asset URL contract: preview does not make an uploaded asset private.
+
+Recovery is versioned browser storage scoped to the current account and draft
+UUID, with separate records for each editor instance so tabs cannot overwrite
+one another. Pages lists available recovery records. Recovery is local to that
+browser, not a cross-device backup; clearing browser storage removes it. A changed
+account cannot view the mounted editor, and writes are pinned to the opening
+account. Recovery retains incomplete input and exact pending mutation payloads.
+A request is stored before dispatch; unavailable storage blocks dispatch rather
+than risking a duplicate create after reload. Auth/network failures retain the
+same request key. Retry never changes payload or silently creates another page.
+
+Stale writes preserve input and require loading the latest saved revision before
+retrying. Load latest first retains current input in recovery. A replay returning
+newer saved content also blocks implicit overwriting. Replayed publication state
+is conservatively reconciled without claiming another editor changed it. Links, browser traversal,
+reload and shared sign-out controls warn before leaving unsaved work. Duplication
+stores a new create request with a distinct UUID-derived slug, creates an unpublished
+draft and opens its recoverable editor; a lost result can only retry that same
+create. It does not copy publication state or claim the source URL. Unpublish
+removes the snapshot while retaining working content. No page operation enqueues
+post newsletters.
+
+Run `pnpm exec playwright test --config=e2e/page-management.config.ts` for real
+editor/renderer flows on desktop/mobile, keyboard review, private preview,
+snapshot-preserving save, unpublish, duplicate creation, lost-response reload,
+exact retry and navigation cancellation. This isolated harness uses synthetic
+HTTP actions without database, Auth, mail or webhooks; it cannot establish hosted
+Auth behavior. Run the existing Pages SQL and concurrency suites on a disposable
+migrated database to verify actual authorization, locks, review/readiness and
+snapshot/retry contracts. The browser harness also verifies explicit URL-change confirmation and View Page
+links. Public resolver/metadata unit tests exercise the real route module; they do
+not replace deployment HTTP/redirect verification.
+
+### Correcting rejected requests and list navigation
+
+A first-attempt preflight rejection unlocks the editor for correction. An image
+error after an unresolved earlier attempt retains the exact request: restoring the
+configured image host and retrying confirms whether the original write committed.
+Never discard that identity just because the latest preflight did not call the RPC.
+A deterministically rejected duplicate stays on the source editor, shows its error,
+and retains an editable copy with no pending request in browser recovery.
+
+Title search uses an escaped case-insensitive regular expression so characters
+such as `*`, `%`, `_` and regex punctuation are literal substring text. Out-of-range
+bookmarks render an empty list with a First page link instead of a permanent load
+error; normal database failures still show an error.

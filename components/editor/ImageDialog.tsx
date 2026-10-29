@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import type { MediaContext } from '@/features/posts/media/context'
 import { pastedImageFile } from '@/features/posts/media/clipboard'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { MediaLibrary } from '@/features/posts/media/components/MediaLibrary'
@@ -11,8 +12,8 @@ import { Label } from '@/components/ui/label'
 import { imageFileError, IMAGE_ACCEPT, type ImageValue } from '@/features/posts/media/validation'
 import { readImageDimensions, uploadImage, validateImageUrl } from '@/features/posts/media/client'
 
-export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, cover = false }: {
-  editorId: string; initial?: ImageValue; initialFile?: File; cover?: boolean
+export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, cover = false, context = 'post' }: {
+  editorId: string; initial?: ImageValue; initialFile?: File; cover?: boolean; context?: MediaContext
   onSave: (image: ImageValue) => void; onClose: () => void
 }) {
   const id = useId()
@@ -74,7 +75,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
     const controller = new AbortController()
     request.current = controller
     try {
-      const result = await uploadImage(file, editorId, setProgress, controller.signal)
+      const result = await uploadImage(file, editorId, setProgress, controller.signal, 'editor', context)
       if (controller.signal.aborted) return
       setImage(result)
       setUrl(result.src)
@@ -92,11 +93,11 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
     request.current = controller
     try {
       // Validate existing and manually entered URLs against the same cover allowlist.
-      const src = await validateImageUrl(url.trim(), editorId, controller.signal)
+      const src = await validateImageUrl(url.trim(), editorId, controller.signal, context)
       const dimensions = image?.src === src && image.width && image.height
         ? { width: image.width, height: image.height } : await readImageDimensions(src, controller.signal)
       if (controller.signal.aborted) return
-      onSave({ src, alt: decorative ? '' : alt.trim(), ...dimensions })
+      onSave({ ...(image?.src === src && image.assetId ? { assetId: image.assetId } : {}), src, alt: decorative ? '' : alt.trim(), ...dimensions })
       onClose()
     } catch (error) { if (!controller.signal.aborted) setError((error as Error).message) }
     finally { if (!controller.signal.aborted) { inFlight.current = false; setBusy(false) } }
@@ -109,7 +110,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
         if (pasted && !busy && !confirmDiscard) { event.preventDefault(); chooseFile(pasted) }
       }}>
         <DialogHeader className="min-w-0 pr-6 pb-4">
-          <DialogTitle>{cover ? 'Cover image' : 'Article image'}</DialogTitle>
+          <DialogTitle>{cover ? 'Cover image' : context === 'page' ? 'Page image' : 'Article image'}</DialogTitle>
           <DialogDescription>Choose or paste a JPEG, PNG or WebP up to 4 MB, or use a publicly accessible image URL. Uploaded images are public to anyone with their URL.</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 min-w-0 overflow-y-auto overscroll-contain py-1 [overflow-wrap:anywhere]">
@@ -119,9 +120,9 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
               <TabsTrigger value="library" disabled={busy}>Media Library</TabsTrigger>
               <TabsTrigger value="url" disabled={busy}>Insert from URL</TabsTrigger>
             </TabsList>
-            <TabsContent value="library"><MediaLibrary editorId={editorId} onSelecting={selecting} onSelect={asset => {
+            <TabsContent value="library"><MediaLibrary context={context} editorId={editorId} onSelecting={selecting} onSelect={asset => {
               setFile(undefined); setUrl(asset.url); setAlt(asset.alt_text); setDecorative(false); setError(undefined)
-              setImage({ src: asset.url, alt: asset.alt_text, ...(asset.width && asset.height ? { width: asset.width, height: asset.height } : {}) })
+              setImage({ assetId: asset.id, src: asset.url, alt: asset.alt_text, ...(asset.width && asset.height ? { width: asset.width, height: asset.height } : {}) })
               setSource('url')
             }} /></TabsContent>
             <TabsContent value="url"><p className="text-sm text-muted-foreground">Enter a public image URL below, then add a description.</p></TabsContent>
@@ -162,7 +163,7 @@ export function ImageDialog({ editorId, initial, initialFile, onSave, onClose, c
               <DialogTitle>Discard image changes?</DialogTitle>
               <DialogDescription>{busy
                 ? 'This will cancel the browser request and discard your image input. The server may still finish uploading; you can reuse the image by uploading it again.'
-                : 'Your file selection, image URL and description have not been applied to the post.'}</DialogDescription>
+                : 'Your file selection, image URL and description have not been applied to the document.'}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button type="button" variant="outline" autoFocus onClick={() => setConfirmDiscard(false)}>Keep editing</Button>

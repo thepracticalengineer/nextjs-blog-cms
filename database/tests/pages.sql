@@ -1,11 +1,70 @@
 -- Run only against an isolated migrated database. All fixtures roll back.
 BEGIN;
+DO $$ DECLARE
+ good jsonb := '{"version":2,"content":{"type":"doc","content":[{"type":"section","attrs":{"width":"wide","background":"muted"},"content":[{"type":"columns","attrs":{"preset":"equal-two"},"content":[{"type":"column","content":[{"type":"paragraph","content":[{"type":"text","text":"Hello 😀","marks":[{"type":"link","attrs":{"href":"/about","title":null,"target":"_blank","rel":"noopener noreferrer nofollow","class":null}}]}]}]},{"type":"column","content":[{"type":"image","attrs":{"src":"/test.png","alt":null,"title":null,"width":null,"height":null,"assetId":null}},{"type":"button","attrs":{"label":"Read","href":"https://example.test","variant":"outline"}}]}]}]}]}}';
+ bad jsonb; deep jsonb := '{"type":"paragraph"}'; i integer;
+BEGIN
+ ASSERT pages_private.valid_document(good), 'Valid v2 layout rejected';
+ ASSERT NOT pages_private.publishable_document(good), 'Missing image alt accepted';
+ ASSERT pages_private.publishable_document('{"version":2,"content":{"type":"doc","content":[{"type":"image","attrs":{"src":"/test.png","alt":"Workshop"}}]}}'), 'Accessible image-only page rejected';
+ ASSERT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1000))));
+ ASSERT NOT pages_private.valid_document(jsonb_set(good,'{content,content,0,content,0,content,0,content,0,content,0,marks,0,attrs,title}',to_jsonb(repeat('😀',1001))));
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[]}}');
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"hardBreak","marks":[{"type":"bold"}]}]}]}}');
+ ASSERT pages_private.valid_document('{"version":2,"content":{"type":"doc","content":[{"type":"orderedList","attrs":{"start":1,"type":null},"content":[{"type":"listItem","content":[{"type":"paragraph"}]}]},{"type":"codeBlock","attrs":{"language":null},"content":[{"type":"text","text":"x"}]}]}}');
+ FOR bad IN SELECT value FROM jsonb_array_elements('[
+ {"type":"column"}, {"type":"text","text":"x"}, {"type":"html"},
+ {"type":"paragraph","attrs":{"style":"color:red"}},
+ {"type":"columns","content":[{"type":"column"}]},
+ {"type":"section","content":[{"type":"column"}]},
+ {"type":"heading","attrs":{"level":7}},
+ {"type":"paragraph","content":[{"type":"text","text":"x","marks":[{"type":"link","attrs":{"href":"javascript:alert(1)"}}]}]},
+ {"type":"image","attrs":{"src":"data:image/png;base64,ABC"}},
+ {"type":"image","attrs":{"src":"/ok.png","width":"10"}},
+ {"type":"paragraph","content":[{"type":"section"}]},
+ {"type":"orderedList","content":[]},
+ {"type":"button","attrs":{"label":"Read","href":"//evil.test"}},
+ {"type":"button","attrs":{"label":"Read","href":"/ok","onclick":"x"}}
+ ]') LOOP
+   ASSERT NOT pages_private.valid_document(jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_build_array(bad)))), 'Invalid node accepted: ' || bad::text;
+ END LOOP;
+ FOR i IN 1..13 LOOP deep := jsonb_build_object('type','section','content',jsonb_build_array(deep)); END LOOP;
+ ASSERT NOT pages_private.valid_document(jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_build_array(deep)))), 'Deep document accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph')))) INTO bad FROM generate_series(1,1500);
+ ASSERT NOT pages_private.valid_document(bad), 'Excess node count accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text',repeat(' ',10000))))))) INTO bad FROM generate_series(1,27);
+ ASSERT NOT pages_private.valid_document(bad), 'Oversize whitespace text accepted';
+ SELECT jsonb_build_object('version',2,'content',jsonb_build_object('type','doc','content',jsonb_agg(jsonb_build_object('type','paragraph','content',jsonb_build_array(jsonb_build_object('type','text','text',repeat('😀',10000))))))) INTO bad FROM generate_series(1,7);
+ ASSERT NOT pages_private.valid_document(bad), 'Oversize UTF-8 accepted';
+END $$;
 INSERT INTO auth.users (id,email) VALUES
  ('28600000-0000-4000-8000-000000000001','pages-admin@example.test'),
  ('28600000-0000-4000-8000-000000000002','pages-author@example.test');
 UPDATE public.profiles SET role='admin' WHERE id='28600000-0000-4000-8000-000000000001';
 SELECT set_config('request.jwt.claims','{"sub":"28600000-0000-4000-8000-000000000001","role":"authenticated","aal":"aal1"}',true);
 SET LOCAL ROLE authenticated;
+DO $$ DECLARE
+ payload jsonb := '{"title":"Canvas","slug":"pages-v2","seo_title":"","seo_description":"","document":{"version":2,"content":{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"Published 😀"}]}]}}}';
+ original jsonb; published jsonb; saved jsonb; replay jsonb;
+BEGIN
+ original := public.write_page_atomic('create','v2-create',payload)->'page';
+ ASSERT original->'document' = payload->'document';
+ BEGIN
+   PERFORM public.write_page_atomic('publish','missing-review',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+   RAISE EXCEPTION 'Missing human review accepted';
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_REVIEW_REQUIRED'; END;
+ published := public.write_page_atomic('publish','v2-publish',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true)->'page';
+ ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
+ saved := public.write_page_atomic('save','v2-save',jsonb_set(payload,'{document,content,content}','[]'),(original->>'id')::uuid,(published->>'revision')::uuid)->'page';
+ ASSERT (SELECT document = payload->'document' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid), 'v2 save changed snapshot';
+ BEGIN
+   PERFORM public.write_page_atomic('publish','empty-content',NULL,(saved->>'id')::uuid,(saved->>'revision')::uuid,true);
+   RAISE EXCEPTION 'Empty page published';
+ EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_NOT_READY'; END;
+ replay := public.write_page_atomic('create','v2-create',payload);
+ ASSERT replay->'page' = saved AND replay->>'replayed' = 'true';
+ PERFORM public.write_page_atomic('unpublish','v2-unpublish',NULL,(saved->>'id')::uuid,(saved->>'revision')::uuid);
+END $$;
 DO $$ DECLARE
  payload jsonb := '{"title":"About","slug":"pages-about","seo_title":"","seo_description":"","document":{"version":1,"blocks":[{"type":"paragraph","text":"Live"}]}}';
  invalid jsonb; result jsonb; original jsonb; saved jsonb; published jsonb; current_page jsonb;
@@ -35,7 +94,7 @@ BEGIN
   RAISE EXCEPTION 'Changed retry accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_RETRY_CONFLICT'; END;
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Draft exposed';
- result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true);
  published := result->'page';
  ASSERT published->>'status' = 'published';
  ASSERT (SELECT title = 'About' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
@@ -48,7 +107,7 @@ BEGIN
   RAISE EXCEPTION 'Stale save accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_STALE'; END;
  BEGIN
-  PERFORM public.write_page_atomic('publish','stale-publish',NULL,(original->>'id')::uuid,(published->>'revision')::uuid);
+  PERFORM public.write_page_atomic('publish','stale-publish',NULL,(original->>'id')::uuid,(published->>'revision')::uuid,true);
   RAISE EXCEPTION 'Stale publish accepted';
  EXCEPTION WHEN SQLSTATE 'P0001' THEN ASSERT SQLERRM = 'PAGE_STALE'; END;
  BEGIN
@@ -61,10 +120,10 @@ BEGIN
  result := public.write_page_atomic('unpublish','unpublish-1',NULL,(original->>'id')::uuid,(saved->>'revision')::uuid);
  current_page := result->'page';
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Unpublish left live row';
- result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-1',NULL,(original->>'id')::uuid,(original->>'revision')::uuid,true);
  ASSERT result->>'replayed' = 'true';
  ASSERT NOT EXISTS (SELECT FROM public.page_snapshots), 'Old publish retry republished page';
- result := public.write_page_atomic('publish','publish-2',NULL,(original->>'id')::uuid,(current_page->>'revision')::uuid);
+ result := public.write_page_atomic('publish','publish-2',NULL,(original->>'id')::uuid,(current_page->>'revision')::uuid,true);
  current_page := result->'page';
  ASSERT (SELECT title = 'Private edit' FROM public.page_snapshots WHERE page_id=(original->>'id')::uuid);
  -- Rename working copy; live slug and its reservation must survive.
@@ -83,15 +142,24 @@ BEGIN
   RAISE EXCEPTION 'Direct snapshot write accepted';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
--- A page reserves only its current working and live slugs, not typing history.
+DO $$ DECLARE slug text; payload jsonb := '{"title":"Reserved","slug":"about","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}';
+BEGIN
+ FOREACH slug IN ARRAY ARRAY['blog','dashboard','authors','api','auth','login','register','mfa','forgot-password','reset-password','confirm-email','onboarding-unavailable','newsletter','screenshots','sitemap','robots','favicon'] LOOP
+  BEGIN
+   PERFORM public.write_page_atomic('create','reserved-'||slug,jsonb_set(payload,'{slug}',to_jsonb(slug)));
+   RAISE EXCEPTION 'Reserved path accepted';
+  EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_RESERVED_URL'; END;
+ END LOOP;
+END $$;
+-- Draft-only typing history is released; published URL history is permanent.
 DO $$ DECLARE
- values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}';
+ values jsonb := '{"title":"Slug lifecycle","slug":"lifecycle-a","seo_title":"","seo_description":"","document":{"version":1,"blocks":[{"type":"paragraph","text":"Content"}]}}';
  page jsonb; live jsonb; replay jsonb;
 BEGIN
  page := public.write_page_atomic('create','life-create',values)->'page';
  page := public.write_page_atomic('save','life-b',jsonb_set(values,'{slug}','"lifecycle-b"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  PERFORM public.write_page_atomic('create','reuse-a',values);
- page := public.write_page_atomic('publish','life-publish-b',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
+ page := public.write_page_atomic('publish','life-publish-b',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true)->'page';
  live := page;
  page := public.write_page_atomic('save','life-c',jsonb_set(values,'{slug}','"lifecycle-c"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  page := public.write_page_atomic('save','life-d',jsonb_set(values,'{slug}','"lifecycle-d"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
@@ -102,23 +170,68 @@ BEGIN
   PERFORM public.write_page_atomic('create','steal-live-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
   RAISE EXCEPTION 'Live slug released before publication';
  EXCEPTION WHEN unique_violation THEN NULL; END;
- page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
- PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+ BEGIN
+  PERFORM public.write_page_atomic('publish','life-confirm',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true);
+  RAISE EXCEPTION 'URL changed without consent';
+ EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_URL_CONFIRMATION_REQUIRED'; END;
+ page := public.write_page_atomic('publish','life-publish-d',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,true)->'page';
+ ASSERT public.resolve_page_path('LIFECYCLE-B')->>'slug' = 'lifecycle-d';
+ ASSERT public.resolve_page_path('lifecycle-c') IS NULL, 'Draft URL leaked';
+ BEGIN
+  PERFORM public.write_page_atomic('create','reuse-b',jsonb_set(values,'{slug}','"lifecycle-b"'));
+  RAISE EXCEPTION 'Published history released';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
  page := public.write_page_atomic('save','life-e',jsonb_set(values,'{slug}','"lifecycle-e"'),(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
  page := public.write_page_atomic('unpublish','life-unpublish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid)->'page';
- PERFORM public.write_page_atomic('create','reuse-d',jsonb_set(values,'{slug}','"lifecycle-d"'));
+ ASSERT public.resolve_page_path('lifecycle-b') IS NULL;
+ ASSERT public.resolve_page_path('lifecycle-d') IS NULL;
+ ASSERT public.resolve_page_path('lifecycle-e') IS NULL;
+ BEGIN
+  PERFORM public.write_page_atomic('create','reuse-d',jsonb_set(values,'{slug}','"lifecycle-d"'));
+  RAISE EXCEPTION 'Published history released';
+ EXCEPTION WHEN unique_violation THEN NULL; END;
  BEGIN
   PERFORM public.write_page_atomic('create','steal-working-e',jsonb_set(values,'{slug}','"lifecycle-e"'));
   RAISE EXCEPTION 'Current working slug released';
  EXCEPTION WHEN unique_violation THEN NULL; END;
+ page := public.write_page_atomic('publish','life-republish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,true)->'page';
+ ASSERT public.resolve_page_path('lifecycle-b')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('lifecycle-d')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('lifecycle-e')->>'slug' = 'lifecycle-e';
+ BEGIN
+  PERFORM public.write_page_atomic('publish','life-republish',NULL,(page->>'id')::uuid,(page->>'revision')::uuid,true,false);
+  RAISE EXCEPTION 'Consent identity changed on retry';
+ EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM='PAGE_RETRY_CONFLICT'; END;
 END $$;
 RESET ROLE;
 DO $$ BEGIN
- ASSERT NOT EXISTS (SELECT page_id FROM public.page_slug_reservations GROUP BY page_id HAVING count(*) > 2), 'Reservation history leaked';
+ ASSERT (SELECT count(*) FROM public.page_slug_reservations WHERE slug IN ('lifecycle-b','lifecycle-d','lifecycle-e'))=3, 'Published reservations lost';
 END $$;
+-- Simulate an acknowledged-before-upgrade create whose response was lost.
+INSERT INTO public.pages(id,title,slug,seo_title,seo_description,document)
+VALUES('28900000-0000-4000-8000-000000000001','Legacy','blog','','','{"version":1,"blocks":[]}');
+INSERT INTO public.page_write_requests(actor_id,request_key,request,page_id)
+VALUES('28600000-0000-4000-8000-000000000001','legacy-reserved',
+ '{"operation":"create","values":{"title":"Legacy","slug":"blog","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}},"page_id":null,"revision":null}',
+ '28900000-0000-4000-8000-000000000001');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE result jsonb;
+BEGIN
+ result := public.write_page_atomic('create','legacy-reserved','{"title":"Legacy","slug":"blog","seo_title":"","seo_description":"","document":{"version":1,"blocks":[]}}');
+ ASSERT result->>'replayed' = 'true';
+ ASSERT result->'page'->>'slug' = 'blog';
+ ASSERT public.resolve_page_path('blog') IS NULL;
+END $$;
+RESET ROLE;
 SET LOCAL ROLE anon;
 DO $$ BEGIN
  ASSERT (SELECT count(*) FROM public.page_snapshots WHERE slug='pages-about') = 1;
+ ASSERT public.resolve_page_path('pages-about')->>'title' = 'Private edit';
+ ASSERT public.resolve_page_path('pages-renamed') IS NULL, 'Pending URL leaked';
+ ASSERT public.resolve_page_path('lifecycle-b')->>'slug' = 'lifecycle-e';
+ ASSERT public.resolve_page_path('missing-page') IS NULL;
+ ASSERT public.resolve_page_path('BLOG') IS NULL;
+ BEGIN PERFORM * FROM public.page_slug_reservations; RAISE EXCEPTION 'Private reservation leak'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM * FROM public.pages; RAISE EXCEPTION 'Anonymous draft read'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM public.write_page_atomic('create','anon','{}'); RAISE EXCEPTION 'Anonymous write'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN PERFORM * FROM public.page_write_requests; RAISE EXCEPTION 'Receipt leak'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;

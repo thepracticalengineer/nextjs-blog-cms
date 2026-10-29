@@ -55,6 +55,7 @@ export type Database = {
           updated_by: string | null
           published_at: string | null
           published_by: string | null
+          published_slug: string | null
         }
         Insert: never // All writes go through write_page_atomic.
         Update: never
@@ -76,7 +77,7 @@ export type Database = {
         Relationships: [{ foreignKeyName: "page_snapshots_page_id_fkey"; columns: ["page_id"]; isOneToOne: true; referencedRelation: "pages"; referencedColumns: ["id"] }]
       }
       page_slug_reservations: {
-        Row: { slug: string; page_id: string }
+        Row: { slug: string; page_id: string; was_published: boolean }
         Insert: never
         Update: never
         Relationships: []
@@ -421,8 +422,9 @@ export type Database = {
       }
     }
     Functions: {
+      resolve_page_path: { Args: { p_slug: string }; Returns: Json }
       write_page_atomic: {
-        Args: { p_operation: string; p_request_key: string; p_values?: Json | null; p_page_id?: string | null; p_expected_revision?: string | null }
+        Args: { p_operation: string; p_request_key: string; p_values?: Json | null; p_page_id?: string | null; p_expected_revision?: string | null; p_reviewed?: boolean; p_confirm_url_change?: boolean }
         Returns: Json
       }
       get_article_reactions: { Args: { p_post_id: string }; Returns: Json }

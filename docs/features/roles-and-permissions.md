@@ -69,4 +69,17 @@ RPC independently derives the actor from `auth.uid()` and checks the current
 profile role and MFA. Direct table writes are revoked even for authenticated
 admins. Private working rows require admin/MFA SELECT access; published snapshots
 are readable by everyone. Retry receipts and slug reservations are private.
+Page image uploads, URL checks and owner-scoped library requests explicitly
+require `pages:update` when using `?context=page`. The same owner and MFA checks
+apply; admin page access does not grant access to another account's media.
+
 See [Pages contracts and rollout](pages.md).
+
+Dashboard → Pages and its create/edit routes require the page capabilities.
+Publication additionally requires explicit review of the saved revision; this is
+checked in the database as well as the UI. Browser recovery is account-scoped,
+and page mutations reject an account switch since the editor opened. Preview
+is in the private dashboard. Public page routing exposes only published snapshots
+and formerly published URLs with a current snapshot. URL changes require separate
+explicit consent in addition to editorial review; unpublishing withdraws all aliases.
+Reservations remain private and cannot be reassigned by other pages.

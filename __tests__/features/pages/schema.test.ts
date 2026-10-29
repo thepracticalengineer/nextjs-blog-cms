@@ -35,7 +35,7 @@ describe('page contracts', () => {
     expect(pageWriteSchema.safeParse({ operation: 'create', values, requestKey: 'a' }).success).toBe(true)
     expect(pageWriteSchema.safeParse({ operation: 'create', values }).success).toBe(false)
     expect(pageWriteSchema.safeParse({ operation: 'save', values, requestKey: 'a', pageId: crypto.randomUUID() }).success).toBe(false)
-    expect(pageWriteSchema.safeParse({ operation: 'publish', requestKey: 'a', pageId: crypto.randomUUID(), expectedRevision: crypto.randomUUID() }).success).toBe(true)
+    expect(pageWriteSchema.safeParse({ operation: 'publish', reviewed: true, requestKey: 'a', pageId: crypto.randomUUID(), expectedRevision: crypto.randomUUID() }).success).toBe(true)
   })
   it('keeps all page capabilities admin-only without changing author publishing', () => {
     for (const permission of ['pages:create', 'pages:read', 'pages:update', 'pages:publish'] as const) {

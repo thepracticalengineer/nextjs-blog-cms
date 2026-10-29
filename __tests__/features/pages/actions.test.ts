@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ authorize: vi.fn(), client: vi.fn(), publicClient: vi.fn(), rpc: vi.fn(), from: vi.fn(), maybeSingle: vi.fn() }))
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }))
 vi.mock('server-only', () => ({}))
 vi.mock('@/lib/auth/session', () => ({ authorizeSession: mocks.authorize }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }))
 vi.mock('@/lib/supabase/static', () => ({ createStaticClient: mocks.publicClient }))
+import { revalidatePath } from 'next/cache'
 import { writePage, getPage } from '@/features/pages/actions'
 import { getPublishedPage } from '@/features/pages/queries'
 const id = '28600000-0000-4000-8000-000000000001'
@@ -27,13 +29,44 @@ describe('page actions', () => {
   })
   it.each(['create', 'save', 'publish', 'unpublish'] as const)('checks the %s capability and uses caller RPC', async operation => {
     const input = operation === 'create' ? { operation, requestKey: 'key', values } :
-      { operation, requestKey: 'key', pageId: id, expectedRevision: id, ...(operation === 'save' ? { values } : {}) }
+      { operation, requestKey: 'key', pageId: id, expectedRevision: id, ...(operation === 'publish' ? { reviewed: true } : {}), ...(operation === 'save' ? { values } : {}) }
     expect((await writePage(input)).data?.page).toEqual(row)
     expect(mocks.authorize).toHaveBeenCalledWith(operation === 'create' ? 'pages:create' : operation === 'save' ? 'pages:update' : 'pages:publish')
     expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', {
-      p_operation: operation, p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
+      p_operation: operation, p_confirm_url_change: false, p_reviewed: operation === 'publish', p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
       p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id,
     })
+  })
+  it('enforces configured image hosts at writes and both stored read boundaries', async () => {
+    const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://unconfigured.invalid/image.png' } }] } }
+    expect((await writePage({ operation: 'create', requestKey: 'image', values: { ...values, document } })).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { src: 'https://unconfigured.invalid/image.png', path: [0] } })
+    expect(mocks.rpc).not.toHaveBeenCalled()
+    mocks.maybeSingle.mockResolvedValue({ data: { ...row, document }, error: null })
+    expect((await getPage(id)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { path: [0] } })
+    mocks.maybeSingle.mockResolvedValue({ data: { ...values, document, page_id: id, revision: id, published_at: row.created_at }, error: null })
+    expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNSUPPORTED_DOCUMENT')
+    mocks.maybeSingle.mockResolvedValue({ data: { ...row, document }, error: null })
+    mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
+    expect((await writePage({ operation: 'publish', reviewed: true, requestKey: 'old-publish', pageId: id, expectedRevision: id })).error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+  it('identifies the first disallowed nested image only after authorization', async () => {
+    const document = { version: 2, content: { type: 'doc', content: [{ type: 'section', content: [{ type: 'image', attrs: { src: '/allowed.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/first.png' } }, { type: 'image', attrs: { src: 'https://blocked.invalid/second.png' } }] }] } }
+    const input = { operation: 'save', requestKey: 'image-save', pageId: id, expectedRevision: id, values: { ...values, document } }
+    expect((await writePage(input)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', image: { src: 'https://blocked.invalid/first.png', path: [0, 1] } })
+    expect(mocks.client).not.toHaveBeenCalled()
+    mocks.authorize.mockResolvedValue({ profile: null, failure: { code: 'FORBIDDEN', error: 'Denied' } })
+    expect((await writePage(input)).error).toEqual({ code: 'FORBIDDEN', message: 'Denied', writeAttempted: false })
+  })
+  it('accepts relative image paths and configured remote hosts on the server', async () => {
+    vi.stubEnv('IMAGE_REMOTE_HOSTS', 'images.example.test')
+    try {
+      for (const src of ['/image.png', 'https://images.example.test/image.png']) {
+        const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src } }] } }
+        mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: false }, error: null })
+        expect((await writePage({ operation: 'create', requestKey: src, values: { ...values, document } })).error).toBeNull()
+      }
+    } finally { vi.unstubAllEnvs() }
   })
   it('rejects invalid inputs without persistence', async () => {
     expect((await writePage({ operation: 'create', requestKey: 'key', values: { ...values, document: { version: 99, blocks: [] } } })).error?.code).toBe('PAGE_INVALID_INPUT')
@@ -82,4 +115,47 @@ describe('page actions', () => {
     expect((await getPublishedPage('about')).error?.code).toBe('PAGE_UNAVAILABLE')
     expect(mocks.from.mock.calls.every(call => call[0] === 'page_snapshots')).toBe(true)
   })
+})
+
+it('pins management mutations to the account that opened the editor', async () => {
+  expect((await writePage({ operation: 'create', requestKey: 'account-switch', values }, '28800000-0000-4000-8000-000000000002')).error?.code).toBe('PAGE_FORBIDDEN')
+  expect(mocks.rpc).not.toHaveBeenCalled()
+})
+
+it('distinguishes image input rejection from a blocked committed/replayed result', async () => {
+  const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://blocked.invalid/image.png' } }] } }
+  const rejected = await writePage({ operation: 'create', requestKey: 'invalid-image', values: { ...values, document } })
+  expect(rejected.error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', writeAttempted: false })
+  expect(mocks.rpc).not.toHaveBeenCalled()
+  mocks.rpc.mockResolvedValue({ data: { page: { ...row, document }, replayed: true }, error: null })
+  const committed = await writePage({ operation: 'create', requestKey: 'old-create', values })
+  expect(committed.error?.code).toBe('PAGE_IMAGE_NOT_ALLOWED')
+  expect(committed.error).not.toHaveProperty('writeAttempted')
+})
+it('authorizes publication once before checking the deployment image policy', async () => {
+  await writePage({ operation: 'publish', reviewed: true, requestKey: 'reviewed', pageId: id, expectedRevision: id })
+  expect(mocks.authorize).toHaveBeenCalledExactlyOnceWith('pages:publish')
+})
+
+it('invalidates all public aliases and sitemap only for publication operations, including retries', async () => {
+  mocks.rpc.mockResolvedValue({ data: { page: row, replayed: true }, error: null })
+  for (const operation of ['publish', 'unpublish'] as const) {
+    vi.mocked(revalidatePath).mockClear()
+    await writePage({ operation, requestKey: 'invalidation', pageId: id, expectedRevision: id, ...(operation === 'publish' ? { reviewed: true, confirmUrlChange: true } : {}) })
+    expect(revalidatePath).toHaveBeenCalledWith('/[slug]', 'page')
+    expect(revalidatePath).toHaveBeenCalledWith('/sitemap.xml')
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard/pages')
+  }
+  vi.mocked(revalidatePath).mockClear()
+  await writePage({ operation: 'save', requestKey: 'draft', pageId: id, expectedRevision: id, values })
+  expect(revalidatePath).toHaveBeenCalledTimes(1)
+  expect(revalidatePath).toHaveBeenCalledWith('/dashboard/pages')
+})
+
+it('lets SQL reconcile historical reserved-slug requests before enforcing new claims', async () => {
+  const legacy = { ...values, slug: 'blog' }
+  mocks.rpc.mockResolvedValueOnce({ data: { page: { ...row, ...legacy }, replayed: true }, error: null })
+  expect((await writePage({ operation: 'create', requestKey: 'pre-upgrade', values: legacy })).data?.replayed).toBe(true)
+  mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: 'PAGE_RESERVED_URL' } })
+  expect((await writePage({ operation: 'create', requestKey: 'new-claim', values: legacy })).error?.code).toBe('PAGE_RESERVED_URL')
 })

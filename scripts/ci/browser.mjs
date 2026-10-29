@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 export const groups = {
-  harness: ['analytics', 'bulk-posts', 'posts-navigation', 'image-dialog', 'media-library', 'link-dialog', 'video-dialog', 'comment-reactions', 'article-reactions'],
+  harness: ['analytics', 'bulk-posts', 'posts-navigation', 'image-dialog', 'media-library', 'link-dialog', 'video-dialog', 'page-editor', 'page-management', 'comment-reactions', 'article-reactions'],
   auth: ['oauth-ui', 'auth-abuse', 'mfa'],
   content: ['ai-settings', 'homepage', 'seo'],
 }
