@@ -28,6 +28,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
   const [busy, setBusy] = useState(false)
   const [pending, setPending] = useState<PageWrite | null>(null)
   const [reviewed, setReviewed] = useState(false)
+  const [confirmUrlChange, setConfirmUrlChange] = useState(false)
   const [preview, setPreview] = useState(false)
   const [message, setMessage] = useState('')
   const [storageError, setStorageError] = useState('')
@@ -62,7 +63,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
   function change(next: PageValues) {
     current.current.values = next
     unsafe.current = true
-    setValues(next); setReviewed(false); setMessage('')
+    setValues(next); setReviewed(false); setConfirmUrlChange(false); setMessage('')
     persist(next, current.current.page, current.current.pending)
   }
   function recover(copy: PageRecovery) {
@@ -71,7 +72,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
     reconciliation.current = copy.reconcile
     setReconcile(copy.reconcile)
     recoveredKey.current = recoveryKey(copy)
-    setValues(copy.values); setPage(copy.page); setPending(copy.pending); setReviewed(false)
+    setValues(copy.values); setPage(copy.page); setPending(copy.pending); setReviewed(false); setConfirmUrlChange(false)
     current.current = { values: copy.values, page: copy.page, pending: copy.pending, dirty: true }
     persist(copy.values, copy.page, copy.pending)
     setCopies([]); setEditorKey(key => key + 1)
@@ -100,7 +101,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
         setReconcile(true)
       }
       setPage(saved); current.current.page = saved
-      setPending(null); current.current.pending = null; setReviewed(false)
+      setPending(null); current.current.pending = null; setReviewed(false); setConfirmUrlChange(false)
       // Never replace input: a replay may return a newer revision from another editor.
       const retained = persist(current.current.values, saved, null)
       if (retained && recoveredKey.current) { localStorage.removeItem(recoveredKey.current); recoveredKey.current = null }
@@ -124,7 +125,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
       writer.current = crypto.randomUUID()
       recoveredKey.current = null
       reconciliation.current = false
-      setReconcile(false); setValues(pageValues(latest)); setPage(latest); setPending(null); setReviewed(false); setEditorKey(key => key + 1)
+      setReconcile(false); setValues(pageValues(latest)); setPage(latest); setPending(null); setReviewed(false); setConfirmUrlChange(false); setEditorKey(key => key + 1)
       current.current = { values: pageValues(latest), page: latest, pending: null, dirty: false }
       setMessage('Latest saved page loaded. Earlier input is available from browser recovery on the Pages list.')
     } catch { setMessage('Latest saved content could not be loaded. Your input is preserved; try again.') }
@@ -152,6 +153,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
     router.push(`/dashboard/pages/new?draft=${id}`)
   }
   const issues = pageReadiness(values)
+  const urlChanged = !!page?.published_slug && page.published_slug !== page.slug
   const blocked = !ready || !accountActive || busy || !!pending || copies.length > 0
   if (auth.loading) return <output>Verifying your account…</output>
   if (!accountActive) return <p role="alert">Your account changed. Sign in with the original account and reopen this page to recover your work.</p>
@@ -165,14 +167,16 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
     <fieldset inert={blocked} disabled={blocked} className="flex min-w-0 flex-col gap-4">
       <legend className="sr-only">Page details and content</legend>
       <div className="grid gap-4 md:grid-cols-2">{(['title', 'slug', 'seo_title', 'seo_description'] as const).map(field => <label className="flex min-w-0 flex-col gap-1" key={field}>{({ title: 'Title', slug: 'URL slug', seo_title: 'SEO title (optional)', seo_description: 'SEO description (optional)' })[field]}<Input value={values[field]} onChange={event => change({ ...values, [field]: event.target.value })} /></label>)}</div>
-      <p className="text-sm text-muted-foreground">Planned URL: /{values.slug || 'your-page'} · Public routing and View Page are pending #289. Empty SEO titles use the page title; empty descriptions are omitted.</p>
+      <p className="text-sm text-muted-foreground">URL: /{values.slug || 'your-page'}. Empty SEO titles use the page title; empty descriptions are omitted.</p>
+      {page?.status === 'published' && page.published_slug && <Link className="underline" href={`/${page.published_slug}`} target="_blank" rel="noopener">View Page</Link>}
       <PageEditor key={editorKey} editorId={accountId} document={values.document} onChange={document => change({ ...current.current.values, document })} />
     </fieldset>
     <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile} onClick={save}>Save Draft</Button><Button variant="outline" disabled={!ready} onClick={() => setPreview(value => !value)}>{preview ? 'Close private preview' : 'Private Preview'}</Button><Button variant="outline" disabled={blocked} onClick={() => void duplicate()}>Duplicate</Button>{page && <Button variant="outline" disabled={busy || !!pending} onClick={() => void loadLatest()}>Load latest saved page</Button>}</div>
     {preview && <section aria-label="Private page preview" className="min-w-0 rounded-lg border p-4"><h2 className="font-semibold">Private preview · current unsaved content</h2><h1 className="my-4 break-words text-3xl">{values.title}</h1><PageContent document={values.document} /></section>}
     <section className="flex flex-col gap-3 rounded-lg border p-4" aria-label="Publication"><h2 className="font-semibold">Publication</h2><p>Save Draft preserves the published snapshot. Pages never send newsletters.</p>{issues.length > 0 && <ul className="list-inside list-disc">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>}{dirty && <p>Save your changes before reviewing this revision for publication.</p>}
       <label className="flex items-start gap-2"><input type="checkbox" checked={reviewed} disabled={blocked || reconcile || dirty || !page || issues.length > 0} onChange={event => setReviewed(event.target.checked)} />I personally reviewed this saved revision, its links, images and SEO for publication.</label>
-      <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile || dirty || !page || !reviewed || issues.length > 0} onClick={() => page && void send({ operation: 'publish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, reviewed: true })}>{page?.status === 'published' ? 'Update published page' : 'Publish'}</Button>{page?.status === 'published' && <Button variant="destructive" disabled={blocked} onClick={() => { if (window.confirm('Unpublish this page? Its working content will be kept.')) void send({ operation: 'unpublish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision }) }}>Unpublish</Button>}</div>
+      {urlChanged && <label className="flex items-start gap-2"><input type="checkbox" checked={confirmUrlChange} disabled={blocked || dirty} onChange={event => setConfirmUrlChange(event.target.checked)} />Change the published URL from /{page?.published_slug} to /{page?.slug}. Former URLs will permanently redirect here while published.</label>}
+      <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile || dirty || !page || !reviewed || (urlChanged && !confirmUrlChange) || issues.length > 0} onClick={() => page && void send({ operation: 'publish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, reviewed: true, ...(urlChanged ? { confirmUrlChange: true } : {}) })}>{page?.status === 'published' ? 'Update published page' : 'Publish'}</Button>{page?.status === 'published' && <Button variant="destructive" disabled={blocked} onClick={() => { if (window.confirm('Unpublish this page? Its working content will be kept.')) void send({ operation: 'unpublish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision }) }}>Unpublish</Button>}</div>
     </section>
   </div>
 }

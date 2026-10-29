@@ -44,3 +44,11 @@ describe('private browser recovery', () => {
     expect(readPageRecovery(id)[0].updatedAt).toBe(2)
   })
 })
+
+it('retains pre-upgrade recovery with a pending reserved-slug write for exact reconciliation', () => {
+  localStorage.clear()
+  const legacy = { ...values, slug: 'blog' }
+  const record: PageRecovery = { version: 1, reconcile: false, accountId: id, documentId: id, writerId: id, updatedAt: 1, page: null, values: legacy, pending: { operation: 'create', requestKey: 'pre-upgrade', values: legacy } }
+  localStorage.setItem(recoveryKey(record), JSON.stringify(record))
+  expect(readPageRecovery(id, id)).toEqual([record])
+})

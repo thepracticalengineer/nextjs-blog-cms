@@ -1,7 +1,7 @@
 import 'server-only'
 import { createStaticClient } from '@/lib/supabase/static'
-import { pageDocumentImagesAllowed } from './document-server'
-import { pageSnapshotSchema, pageValuesSchema, type PageSnapshot } from './schema'
+import { readPublishedSnapshot } from './published-snapshot'
+import { pageValuesSchema, type PageSnapshot } from './schema'
 import { pageFailure, type PageResult } from './errors'
 
 /** Public renderers must use this validated snapshot, never a working page.
@@ -17,8 +17,8 @@ export async function getPublishedPage(slug: string): Promise<PageResult<PageSna
     const { data, error } = await client.from('page_snapshots').select('*').eq('slug', slug).maybeSingle()
     if (error) return pageFailure('PAGE_UNAVAILABLE')
     if (!data) return { data: null, error: null }
-    const result = pageSnapshotSchema.safeParse(data)
-    return result.success && pageDocumentImagesAllowed(result.data.document) ? { data: result.data, error: null } : pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    const result = readPublishedSnapshot(data)
+    return result ? { data: result, error: null } : pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')
   }

@@ -1,9 +1,10 @@
-# Pages management, publishing and block editor
+# Pages management, publishing, public URLs and block editor
 
-Issues #286–288 provide the dedicated Pages domain in `features/pages/`,
-atomic persistence, a reusable block editor and shared rendering. Dashboard management and publishing are available to administrators. Public URL
-routing, redirects, sitemap integration and View Page remain dependent on #289;
-the dashboard displays this dependency instead of linking to unimplemented URLs. Pages do not participate
+Issues #286–289 provide the dedicated Pages domain in `features/pages/`,
+atomic persistence, a reusable block editor and shared rendering. Administrators
+manage and publish pages; visitors read published snapshots at flat URLs such as
+`/about` and `/contact`, with permanent redirects and published-only SEO.
+Pages do not participate
 in post taxonomy, newsletters or retired AI/API workflows. Public signup still
 grants author access to posts; the contributor approval decision remains #111.
 
@@ -58,8 +59,8 @@ unknown blocks, coerce versions or replace unsupported content with an empty doc
 before handing them to `PageContent`. It uses the anonymous cookie-free client,
 so public reads do not force request-bound dynamic rendering. `getPage(id)` does the same for private
 working data after authorization. Invalid/unsupported stored data returns
-`PAGE_UNSUPPORTED_DOCUMENT`, never a working-copy fallback. Paragraph text is rendered as escaped text, not HTML. No application cache is introduced; future public routing must define cache
-invalidation for publish/unpublish and decide how page slugs map to site routes.
+`PAGE_UNSUPPORTED_DOCUMENT`, never a working-copy fallback. Paragraph text is rendered as escaped text, not HTML. The public route uses request-local deduplication with dynamic rendering and no
+cross-request page cache. Publication invalidates all page URLs and the sitemap.
 
 ## Version 2 block documents
 
@@ -166,7 +167,7 @@ and semantic elements. Its CSS and layout hooks are shared with Tiptap, scoped t
 `.page-canvas`, and independent of article prose styles. Editor Preview uses this
 same renderer with current unsaved content, entirely in memory. The dashboard
 must authorize the enclosing page and supply private working data only after
-`getPage`; the future public route must supply `getPublishedPage` snapshots only.
+`getPage`; the public route uses `resolvePublicPage`, which supplies validated snapshots only.
 Preview does not create a public URL or publish a snapshot.
 
 ### Page media permissions and retention
@@ -192,7 +193,7 @@ archiving does not delete stored files. See [image rules and library behavior](p
 - `create`: `{ operation, requestKey, values }`; always creates a private draft.
 - `save`: `{ operation, requestKey, pageId, expectedRevision, values }`; replaces
   the complete working values, without publishing them.
-- `publish`: `{ operation, requestKey, pageId, expectedRevision, reviewed: true }`;
+- `publish`: `{ operation, requestKey, pageId, expectedRevision, reviewed: true, confirmUrlChange?: boolean }`;
   `unpublish`: `{ operation, requestKey, pageId, expectedRevision }`;
   publishes exactly the expected working revision or removes its snapshot.
 
@@ -216,19 +217,72 @@ unpublished page. A replay response can therefore include edits made since the
 original request. Receipts are retained without expiry. Database role/MFA checks
 happen before replay lookup so revoked permissions cannot retrieve a prior result.
 
-Each page reserves its current working slug and, when different, its live snapshot
-slug. Saving releases abandoned working slugs; publishing or unpublishing releases
-previous live slugs that are no longer used by the working copy. Pruning happens
-atomically with the write. Renaming a draft cannot release a still-live slug to
-another page. Retries never reclaim previously released slugs. Collision returns `PAGE_SLUG_CONFLICT` with no partial write.
-These reservations are separate from post routes: there is no new public route,
-redirect or shared root-path claim. Routing delivery must decide site-path
-conflicts before exposing pages. There is no page delete operation or historical page redirect reservation.
+Each page reserves its working slug and every URL at which it has been published.
+Abandoned draft-only slugs are released atomically; published slugs are retained
+indefinitely, including after unpublish. Collisions return `PAGE_SLUG_CONFLICT`
+without a partial write. Claims use the existing unique slug key and page lock;
+concurrent claims cannot acquire the same URL. Exact retries cannot reclaim an
+abandoned draft-only slug or repeat publication.
+
+## Public URLs, redirects and SEO
+
+`app/(public)/[slug]/page.tsx` resolves a single flat path using
+`resolve_page_path`. The database joins only formerly published reservations to
+current snapshots. Unknown, draft-only and unpublished pages return 404; working
+content and pending slug changes never enter HTML, metadata or redirects. Database
+outages fail as errors rather than successful empty content. Unsupported snapshots
+fail closed. Post, taxonomy, author and application routes retain their behavior.
+
+Stored slugs must already be canonical lowercase ASCII with single internal
+hyphens (no automatic rewrite on save). Incoming mixed-case paths normalize to
+lowercase and redirect directly to the current published destination. Next handles
+trailing-slash removal; percent-decoded separators, nested paths, whitespace,
+dots, underscores and double-encoded input are rejected. Root application names
+are reserved: `blog`, `dashboard`, `authors`, `api`, `auth`, `login`, `register`,
+`mfa`, `forgot-password`, `reset-password`, `confirm-email`,
+`onboarding-unavailable`, `newsletter`, `screenshots`, `sitemap`, `robots` and
+`favicon`. The grammar additionally excludes framework and static endpoints such
+as `_next`, `.well-known`, `sitemap.xml` and `favicon.ico`. Add future root namespaces
+to both the TypeScript guard and a migration before deploying those routes.
+A filesystem regression test checks root routes (including route groups) and
+claimable static asset names against the TypeScript reservation set.
+
+Save Draft can prepare a new URL without moving the live page. Publishing a changed
+URL requires the separate confirmation checkbox and `confirmUrlChange: true`
+(`p_confirm_url_change` in SQL), as well as editorial review. The database checks
+the last published slug under the revision lock, even after unpublish. Confirmation
+is bound to retry identity. A rename from A to B to C makes both A and B return a
+direct permanent 308 redirect to C, with no chain. View Page always uses the last
+published URL rather than the pending working slug.
+
+Unpublish removes the snapshot: current URLs and historical aliases all return
+404 while reservations remain private. Republish reactivates aliases and points
+them directly at the new snapshot. Pages currently have no trash, restore or
+delete operation. A future trash implementation must withdraw the snapshot and
+retain these reservations; restore must remain unpublished until explicit review
+and publication. There is no public fallback to retained working data.
+
+Canonical, title, description, Open Graph and Twitter metadata derive only from
+the snapshot and the configured `NEXT_PUBLIC_SITE_URL` origin. Empty SEO title uses
+the published title; empty description suppresses the layout default. Social cards
+use the existing site logo convention. The sitemap reads current snapshots in
+batches of 50 and applies the same schema and image-host validation as the public
+route, omitting snapshots that would return 404. It uses publication time, never
+draft update time or redirect aliases. Publish,
+unpublish and successful retries invalidate the page route pattern (all old/new
+URLs), `/sitemap.xml` and `/dashboard/pages`. Draft saves invalidate only the
+management listing. Dynamic public responses prevent stale withdrawn content from
+persisting in the application cache.
 
 ## Rollout
 
 1. Apply ordered migrations through
-   `20261029010000_page_publication_review.sql` before deploying management/server functions.
+   `20261029152514_page_public_urls.sql` before deploying public routing/server functions.
+   This backfills reservations and the last published slug from current snapshots;
+   previously released URLs and old unpublished history cannot be reconstructed.
+   Existing reserved-name drafts remain readable so an admin can rename them;
+   reserved-name snapshots are not exposed by the new resolver or sitemap.
+   Inventory such pages and deliberately rename/review/publish them before rollout.
    The publication RPC now requires an explicit `p_reviewed: true`; older callers
    omitting it fail closed. Save/create/unpublish retain their contracts.
    This is additive and does not backfill or modify posts, profile privacy,
@@ -240,8 +294,8 @@ conflicts before exposing pages. There is no page delete operation or historical
    Code predating version 2 cannot edit/render version 2 rows; retain version 2
    reader support when rolling back, or keep those pages unavailable without
    rewriting their documents.
-4. Public routing remains #289. Do not expose working rows as a shortcut for
-   preview/publication or treat planned dashboard URLs as implemented public routes.
+4. Verify a published URL, a historical redirect and an unpublished 404; check
+   canonical metadata and sitemap. Do not expose working rows for public preview.
 
 ## Verification
 
@@ -267,7 +321,7 @@ the real editor and renderer at desktop/mobile sizes with local media fixtures.
 It checks editing and serialized reload, nesting, undo/redo, keyboard/drag moves,
 settings, media metadata, layout parity and overflow. It performs no Auth, database
 or external requests. The SQL suite separately checks real version 2 save/read,
-snapshot isolation and malformed documents. Public-route verification remains #289. The management harness verifies the real
+snapshot isolation and malformed documents. URL lifecycle SQL and public-route unit tests cover redirects, snapshot privacy and SEO. The management harness verifies the real
 editor workflow with fixture action responses; SQL tests independently verify persistence.
 
 ## Dashboard workflow and private recovery
@@ -283,7 +337,7 @@ requires a saved revision, meaningful text or an image, alternative text on ever
 image, allowed image hosts and explicit human review of that saved revision.
 There is no article word-count/excerpt requirement. SEO title and description are
 optional: an empty title falls back to the page title, and an empty description is
-omitted by the future public routing integration. Field bounds remain 200/500
+omitted by public routing. Field bounds remain 200/500
 characters. Every edit and successful mutation clears the review checkbox.
 Database publication checks run under the page lock and reject missing review,
 empty content or missing image alternatives. A client cannot bypass these checks
@@ -323,7 +377,9 @@ exact retry and navigation cancellation. This isolated harness uses synthetic
 HTTP actions without database, Auth, mail or webhooks; it cannot establish hosted
 Auth behavior. Run the existing Pages SQL and concurrency suites on a disposable
 migrated database to verify actual authorization, locks, review/readiness and
-snapshot/retry contracts. Public navigation remains unverified until #289.
+snapshot/retry contracts. The browser harness also verifies explicit URL-change confirmation and View Page
+links. Public resolver/metadata unit tests exercise the real route module; they do
+not replace deployment HTTP/redirect verification.
 
 ### Correcting rejected requests and list navigation
 

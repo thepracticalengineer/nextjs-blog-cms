@@ -39,6 +39,7 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
     const { data, error } = await client.rpc('write_page_atomic', {
       p_operation: request.operation,
       p_reviewed: request.operation === 'publish' && request.reviewed,
+      p_confirm_url_change: request.operation === 'publish' && request.confirmUrlChange === true,
       p_request_key: request.requestKey,
       p_values: 'values' in request ? request.values : null,
       p_page_id: 'pageId' in request ? request.pageId : null,
@@ -47,7 +48,14 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
     if (error) return pageDatabaseFailure(error)
     if (!data) return pageFailure('PAGE_UNAVAILABLE')
     const result = readWriteResponse(data)
-    if (!result.error) revalidatePath('/dashboard/pages')
+    if (!result.error) {
+      revalidatePath('/dashboard/pages')
+      if (request.operation === 'publish' || request.operation === 'unpublish') {
+        // Includes every historical alias, even on an exact retry after a lost response.
+        revalidatePath('/[slug]', 'page')
+        revalidatePath('/sitemap.xml')
+      }
+    }
     return result
   } catch {
     return pageFailure('PAGE_UNAVAILABLE')

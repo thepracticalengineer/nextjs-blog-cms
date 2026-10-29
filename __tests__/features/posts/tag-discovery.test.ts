@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+vi.mock('server-only', () => ({}))
 const client = vi.hoisted(() => ({ from: vi.fn() }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => client }))
 vi.mock('@/features/posts/components/PostList', () => ({ PostList: () => null }))
