@@ -217,8 +217,8 @@ importers:
         specifier: 17.6.0
         version: 17.6.0
       monocart-coverage-reports:
-        specifier: 3.0.0
-        version: 3.0.0
+        specifier: 3.2.0
+        version: 3.2.0
       postcss:
         specifier: 8.5.31
         version: 8.5.31
@@ -2786,8 +2786,8 @@ packages:
     resolution: {integrity: sha512-CRT1WTyuQoD771GW56XEZFQ/ZoSfWid1alKGDYMmkt2yl8UXrVR4pspqWNEcqKvVIzg6PAltWjxcSSPrboA4iA==}
     engines: {node: '>=18.0.0'}
 
-  execa@10.2.0:
-    resolution: {integrity: sha512-j1pFOVxaybMVCTNHSBuISL2KQcDS3KIE1wBmUp4n2X+1FgaQI2ZDJVy9TYxDyMCzYojRIMh9O8X/UoWZtxTJdw==}
+  execa@10.2.1:
+    resolution: {integrity: sha512-/Bofl3ZBh2Q4/PG0W63qFzP5vDAypi8Zc90UWTBzaDNIYiX7apPOd0N6L8hG8CojUdq4V51adu8BObP+iVsSTw==}
     engines: {node: '>=22'}
 
   execa@5.1.1:
@@ -3825,8 +3825,8 @@ packages:
     resolution: {integrity: sha512-xV2bxeN6F7oYjZWTe/YPAy6MN2M+sL4u/Rlm2AHCIVGfo2p1yGmBHQ6vHehl4bRTZBdHu3TSkWdYgkwpYzAGSw==}
     engines: {node: '>=0.10.0'}
 
-  monocart-coverage-reports@3.0.0:
-    resolution: {integrity: sha512-e/1sowGv8sCDD/QV/6SPsaJz5i2VuPaY7hPlzAPiisgYaJHvuKOgDk78ixSFBGMgHjFcw7p/GDL1m1LcvfB3Dw==}
+  monocart-coverage-reports@3.2.0:
+    resolution: {integrity: sha512-hF8GxLozQGJ9P2FDjTrGfo/IAvHSlPdmYiBE3qkfbWUc9Zc+I+mrShta9+cJxmZfC5d6FiaEyrhjzCNrpAflog==}
     engines: {node: '>=22.15.0'}
     hasBin: true
 
@@ -7701,7 +7701,7 @@ snapshots:
     dependencies:
       eventsource-parser: 3.1.1
 
-  execa@10.2.0:
+  execa@10.2.1:
     dependencies:
       '@sindresorhus/merge-streams': 4.0.0
       figures: 6.1.0
@@ -8721,7 +8721,7 @@ snapshots:
 
   modify-values@1.0.1: {}
 
-  monocart-coverage-reports@3.0.0:
+  monocart-coverage-reports@3.2.0:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.6.0
       acorn: 8.19.0
@@ -8731,7 +8731,7 @@ snapshots:
       console-grid: 2.2.4
       convert-source-map: 2.0.0
       eight-colors: 1.3.3
-      execa: 10.2.0
+      execa: 10.2.1
       istanbul-lib-coverage: 3.2.2
       istanbul-lib-report: 3.0.1
       istanbul-reports: 3.2.0
