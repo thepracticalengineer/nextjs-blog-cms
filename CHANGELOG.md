@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.6.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.5.0...v3.6.0) (2026-11-04)
+
+
+### Features
+
+* **pages:** add revision history and restore to draft ([#322](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/322)) ([d1c3d6b](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/d1c3d6bfca051753232481915dac151ae3aebd7a))
+* **pages:** add revision history and restore to draft ([#322](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/322)) ([#323](https://github.com/thepracticalengineer/nextjs-blog-cms/issues/323)) ([ce144e7](https://github.com/thepracticalengineer/nextjs-blog-cms/commit/ce144e7447dd5691eca24dd10de880851d2a26c5))
+
 ## [3.5.0](https://github.com/thepracticalengineer/nextjs-blog-cms/compare/v3.4.0...v3.5.0) (2026-10-29)
 
 
