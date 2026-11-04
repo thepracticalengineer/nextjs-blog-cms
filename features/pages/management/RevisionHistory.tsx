@@ -86,6 +86,7 @@ export function RevisionHistory({ page, disabled, onRestore }: Readonly<{ page: 
             <dd className="break-words"><del className="text-destructive">{change.before || '(empty)'}</del>{' → '}<ins className="no-underline">{change.after || '(empty)'}</ins></dd>
           </div>)}</dl>}
           {comparison.layoutOnly && <p className="text-sm">Text is unchanged; layout, formatting or block settings differ.</p>}
+          {comparison.contentChanged && !comparison.layoutOnly && !comparison.exact && <p className="text-sm">This page is large, so added and removed lines are listed without their exact positions.</p>}
           {comparison.contentChanged && !comparison.layoutOnly && <ul className="flex flex-col gap-1 text-sm" aria-label="Content changes">
             {comparison.lines.filter(line => line.kind !== 'same').map((line, index) => <li key={index} className="break-words">
               {line.kind === 'added' ? <ins className="no-underline">+ {line.text}</ins> : <del className="text-destructive">− {line.text}</del>}

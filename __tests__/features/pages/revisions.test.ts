@@ -18,9 +18,9 @@ describe('revision comparison', () => {
     expect(documentLines({ version: 1, blocks: [{ type: 'paragraph', text: ' Legacy ' }, { type: 'paragraph', text: '' }] })).toEqual(['Legacy'])
   })
   it('orders added and removed lines around unchanged ones', () => {
-    expect(diffLines(['a', 'b', 'c'], ['a', 'x', 'c'])).toEqual([
+    expect(diffLines(['a', 'b', 'c'], ['a', 'x', 'c'])).toEqual({ exact: true, lines: [
       { kind: 'same', text: 'a' }, { kind: 'removed', text: 'b' }, { kind: 'added', text: 'x' }, { kind: 'same', text: 'c' },
-    ])
+    ] })
   })
   it('reports settings changes and text changes separately from layout-only changes', () => {
     const target = { ...base, slug: 'about-us', document: doc(paragraph('One'), paragraph('Three')) }
@@ -32,11 +32,31 @@ describe('revision comparison', () => {
     expect(layout).toMatchObject({ fields: [], contentChanged: true, layoutOnly: true })
     expect(compareRevision(base, base)).toMatchObject({ fields: [], contentChanged: false, layoutOnly: false })
   })
-  it('stays bounded for very large documents', () => {
+  it('stays exact for large documents with a small changed region', () => {
     const before = Array.from({ length: 1000 }, (_, i) => `line ${i}`)
-    const after = [...before.slice(1), 'new']
+    const after = before.with(500, 'new')
     const result = diffLines(before, after)
-    expect(result.filter(line => line.kind === 'removed').map(line => line.text)).toEqual(['line 0'])
-    expect(result.filter(line => line.kind === 'added').map(line => line.text)).toEqual(['new'])
+    expect(result.exact).toBe(true)
+    expect(result.lines.filter(line => line.kind === 'removed').map(line => line.text)).toEqual(['line 500'])
+    expect(result.lines.filter(line => line.kind === 'added').map(line => line.text)).toEqual(['new'])
+  })
+  it('counts repeated lines when a large change falls back to an approximate diff', () => {
+    const before = Array.from({ length: 1001 }, (_, i) => i % 2 ? 'same' : `old ${i}`)
+    const after = Array.from({ length: 1000 }, (_, i) => i % 2 ? 'same' : `new ${i}`)
+    const result = diffLines(before, after)
+    expect(result.exact).toBe(false)
+    const count = (kind: string, text?: string) => result.lines.filter(line => line.kind === kind && (!text || line.text === text)).length
+    expect(count('removed', 'same')).toBe(0)
+    expect(count('removed')).toBe(501)
+    expect(count('added')).toBe(500)
+    expect(count('same')).toBe(500)
+  })
+  it('never reports a large repeated-line text change as layout-only', () => {
+    const lines = (n: number) => doc(...Array.from({ length: n }, (_, i) => paragraph(i % 3 ? 'same' : `unique ${i}`)))
+    const removedOne = compareRevision({ ...base, document: lines(1500) }, { ...base, document: doc(paragraph('lead'), ...(lines(1499).content.content ?? [])) })
+    expect(removedOne.layoutOnly).toBe(false)
+    const repeated = compareRevision({ ...base, document: doc(...Array.from({ length: 501 }, () => paragraph('same'))) }, { ...base, document: doc(...Array.from({ length: 500 }, () => paragraph('same'))) })
+    expect(repeated).toMatchObject({ layoutOnly: false, exact: true })
+    expect(repeated.lines.filter(line => line.kind === 'removed')).toHaveLength(1)
   })
 })
