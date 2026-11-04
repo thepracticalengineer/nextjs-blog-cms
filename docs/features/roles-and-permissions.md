@@ -60,7 +60,9 @@ See [MFA verification and recovery](mfa.md) for authenticator selection, recover
 ## Pages capabilities
 
 `pages:create`, `pages:read`, `pages:update` and `pages:publish` are admin-only.
-`pages:publish` covers explicit publication and unpublication. Authors' existing
+`pages:publish` covers explicit publication and unpublication. Page revision
+history is readable with `pages:read`; restoring a revision into the working draft
+requires `pages:update` and never publishes it. Authors' existing
 `posts:publish` does not grant any page-management access. Signup policy remains
 unchanged; #111 is a separate product decision.
 

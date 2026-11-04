@@ -22,6 +22,10 @@ A published page can have newer private working content: saving changes does not
 modify its live snapshot or status. Publishing copies the locked working row to
 the snapshot; unpublishing removes the snapshot and sets status to `draft`.
 
+`page_revisions` is private, append-only history: one row per successful write,
+holding the resulting working values, status, operation, actor and time. See
+[revision history and restore](#revision-history-and-restore).
+
 `pages:create`, `pages:read`, `pages:update` and `pages:publish` are admin-only.
 The last capability includes unpublishing. Actions use `authorizeSession` and the
 caller's cookie client; no service-role client or caller-supplied actor is used.
@@ -196,6 +200,9 @@ archiving does not delete stored files. See [image rules and library behavior](p
 - `publish`: `{ operation, requestKey, pageId, expectedRevision, reviewed: true, confirmUrlChange?: boolean }`;
   `unpublish`: `{ operation, requestKey, pageId, expectedRevision }`;
   publishes exactly the expected working revision or removes its snapshot.
+- `restore`: `{ operation, requestKey, pageId, expectedRevision, sourceRevision }`;
+  copies a stored revision of the same page into the working values (see
+  [revision history and restore](#revision-history-and-restore)).
 
 `values` contains exactly `title`, `slug`, `seo_title`, `seo_description` and
 `document`. Every mutation returns `{ page, replayed }`. Every successful new
@@ -223,6 +230,47 @@ indefinitely, including after unpublish. Collisions return `PAGE_SLUG_CONFLICT`
 without a partial write. Claims use the existing unique slug key and page lock;
 concurrent claims cannot acquire the same URL. Exact retries cannot reclaim an
 abandoned draft-only slug or repeat publication.
+
+## Revision history and restore
+
+Every successful `create`, `save`, `publish`, `unpublish` and `restore` appends one
+`page_revisions` row in the same transaction as the write. The row is keyed by the
+revision UUID the write produced and stores the resulting title, slug, SEO fields,
+document and status, plus the operation, the acting administrator and the time.
+Failed or replayed writes record nothing. History starts with migration
+`20261104110000_page_revisions.sql`: earlier saves were never stored, so each
+existing page gets a single `baseline` row for its current working values.
+
+Revisions use the same privacy as working rows: only administrators who pass the
+MFA check can SELECT them, and direct inserts, updates and deletes are revoked for
+every client role. `list_page_revisions(page_id, limit)` returns at most 100 summaries, newest first,
+without documents. It includes the author's profile name, joined only after the
+administrator check. The dashboard reads one full revision through `getPageRevision`.
+Both actions require `pages:read`, and restore requires `pages:update`.
+
+`restore` changes the working copy only. It requires the current
+`expectedRevision`, so it cannot overwrite a newer save (`PAGE_STALE`). It accepts
+only a revision of the same page (`PAGE_REVISION_NOT_FOUND`), and is subject to the
+same reserved-namespace and slug-reservation checks as a save. Status,
+`published_*` fields and the public snapshot stay unchanged. Restored content
+reaches visitors only through a normal publish with explicit human review and,
+if the slug differs from the live URL, URL-change confirmation. The server action
+rejects a revision whose images use a host that is no longer allowed, before it
+writes anything. The `sourceRevision` is part of retry identity.
+
+Revisions are retained for the life of the page, with no automatic pruning. They
+are removed only by the existing `ON DELETE CASCADE` if a page row is deleted.
+There is no page delete operation yet. The trash and permanent-deletion policy in
+#290 must define revision retention explicitly.
+
+In the editor, **Revision history** is a collapsed panel that queries only while
+open and refreshes after each write. Selecting a revision shows how restoring it
+would change the current saved draft: changed title, URL and SEO fields, and
+added or removed text lines (headings, paragraphs, image alternative text and
+button labels/targets). It notes when only layout or formatting differs, and
+offers a private preview. **Restore as working draft** is disabled while there
+is unsaved input or an unconfirmed request, and asks for confirmation first. On
+success, the editor loads the restored values and publication review starts again.
 
 ## Public URLs, redirects and SEO
 
@@ -257,8 +305,8 @@ published URL rather than the pending working slug.
 
 Unpublish removes the snapshot: current URLs and historical aliases all return
 404 while reservations remain private. Republish reactivates aliases and points
-them directly at the new snapshot. Pages currently have no trash, restore or
-delete operation. A future trash implementation must withdraw the snapshot and
+them directly at the new snapshot. Pages currently have no trash or delete
+operation (revision restore changes only working content). A future trash implementation must withdraw the snapshot and
 retain these reservations; restore must remain unpublished until explicit review
 and publication. There is no public fallback to retained working data.
 
@@ -278,6 +326,10 @@ persisting in the application cache.
 
 1. Apply ordered migrations through
    `20261029152514_page_public_urls.sql` before deploying public routing/server functions.
+   Apply `20261104110000_page_revisions.sql` before deploying revision history. It replaces
+   `write_page_atomic` with a version that adds `p_source_revision` (default null),
+   so existing callers keep working. It backfills one `baseline` revision per
+   existing page and does not touch snapshots, reservations or posts.
    This backfills reservations and the last published slug from current snapshots;
    previously released URLs and old unpublished history cannot be reconstructed.
    Existing reserved-name drafts remain readable so an admin can rename them;
@@ -302,6 +354,7 @@ persisting in the application cache.
 ```bash
 pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/pages.sql
+docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/page_revisions.sql
 node database/tests/pages-concurrency.mjs
 pnpm exec playwright test --config=e2e/page-editor.config.ts
 pnpm run typecheck
