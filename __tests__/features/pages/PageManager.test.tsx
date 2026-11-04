@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup as cleanupDom, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PageManager } from '@/features/pages/management/PageManager'
 import type { Page, PageWrite } from '@/features/pages/schema'
 const id = '28800000-0000-4000-8000-000000000001'
-const mocks = vi.hoisted(() => ({ write: vi.fn(), get: vi.fn(), push: vi.fn(), user: { id: '28800000-0000-4000-8000-000000000001' } }))
-vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get }))
+const mocks = vi.hoisted(() => ({ write: vi.fn(), get: vi.fn(), list: vi.fn(), revision: vi.fn(), push: vi.fn(), user: { id: '28800000-0000-4000-8000-000000000001' } }))
+vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get, listPageRevisions: mocks.list, getPageRevision: mocks.revision }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/features/auth/context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }))
 vi.mock('@/features/pages/editor/PageEditor', () => ({ PageEditor: () => <div>Canvas</div> }))
@@ -146,4 +146,59 @@ it.each(['PAGE_SLUG_CONFLICT', 'PAGE_IMAGE_NOT_ALLOWED', 'PAGE_FORBIDDEN'])('sho
   const copies = Object.keys(localStorage).map(key => JSON.parse(localStorage.getItem(key)!))
   const duplicate = copies.find(copy => copy.values.slug.startsWith('copy-'))
   expect(duplicate.pending).toBeNull()
+})
+
+describe('revision history', () => {
+  const source = '28800000-0000-4000-8000-000000000009'
+  const older = { ...page, id: source, page_id: id, revision: source, operation: 'create' as const, status: 'draft' as const, restored_from: null, created_at: '2026-10-28T00:00:00Z', title: 'Old about', document: { version: 1 as const, blocks: [{ type: 'paragraph' as const, text: 'Earlier' }] } }
+  const summaries = [
+    { id, revision: id, operation: 'save', title: 'About', slug: 'about', status: 'draft', restored_from: null, created_by: id, author_name: 'Frank', created_at: '2026-10-29T00:00:00Z' },
+    { id: source, revision: source, operation: 'create', title: 'Old about', slug: 'about', status: 'draft', restored_from: null, created_by: null, author_name: null, created_at: '2026-10-28T00:00:00Z' },
+  ]
+  beforeEach(() => {
+    mocks.list.mockResolvedValue({ data: summaries, error: null })
+    mocks.revision.mockResolvedValue({ data: older, error: null })
+    mocks.write.mockImplementation(async (request: PageWrite) => ({ data: { page: { ...page, revision: '28800000-0000-4000-8000-00000000000a', title: request.operation === 'restore' ? older.title : page.title, document: request.operation === 'restore' ? older.document : page.document }, replayed: false }, error: null }))
+  })
+  async function openHistory() {
+    await mount()
+    const panel = screen.getByText('Revision history').closest('details')!
+    panel.open = true
+    fireEvent(panel, new Event('toggle'))
+    await screen.findByRole('button', { name: /Draft saved/ })
+  }
+  it('loads only when opened and compares a revision with the saved draft', async () => {
+    await mount()
+    expect(mocks.list).not.toHaveBeenCalled()
+    cleanupDom()
+    await openHistory()
+    expect(screen.getByRole('button', { name: /Draft saved.*Frank.*current draft/ })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Created.*Deleted account/ }))
+    expect(await screen.findByText('− Hello')).toBeInTheDocument()
+    expect(screen.getByText('+ Earlier')).toBeInTheDocument()
+    expect(mocks.revision).toHaveBeenCalledWith(id, source)
+  })
+  it('restores into the working draft only after confirmation and without publishing', async () => {
+    await openHistory()
+    fireEvent.click(screen.getByRole('button', { name: /Created/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore as working draft' }))
+    await waitFor(() => expect(mocks.write).toHaveBeenCalledOnce())
+    expect(mocks.write.mock.calls[0][0]).toMatchObject({ operation: 'restore', pageId: id, expectedRevision: id, sourceRevision: source })
+    expect(await screen.findByText(/Revision restored as the working draft/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Title', { exact: true })).toHaveValue('Old about')
+    expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled()
+  })
+  it('blocks restore while there are unsaved changes', async () => {
+    await openHistory()
+    fireEvent.change(screen.getByLabelText('Title', { exact: true }), { target: { value: 'Unsaved' } })
+    fireEvent.click(screen.getByRole('button', { name: /Created/ }))
+    expect(await screen.findByRole('button', { name: 'Restore as working draft' })).toBeDisabled()
+  })
+  it('does nothing when restore is not confirmed', async () => {
+    vi.mocked(window.confirm).mockReturnValue(false)
+    await openHistory()
+    fireEvent.click(screen.getByRole('button', { name: /Created/ }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore as working draft' }))
+    expect(mocks.write).not.toHaveBeenCalled()
+  })
 })

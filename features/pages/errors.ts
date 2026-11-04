@@ -14,6 +14,7 @@ const messages = {
   PAGE_SLUG_CONFLICT: 'This slug is reserved by another page. Choose another slug.',
   PAGE_FORBIDDEN: 'You do not have permission to manage pages.',
   PAGE_NOT_FOUND: 'The page no longer exists.',
+  PAGE_REVISION_NOT_FOUND: 'That revision does not belong to this page or no longer exists.',
   PAGE_UNAVAILABLE: 'The page operation could not be confirmed. Retry the same request key and input.',
 } as const
 export function pageFailure(code: keyof typeof messages): { data: null; error: { code: string; message: string } } {

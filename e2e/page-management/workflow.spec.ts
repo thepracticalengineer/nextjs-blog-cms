@@ -137,3 +137,37 @@ test('published URL changes require separate confirmation and keep View Page on 
   await expect(page.getByRole('link', { name: 'View Page' })).toHaveAttribute('href', '/contact-us')
   expect(requests.at(-1)).toMatchObject({ operation: 'publish', reviewed: true, confirmUrlChange: true })
 })
+test('revision history compares and restores an older revision without publishing it', async ({ page }) => {
+  const older = { ...structuredClone(fixturePage), title: 'Original about', slug: 'original-about', document: { version: 1 as const, blocks: [{ type: 'paragraph' as const, text: 'Our first words.' }] } }
+  const olderRevision = randomUUID()
+  const summaries = [
+    { id: fixturePage.revision, revision: fixturePage.revision, operation: 'save', title: fixturePage.title, slug: fixturePage.slug, status: 'draft', restored_from: null, created_by: fixturePage.id, author_name: 'Page Admin', created_at: '2026-10-29T00:00:00Z' },
+    { id: olderRevision, revision: olderRevision, operation: 'create', title: older.title, slug: older.slug, status: 'draft', restored_from: null, created_by: null, author_name: null, created_at: '2026-10-28T00:00:00Z' },
+  ]
+  let saved = structuredClone(fixturePage)
+  const requests: PageWrite[] = []
+  await page.route('**/fixture/revisions?*', route => route.fulfill({ json: { data: summaries, error: null } }))
+  await page.route('**/fixture/revision?*', route => route.fulfill({ json: { data: { ...older, page_id: fixturePage.id, id: olderRevision, revision: olderRevision, operation: 'create', restored_from: null }, error: null } }))
+  await page.route('**/fixture/write', async route => {
+    const request: PageWrite = route.request().postDataJSON(); requests.push(request)
+    if (request.operation === 'restore') saved = { ...saved, title: older.title, slug: older.slug, document: older.document, revision: randomUUID() }
+    await route.fulfill({ json: { data: { page: saved, replayed: false }, error: null } })
+  })
+  await page.goto(url)
+  await page.getByText('Revision history').click()
+  await expect(page.getByRole('button', { name: /Draft saved.*Page Admin.*current draft/ })).toBeVisible()
+  await page.getByRole('button', { name: /Created.*Deleted account/ }).click()
+  const selected = page.getByRole('region', { name: 'Selected revision' })
+  await expect(selected).toContainText('Original about')
+  await expect(selected.getByRole('list', { name: 'Content changes' })).toContainText('Our first words.')
+  await selected.getByRole('button', { name: 'Preview revision' }).click()
+  await expect(selected).toContainText('Our first words.')
+  page.once('dialog', dialog => dialog.accept())
+  await selected.getByRole('button', { name: 'Restore as working draft' }).click()
+  await expect(page.getByText(/Revision restored as the working draft/)).toBeVisible()
+  expect(requests).toHaveLength(1)
+  expect(requests[0]).toMatchObject({ operation: 'restore', pageId: fixturePage.id, expectedRevision: fixturePage.revision, sourceRevision: olderRevision })
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Original about')
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})

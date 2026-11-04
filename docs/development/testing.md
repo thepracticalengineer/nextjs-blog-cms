@@ -459,11 +459,13 @@ CI runs both, along with the existing reaction policy/concurrency checks. See
 
 Run `pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts`
 for document validation, action guards, retry/error mapping and read boundaries.
-CI runs `database/tests/pages.sql` (rolled back) and
+CI runs `database/tests/pages.sql` and `database/tests/page_revisions.sql` (both rolled back) and
 `node database/tests/pages-concurrency.mjs` against its disposable migrated
 Supabase database. They exercise anonymous/author/admin/MFA access, direct-write
 denial, snapshot isolation, stale saves/publication, retry identity and real
-multi-connection create/save/publish/slug races. See [Pages verification](../features/pages.md#verification)
+multi-connection create/save/publish/slug races. The revision suite checks recorded
+authorship, stale/foreign/colliding restores, retry identity, unchanged snapshots,
+append-only history and anonymous/author/AAL1 denial. See [Pages verification](../features/pages.md#verification)
 for local target restrictions. Run `pnpm exec playwright test --config=e2e/page-editor.config.ts` for the real
 page editor and shared renderer with isolated media fixtures. It checks serialized
 reload, structural editing/history, keyboard/drag ordering, bounded settings, image
