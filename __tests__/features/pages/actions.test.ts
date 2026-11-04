@@ -6,7 +6,7 @@ vi.mock('@/lib/auth/session', () => ({ authorizeSession: mocks.authorize }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }))
 vi.mock('@/lib/supabase/static', () => ({ createStaticClient: mocks.publicClient }))
 import { revalidatePath } from 'next/cache'
-import { writePage, getPage } from '@/features/pages/actions'
+import { writePage, getPage, getPageRevision, listPageRevisions } from '@/features/pages/actions'
 import { getPublishedPage } from '@/features/pages/queries'
 const id = '28600000-0000-4000-8000-000000000001'
 const values = { title: 'About', slug: 'about', seo_title: '', seo_description: '', document: { version: 1, blocks: [] } }
@@ -34,7 +34,7 @@ describe('page actions', () => {
     expect(mocks.authorize).toHaveBeenCalledWith(operation === 'create' ? 'pages:create' : operation === 'save' ? 'pages:update' : 'pages:publish')
     expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', {
       p_operation: operation, p_confirm_url_change: false, p_reviewed: operation === 'publish', p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
-      p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id,
+      p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id, p_source_revision: null,
     })
   })
   it('enforces configured image hosts at writes and both stored read boundaries', async () => {
@@ -158,4 +158,59 @@ it('lets SQL reconcile historical reserved-slug requests before enforcing new cl
   expect((await writePage({ operation: 'create', requestKey: 'pre-upgrade', values: legacy })).data?.replayed).toBe(true)
   mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: 'PAGE_RESERVED_URL' } })
   expect((await writePage({ operation: 'create', requestKey: 'new-claim', values: legacy })).error?.code).toBe('PAGE_RESERVED_URL')
+})
+
+describe('page revisions', () => {
+  const source = '29000000-0000-4000-8000-000000000009'
+  const revisionRow = { ...values, id: source, page_id: id, revision: source, operation: 'save', status: 'draft', restored_from: null, created_by: id, created_at: row.created_at }
+  const summary = { id: source, revision: source, operation: 'save', title: 'About', slug: 'about', status: 'draft', restored_from: null, created_by: id, author_name: 'Admin', created_at: row.created_at }
+  const revisionQuery = vi.fn()
+  beforeEach(() => {
+    revisionQuery.mockResolvedValue({ data: revisionRow, error: null })
+    mocks.from.mockImplementation((table: string) => table === 'page_revisions'
+      ? { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: revisionQuery }) }) }) }
+      : { select: () => ({ eq: () => ({ maybeSingle: mocks.maybeSingle }) }) })
+  })
+  const restore = { operation: 'restore', requestKey: 'restore', pageId: id, expectedRevision: id, sourceRevision: source } as const
+  it('restores through the caller RPC with update capability and dashboard-only invalidation', async () => {
+    expect((await writePage(restore)).data?.page).toEqual(row)
+    expect(mocks.authorize).toHaveBeenCalledExactlyOnceWith('pages:update')
+    expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', expect.objectContaining({ p_operation: 'restore', p_values: null, p_reviewed: false, p_source_revision: source }))
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith('/dashboard/pages')
+  })
+  it('rejects missing or disallowed revisions before writing', async () => {
+    revisionQuery.mockResolvedValue({ data: null, error: null })
+    expect((await writePage(restore)).error).toMatchObject({ code: 'PAGE_REVISION_NOT_FOUND', writeAttempted: false })
+    const document = { version: 2, content: { type: 'doc', content: [{ type: 'image', attrs: { src: 'https://blocked.invalid/old.png' } }] } }
+    revisionQuery.mockResolvedValue({ data: { ...revisionRow, document }, error: null })
+    expect((await writePage(restore)).error).toMatchObject({ code: 'PAGE_IMAGE_NOT_ALLOWED', writeAttempted: false })
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+  it('requires a source revision and refuses values for restore', async () => {
+    expect((await writePage({ ...restore, sourceRevision: undefined })).error?.code).toBe('PAGE_INVALID_INPUT')
+    expect((await writePage({ ...restore, values })).error?.code).toBe('PAGE_INVALID_INPUT')
+    expect(mocks.authorize).not.toHaveBeenCalled()
+  })
+  it('lists summaries through the private RPC and validates the response', async () => {
+    mocks.rpc.mockResolvedValue({ data: [summary], error: null })
+    expect((await listPageRevisions(id)).data).toEqual([summary])
+    expect(mocks.authorize).toHaveBeenCalledWith('pages:read')
+    expect(mocks.rpc).toHaveBeenCalledWith('list_page_revisions', { p_page_id: id, p_limit: 50 })
+    mocks.rpc.mockResolvedValue({ data: [{ ...summary, operation: 'forged' }], error: null })
+    expect((await listPageRevisions(id)).error?.code).toBe('PAGE_UNAVAILABLE')
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: 'PAGE_FORBIDDEN' } })
+    expect((await listPageRevisions(id)).error?.code).toBe('PAGE_FORBIDDEN')
+  })
+  it('reads one revision scoped to its page', async () => {
+    expect((await getPageRevision(id, source)).data).toEqual(revisionRow)
+    revisionQuery.mockResolvedValue({ data: null, error: null })
+    expect(await getPageRevision(id, source)).toEqual({ data: null, error: null })
+    expect((await getPageRevision(id, 'invalid')).error?.code).toBe('PAGE_INVALID_INPUT')
+  })
+  it('denies history access before database access', async () => {
+    mocks.authorize.mockResolvedValue({ profile: null, failure: { code: 'FORBIDDEN', error: 'Denied' } })
+    expect((await listPageRevisions(id)).error?.code).toBe('FORBIDDEN')
+    expect((await getPageRevision(id, source)).error?.code).toBe('FORBIDDEN')
+    expect(mocks.client).not.toHaveBeenCalled()
+  })
 })

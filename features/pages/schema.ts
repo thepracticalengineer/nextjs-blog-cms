@@ -26,6 +26,8 @@ export const pageWriteSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('save'), ...existing, values: requestValuesSchema }),
   z.strictObject({ operation: z.literal('publish'), ...existing, reviewed: z.literal(true), confirmUrlChange: z.boolean().optional() }),
   z.strictObject({ operation: z.literal('unpublish'), ...existing }),
+  // Copies a stored revision into the working copy only; publication stays separate.
+  z.strictObject({ operation: z.literal('restore'), ...existing, sourceRevision: z.uuid() }),
 ])
 export type PageDocument = z.infer<typeof pageDocumentSchema>
 export type PageValues = z.infer<typeof pageValuesSchema>
@@ -45,5 +47,22 @@ export const pageSnapshotSchema = z.object({
   ...pageValuesSchema.shape,
   page_id: z.uuid(), revision: z.uuid(), published_at: z.string(),
 })
+export const pageRevisionOperations = ['baseline', 'create', 'save', 'publish', 'unpublish', 'restore'] as const
+const revisionMeta = {
+  id: z.uuid(), revision: z.uuid(), operation: z.enum(pageRevisionOperations),
+  status: z.enum(['draft', 'published']), restored_from: z.uuid().nullable(),
+  created_by: z.uuid().nullable(), created_at: z.string(),
+}
+export const pageRevisionSummarySchema = z.object({
+  ...revisionMeta, title: z.string(), slug: z.string(), author_name: z.string().nullable(),
+})
+export const pageRevisionSchema = z.object({
+  ...pageValuesSchema.shape,
+  // Stored history keeps whatever slug was valid when it was written.
+  slug: storedSlug,
+  ...revisionMeta, page_id: z.uuid(),
+})
+export type PageRevisionSummary = z.infer<typeof pageRevisionSummarySchema>
+export type PageRevision = z.infer<typeof pageRevisionSchema>
 export type Page = z.infer<typeof pageRecordSchema>
 export type PageSnapshot = z.infer<typeof pageSnapshotSchema>

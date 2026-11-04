@@ -2,7 +2,7 @@ import type { PageResult } from '../errors'
 import type { Page, PageWrite } from '../schema'
 
 type WriteError = NonNullable<PageResult<never>['error']>
-const rejectedWrites = new Set(['PAGE_RESERVED_URL', 'PAGE_URL_CONFIRMATION_REQUIRED', 'PAGE_INVALID_INPUT', 'PAGE_INVALID_DOCUMENT', 'PAGE_STALE', 'PAGE_RETRY_CONFLICT', 'PAGE_SLUG_CONFLICT', 'PAGE_NOT_READY', 'PAGE_REVIEW_REQUIRED', 'PAGE_NOT_FOUND'])
+const rejectedWrites = new Set(['PAGE_RESERVED_URL', 'PAGE_URL_CONFIRMATION_REQUIRED', 'PAGE_INVALID_INPUT', 'PAGE_INVALID_DOCUMENT', 'PAGE_STALE', 'PAGE_RETRY_CONFLICT', 'PAGE_SLUG_CONFLICT', 'PAGE_NOT_READY', 'PAGE_REVIEW_REQUIRED', 'PAGE_NOT_FOUND', 'PAGE_REVISION_NOT_FOUND'])
 
 /** A preflight rejection only establishes the outcome of this attempt. An older
  * attempt may have committed before its acknowledgement was lost. */
@@ -21,6 +21,7 @@ export function writeSuccessMessage(operation: PageWrite['operation'], replayed:
   if (replayed) return 'Request confirmed. Your input is preserved; compare it with the latest saved page before saving again.'
   if (operation === 'publish') return 'Published snapshot updated. Your page is live.'
   if (operation === 'unpublish') return 'Page unpublished. Your working content is preserved.'
+  if (operation === 'restore') return 'Revision restored as the working draft. Published content is unchanged until you review and publish it.'
   return 'Draft saved. Published content is unchanged.'
 }
 

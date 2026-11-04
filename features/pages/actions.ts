@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { authorizeSession } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { findDisallowedPageImage } from './document-server'
-import { pageRecordSchema, pageWriteSchema, type Page } from './schema'
+import { pageRecordSchema, pageRevisionSchema, pageRevisionSummarySchema, pageWriteSchema, type Page, type PageRevision, type PageRevisionSummary } from './schema'
 import { pageDatabaseFailure, pageFailure, pageImageFailure, type PageResult } from './errors'
 
 /** Reuse a requestKey only for an exact retry, including expectedRevision. */
@@ -14,7 +14,7 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
   if (!parsed.success) return pageFailure('PAGE_INVALID_INPUT')
   const request = parsed.data
   const permission = {
-    create: 'pages:create', save: 'pages:update', publish: 'pages:publish', unpublish: 'pages:publish',
+    create: 'pages:create', save: 'pages:update', publish: 'pages:publish', unpublish: 'pages:publish', restore: 'pages:update',
   } as const
   const { profile, failure } = await authorizeSession(permission[request.operation])
   if (failure) return { data: null, error: { code: failure.code, message: failure.error, writeAttempted: false } }
@@ -35,6 +35,15 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
     if (working.error) return { ...working, error: { ...working.error, writeAttempted: false } }
     if (!working.data) return pageFailure('PAGE_NOT_FOUND')
   }
+  // A restored revision may reference an image host that is no longer configured.
+  if (request.operation === 'restore') {
+    const source = await readAuthorizedRevision(client, request.pageId, request.sourceRevision)
+    if (source.error) return { ...source, error: { ...source.error, writeAttempted: false } }
+    if (!source.data) {
+      const missing = pageFailure('PAGE_REVISION_NOT_FOUND')
+      return { ...missing, error: { ...missing.error, writeAttempted: false } }
+    }
+  }
   try {
     const { data, error } = await client.rpc('write_page_atomic', {
       p_operation: request.operation,
@@ -44,6 +53,7 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
       p_values: 'values' in request ? request.values : null,
       p_page_id: 'pageId' in request ? request.pageId : null,
       p_expected_revision: 'expectedRevision' in request ? request.expectedRevision : null,
+      p_source_revision: request.operation === 'restore' ? request.sourceRevision : null,
     })
     if (error) return pageDatabaseFailure(error)
     if (!data) return pageFailure('PAGE_UNAVAILABLE')
@@ -67,6 +77,43 @@ export async function getPage(id: string): Promise<PageResult<Page | null>> {
   if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
   if (!z.uuid().safeParse(id).success) return pageFailure('PAGE_INVALID_INPUT')
   return readAuthorizedPage(await createClient(), id)
+}
+
+/** Newest first, without documents. Private to page administrators. */
+export async function listPageRevisions(pageId: string): Promise<PageResult<PageRevisionSummary[]>> {
+  const { failure } = await authorizeSession('pages:read')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
+  if (!z.uuid().safeParse(pageId).success) return pageFailure('PAGE_INVALID_INPUT')
+  try {
+    const client = await createClient()
+    const { data, error } = await client.rpc('list_page_revisions', { p_page_id: pageId, p_limit: 50 })
+    if (error) return pageDatabaseFailure(error)
+    const result = z.array(pageRevisionSummarySchema).safeParse(data)
+    return result.success ? { data: result.data, error: null } : pageFailure('PAGE_UNAVAILABLE')
+  } catch {
+    return pageFailure('PAGE_UNAVAILABLE')
+  }
+}
+
+export async function getPageRevision(pageId: string, revision: string): Promise<PageResult<PageRevision | null>> {
+  const { failure } = await authorizeSession('pages:read')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
+  if (!z.uuid().safeParse(pageId).success || !z.uuid().safeParse(revision).success) return pageFailure('PAGE_INVALID_INPUT')
+  return readAuthorizedRevision(await createClient(), pageId, revision)
+}
+
+async function readAuthorizedRevision(client: Awaited<ReturnType<typeof createClient>>, pageId: string, revision: string): Promise<PageResult<PageRevision | null>> {
+  try {
+    const { data, error } = await client.from('page_revisions').select('*').eq('page_id', pageId).eq('revision', revision).maybeSingle()
+    if (error) return pageFailure('PAGE_UNAVAILABLE')
+    if (!data) return { data: null, error: null }
+    const result = pageRevisionSchema.safeParse(data)
+    if (!result.success) return pageFailure('PAGE_UNSUPPORTED_DOCUMENT')
+    const image = findDisallowedPageImage(result.data.document)
+    return image ? pageImageFailure(image) : { data: result.data, error: null }
+  } catch {
+    return pageFailure('PAGE_UNAVAILABLE')
+  }
 }
 
 async function readAuthorizedPage(client: Awaited<ReturnType<typeof createClient>>, id: string): Promise<PageResult<Page | null>> {

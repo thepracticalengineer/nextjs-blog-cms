@@ -9,10 +9,11 @@ import { Input } from '@/components/ui/input'
 import { PageEditor } from '../editor/PageEditor'
 import { PageContent } from '../PageContent'
 import { getPage, writePage } from '@/features/pages/actions'
-import { pageValuesSchema, type Page, type PageValues, type PageWrite } from '../schema'
+import { pageValuesSchema, type Page, type PageRevision, type PageValues, type PageWrite } from '../schema'
 import { pageReadiness } from '../readiness'
 import { installNavigationGuard } from '@/features/posts/drafts/navigation'
 import { canCorrectWrite, writeErrorMessage, writeSuccessMessage, editorStatus } from './feedback'
+import { RevisionHistory } from './RevisionHistory'
 import { blankPage, pageValues, readPageRecovery, recoveryKey, storePageRecovery, type PageRecovery } from './recovery'
 
 export function PageManager({ accountId, documentId, initialPage }: Readonly<{ accountId: string; documentId: string; initialPage: Page | null }>) {
@@ -102,6 +103,12 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
       }
       setPage(saved); current.current.page = saved
       setPending(null); current.current.pending = null; setReviewed(false); setConfirmUrlChange(false)
+      // Restore was only offered without unsaved input, so adopting its result loses nothing.
+      if (request.operation === 'restore' && !result.data.replayed) {
+        const restored = pageValues(saved)
+        current.current.values = restored
+        setValues(restored); setEditorKey(key => key + 1)
+      }
       // Never replace input: a replay may return a newer revision from another editor.
       const retained = persist(current.current.values, saved, null)
       if (retained && recoveredKey.current) { localStorage.removeItem(recoveredKey.current); recoveredKey.current = null }
@@ -112,6 +119,10 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
   function save() {
     if (!pageValuesSchema.safeParse(values).success) { setMessage('Enter a title (up to 200 characters), a lowercase URL slug (up to 120), and valid SEO fields and blocks.'); return }
     void send(page ? { operation: 'save', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, values } : { operation: 'create', requestKey: crypto.randomUUID(), values })
+  }
+  function restore(revision: PageRevision) {
+    if (!page || dirty || running.current || !window.confirm('Restore this revision as the working draft? The live page stays unchanged until you review and publish.')) return
+    void send({ operation: 'restore', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, sourceRevision: revision.revision })
   }
   async function loadLatest() {
     if (!page || running.current || !window.confirm('Load the latest saved page? Your current input remains in browser recovery.')) return
@@ -172,6 +183,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
       <PageEditor key={editorKey} editorId={accountId} document={values.document} onChange={document => change({ ...current.current.values, document })} />
     </fieldset>
     <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile} onClick={save}>Save Draft</Button><Button variant="outline" disabled={!ready} onClick={() => setPreview(value => !value)}>{preview ? 'Close private preview' : 'Private Preview'}</Button><Button variant="outline" disabled={blocked} onClick={() => void duplicate()}>Duplicate</Button>{page && <Button variant="outline" disabled={busy || !!pending} onClick={() => void loadLatest()}>Load latest saved page</Button>}</div>
+    {page && <RevisionHistory page={page} disabled={blocked || reconcile || dirty} onRestore={restore} />}
     {preview && <section aria-label="Private page preview" className="min-w-0 rounded-lg border p-4"><h2 className="font-semibold">Private preview · current unsaved content</h2><h1 className="my-4 break-words text-3xl">{values.title}</h1><PageContent document={values.document} /></section>}
     <section className="flex flex-col gap-3 rounded-lg border p-4" aria-label="Publication"><h2 className="font-semibold">Publication</h2><p>Save Draft preserves the published snapshot. Pages never send newsletters.</p>{issues.length > 0 && <ul className="list-inside list-disc">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>}{dirty && <p>Save your changes before reviewing this revision for publication.</p>}
       <label className="flex items-start gap-2"><input type="checkbox" checked={reviewed} disabled={blocked || reconcile || dirty || !page || issues.length > 0} onChange={event => setReviewed(event.target.checked)} />I personally reviewed this saved revision, its links, images and SEO for publication.</label>
