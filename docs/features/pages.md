@@ -203,6 +203,11 @@ archiving does not delete stored files. See [image rules and library behavior](p
 - `restore`: `{ operation, requestKey, pageId, expectedRevision, sourceRevision }`;
   copies a stored revision of the same page into the working values (see
   [revision history and restore](#revision-history-and-restore)).
+- `trash`, `recover`: `{ operation, requestKey, pageId, expectedRevision }`;
+  `purge`: the same plus `confirmSlug`; `move`: the same plus `parentId` (UUID or
+  `null`) and `position`. See [trash, restore and permanent deletion](#trash-restore-and-permanent-deletion)
+  and [page hierarchy](#page-hierarchy). SQL receives `confirmSlug`, `parentId` and
+  `position` in `p_options`, which is part of retry identity.
 
 `values` contains exactly `title`, `slug`, `seo_title`, `seo_description` and
 `document`. Every mutation returns `{ page, replayed }`. Every successful new
@@ -258,10 +263,11 @@ if the slug differs from the live URL, URL-change confirmation. The server actio
 rejects a revision whose images use a host that is no longer allowed, before it
 writes anything. The `sourceRevision` is part of retry identity.
 
-Revisions are retained for the life of the page, with no automatic pruning. They
-are removed only by the existing `ON DELETE CASCADE` if a page row is deleted.
-There is no page delete operation yet. The trash and permanent-deletion policy in
-#290 must define revision retention explicitly.
+Revisions are retained for the life of the page, with no automatic pruning,
+including while the page is in the trash. Permanent deletion erases them and keeps
+only a single `purge` audit row (see [trash, restore and permanent deletion](#trash-restore-and-permanent-deletion)).
+Trash, restore from trash and moves also append revisions (`trash`, `recover`,
+`move`), recording who acted and when; their content equals the previous row.
 
 In the editor, **Revision history** is a collapsed panel that queries only while
 open and refreshes after each write. Selecting a revision shows how restoring it
@@ -271,6 +277,68 @@ button labels/targets). It notes when only layout or formatting differs, and
 offers a private preview. **Restore as working draft** is disabled while there
 is unsaved input or an unconfirmed request, and asks for confirmation first. On
 success, the editor loads the restored values and publication review starts again.
+
+## Trash, restore and permanent deletion
+
+**Move to trash** (`trash`, `pages:publish`) is available in the editor for a saved
+page without unsaved input, after confirmation. It sets `trashed_at`/`trashed_by`,
+sets status to `draft` and removes the public snapshot in the same transaction, so
+the current URL and every historical alias return 404 immediately. All URL
+reservations are kept, so no other page can claim a trashed page's URLs. A
+trashed page is read-only: `save`, `publish`, `unpublish`, `restore` and `move`
+fail with `PAGE_TRASHED`. A page that still has active (not trashed) child pages
+cannot be trashed (`PAGE_HAS_CHILDREN`): move or trash the children first, so
+children are never silently trashed, deleted or orphaned.
+
+Dashboard → Pages → Status **Trash** lists trashed pages, newest first.
+**Restore** (`recover`, `pages:update`) returns the page to its previous parent at
+the end of its siblings, always **unpublished**. Going live again requires the normal
+reviewed publish. A child whose parent is still in the trash cannot be restored
+(`PAGE_PARENT_TRASHED`); restore the parent first. The editor of a trashed page
+offers the same restore.
+
+**Retention policy.** Trashed pages are kept indefinitely; there is no automatic
+purge. **Delete permanently** (`purge`, `pages:publish`) is available only from the
+Trash view and only for a trashed page. The administrator must type the page's URL
+slug, and the database rejects a mismatch (`PAGE_DELETE_CONFIRMATION_REQUIRED`).
+Permanent deletion cannot be undone. In one transaction it:
+
+- replaces the title, SEO fields and document with an empty tombstone and sets `purged_at`;
+- deletes every revision of the page (keeping one `purge` audit row that holds only
+  tombstone values) and every stored retry payload except the purge's own;
+- detaches any trashed children to the top level, so they can still be restored;
+- **keeps the page row and all of its URL reservations**. Former URLs stay
+  unclaimable and keep returning 404, so links cannot be hijacked by a new page.
+
+Purged pages never appear in lists and accept no further operations
+(`PAGE_NOT_FOUND`); an exact retry of the purge request still replays.
+Pages reference images by URL and never own media files, so trash and permanent
+deletion do not delete or archive media; the media library's own rules apply.
+
+## Page hierarchy
+
+Pages can have a parent (`parent_id`) and an order among siblings (`position`).
+**URLs stay flat**: hierarchy is organizational only. It never changes a slug, a
+reservation, a redirect, the sitemap or a public page. In the editor, **Page
+attributes** (loaded only when opened) offers a parent and a position ("First"
+or "After …"). **Move page** sends `move` with the page's current revision. The
+Pages list shows each page's parent.
+
+The database enforces the rules under a single hierarchy lock, so concurrent moves
+cannot race into an invalid tree:
+
+- no cycles: a page cannot be its own parent or sit under its own descendant (`PAGE_HIERARCHY_CYCLE`);
+- bounded depth: at most three levels, counting the moved page's whole subtree,
+  including trashed descendants that could be restored later (`PAGE_HIERARCHY_TOO_DEEP`);
+- the parent must exist and not be trashed or purged (`PAGE_PARENT_NOT_FOUND`, `PAGE_PARENT_TRASHED`);
+- `position` is an integer from 0 to 10,000 counting active siblings other than the
+  page itself; larger values append. Sibling positions are kept dense (0…n-1),
+  and only the moved page's revision changes.
+
+New pages are appended to the top level. The migration places existing pages at
+the top level in their current list order. Unpublishing a parent has no effect on
+its children, and a child can be published under an unpublished parent; with flat
+URLs there is no dependency between them.
 
 ## Public URLs, redirects and SEO
 
@@ -305,10 +373,10 @@ published URL rather than the pending working slug.
 
 Unpublish removes the snapshot: current URLs and historical aliases all return
 404 while reservations remain private. Republish reactivates aliases and points
-them directly at the new snapshot. Pages currently have no trash or delete
-operation (revision restore changes only working content). A future trash implementation must withdraw the snapshot and
-retain these reservations; restore must remain unpublished until explicit review
-and publication. There is no public fallback to retained working data.
+them directly at the new snapshot. Trash withdraws the snapshot the same way and
+retains these reservations, and restoring from trash stays unpublished until explicit
+review and publication. Permanent deletion also keeps the reservations. There is no
+public fallback to retained working data.
 
 Canonical, title, description, Open Graph and Twitter metadata derive only from
 the snapshot and the configured `NEXT_PUBLIC_SITE_URL` origin. Empty SEO title uses
@@ -330,6 +398,10 @@ persisting in the application cache.
    `write_page_atomic` with a version that adds `p_source_revision` (default null),
    so existing callers keep working. It backfills one `baseline` revision per
    existing page and does not touch snapshots, reservations or posts.
+   Then apply `20261105140000_page_trash_hierarchy.sql` before deploying trash and
+   hierarchy. It adds the trash and hierarchy columns, places existing pages at the top
+   level, and replaces `write_page_atomic` again, adding `p_options` (default null),
+   so earlier callers keep working. It does not change snapshots, reservations or posts.
    This backfills reservations and the last published slug from current snapshots;
    previously released URLs and old unpublished history cannot be reconstructed.
    Existing reserved-name drafts remain readable so an admin can rename them;
@@ -355,6 +427,7 @@ persisting in the application cache.
 pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/pages.sql
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/page_revisions.sql
+docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/page_trash_hierarchy.sql
 node database/tests/pages-concurrency.mjs
 pnpm exec playwright test --config=e2e/page-editor.config.ts
 pnpm run typecheck

@@ -14,6 +14,7 @@ import { pageReadiness } from '../readiness'
 import { installNavigationGuard } from '@/features/posts/drafts/navigation'
 import { canCorrectWrite, writeErrorMessage, writeSuccessMessage, editorStatus } from './feedback'
 import { RevisionHistory } from './RevisionHistory'
+import { PageAttributes } from './PageAttributes'
 import { blankPage, pageValues, readPageRecovery, recoveryKey, storePageRecovery, type PageRecovery } from './recovery'
 
 export function PageManager({ accountId, documentId, initialPage }: Readonly<{ accountId: string; documentId: string; initialPage: Page | null }>) {
@@ -124,6 +125,18 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
     if (!page || dirty || running.current || !window.confirm('Restore this revision as the working draft? The live page stays unchanged until you review and publish.')) return
     void send({ operation: 'restore', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, sourceRevision: revision.revision })
   }
+  function move(parentId: string | null, position: number) {
+    if (!page || dirty || running.current) return
+    void send({ operation: 'move', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, parentId, position })
+  }
+  function trash() {
+    if (!page || dirty || running.current || !window.confirm('Move this page to the trash? It will be unpublished immediately. Its URLs stay reserved, and you can restore it from Trash.')) return
+    void send({ operation: 'trash', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision })
+  }
+  function recoverFromTrash() {
+    if (!page) return
+    void send({ operation: 'recover', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision })
+  }
   async function loadLatest() {
     if (!page || running.current || !window.confirm('Load the latest saved page? Your current input remains in browser recovery.')) return
     if (!persist(current.current.values, current.current.page, current.current.pending)) return
@@ -165,14 +178,17 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
   }
   const issues = pageReadiness(values)
   const urlChanged = !!page?.published_slug && page.published_slug !== page.slug
-  const blocked = !ready || !accountActive || busy || !!pending || copies.length > 0
+  const trashed = !!page?.trashed_at
+  const blocked = !ready || !accountActive || busy || !!pending || copies.length > 0 || trashed
   if (auth.loading) return <output>Verifying your account…</output>
   if (!accountActive) return <p role="alert">Your account changed. Sign in with the original account and reopen this page to recover your work.</p>
+  if (page?.purged_at) return <div className="flex flex-col gap-3"><p role="alert">This page was permanently deleted. Its URLs stay reserved.</p><Link className="underline" href="/dashboard/pages">All pages</Link></div>
   return <div className="flex min-w-0 flex-col gap-5">
     <header className="flex flex-wrap items-center justify-between gap-3"><h1 className="text-2xl font-semibold">{page ? 'Edit Page' : 'Add Page'}</h1><Link className="underline" href="/dashboard/pages">All pages</Link></header>
     <output>{editorStatus(busy, !!pending, dirty, page)}</output>
     {storageError && <p role="alert">{storageError}</p>}{message && <output>{message}</output>}
     {copies.length > 0 && <section className="flex flex-col gap-2 rounded-lg border p-4" aria-label="Recover page work"><h2 className="font-semibold">Private browser recovery available</h2>{copies.map(copy => <Button key={copy.writerId} variant="outline" onClick={() => recover(copy)}>Recover {copy.values.title || 'untitled page'} — {new Date(copy.updatedAt).toLocaleString()}</Button>)}{!copies.some(copy => copy.pending) && <Button variant="ghost" onClick={() => setCopies([])}>Continue with saved content</Button>}</section>}
+    {trashed && <section role="alert" aria-label="Page in trash" className="flex flex-col gap-2 rounded-lg border border-destructive p-4"><p>This page is in the trash. It is unpublished and read-only; its URLs stay reserved.</p><div><Button disabled={busy || !!pending || !accountActive} onClick={recoverFromTrash}>Restore from trash</Button></div></section>}
     {reconcile && <p role="alert">This retry needs reconciliation with the current saved page. Load the latest saved page before another save; your earlier input remains recoverable.</p>}
     {pending && <Button disabled={busy} onClick={() => void send(pending)}>Retry previous request</Button>}
     <fieldset inert={blocked} disabled={blocked} className="flex min-w-0 flex-col gap-4">
@@ -183,12 +199,13 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
       <PageEditor key={editorKey} editorId={accountId} document={values.document} onChange={document => change({ ...current.current.values, document })} />
     </fieldset>
     <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile} onClick={save}>Save Draft</Button><Button variant="outline" disabled={!ready} onClick={() => setPreview(value => !value)}>{preview ? 'Close private preview' : 'Private Preview'}</Button><Button variant="outline" disabled={blocked} onClick={() => void duplicate()}>Duplicate</Button>{page && <Button variant="outline" disabled={busy || !!pending} onClick={() => void loadLatest()}>Load latest saved page</Button>}</div>
+    {page && !trashed && <PageAttributes page={page} disabled={blocked || reconcile || dirty} onMove={move} />}
     {page && <RevisionHistory page={page} disabled={blocked || reconcile || dirty} onRestore={restore} />}
     {preview && <section aria-label="Private page preview" className="min-w-0 rounded-lg border p-4"><h2 className="font-semibold">Private preview · current unsaved content</h2><h1 className="my-4 break-words text-3xl">{values.title}</h1><PageContent document={values.document} /></section>}
     <section className="flex flex-col gap-3 rounded-lg border p-4" aria-label="Publication"><h2 className="font-semibold">Publication</h2><p>Save Draft preserves the published snapshot. Pages never send newsletters.</p>{issues.length > 0 && <ul className="list-inside list-disc">{issues.map(issue => <li key={issue}>{issue}</li>)}</ul>}{dirty && <p>Save your changes before reviewing this revision for publication.</p>}
       <label className="flex items-start gap-2"><input type="checkbox" checked={reviewed} disabled={blocked || reconcile || dirty || !page || issues.length > 0} onChange={event => setReviewed(event.target.checked)} />I personally reviewed this saved revision, its links, images and SEO for publication.</label>
       {urlChanged && <label className="flex items-start gap-2"><input type="checkbox" checked={confirmUrlChange} disabled={blocked || dirty} onChange={event => setConfirmUrlChange(event.target.checked)} />Change the published URL from /{page?.published_slug} to /{page?.slug}. Former URLs will permanently redirect here while published.</label>}
-      <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile || dirty || !page || !reviewed || (urlChanged && !confirmUrlChange) || issues.length > 0} onClick={() => page && void send({ operation: 'publish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, reviewed: true, ...(urlChanged ? { confirmUrlChange: true } : {}) })}>{page?.status === 'published' ? 'Update published page' : 'Publish'}</Button>{page?.status === 'published' && <Button variant="destructive" disabled={blocked} onClick={() => { if (window.confirm('Unpublish this page? Its working content will be kept.')) void send({ operation: 'unpublish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision }) }}>Unpublish</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile || dirty || !page || !reviewed || (urlChanged && !confirmUrlChange) || issues.length > 0} onClick={() => page && void send({ operation: 'publish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, reviewed: true, ...(urlChanged ? { confirmUrlChange: true } : {}) })}>{page?.status === 'published' ? 'Update published page' : 'Publish'}</Button>{page?.status === 'published' && <Button variant="destructive" disabled={blocked} onClick={() => { if (window.confirm('Unpublish this page? Its working content will be kept.')) void send({ operation: 'unpublish', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision }) }}>Unpublish</Button>}{page && !trashed && <Button variant="destructive" disabled={blocked || reconcile || dirty} onClick={trash}>Move to trash</Button>}</div>
     </section>
   </div>
 }

@@ -15,6 +15,7 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
   const request = parsed.data
   const permission = {
     create: 'pages:create', save: 'pages:update', publish: 'pages:publish', unpublish: 'pages:publish', restore: 'pages:update',
+    trash: 'pages:publish', recover: 'pages:update', purge: 'pages:publish', move: 'pages:update',
   } as const
   const { profile, failure } = await authorizeSession(permission[request.operation])
   if (failure) return { data: null, error: { code: failure.code, message: failure.error, writeAttempted: false } }
@@ -54,13 +55,15 @@ export async function writePage(input: unknown, expectedAccountId?: string): Pro
       p_page_id: 'pageId' in request ? request.pageId : null,
       p_expected_revision: 'expectedRevision' in request ? request.expectedRevision : null,
       p_source_revision: request.operation === 'restore' ? request.sourceRevision : null,
+      p_options: request.operation === 'move' ? { parent_id: request.parentId, position: request.position }
+        : request.operation === 'purge' ? { confirm_slug: request.confirmSlug } : null,
     })
     if (error) return pageDatabaseFailure(error)
     if (!data) return pageFailure('PAGE_UNAVAILABLE')
     const result = readWriteResponse(data)
     if (!result.error) {
       revalidatePath('/dashboard/pages')
-      if (request.operation === 'publish' || request.operation === 'unpublish') {
+      if (['publish', 'unpublish', 'trash', 'purge'].includes(request.operation)) {
         // Includes every historical alias, even on an exact retry after a lost response.
         revalidatePath('/[slug]', 'page')
         revalidatePath('/sitemap.xml')
@@ -77,6 +80,23 @@ export async function getPage(id: string): Promise<PageResult<Page | null>> {
   if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
   if (!z.uuid().safeParse(id).success) return pageFailure('PAGE_INVALID_INPUT')
   return readAuthorizedPage(await createClient(), id)
+}
+
+const treeNode = z.object({ id: z.uuid(), title: z.string(), slug: z.string(), parent_id: z.uuid().nullable(), position: z.number().int() })
+export type PageTreeNode = z.infer<typeof treeNode>
+/** Active (not trashed) pages for parent selection, ordered for tree display. The database enforces every hierarchy rule. */
+export async function listPageTree(): Promise<PageResult<PageTreeNode[]>> {
+  const { failure } = await authorizeSession('pages:read')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
+  try {
+    const client = await createClient()
+    const { data, error } = await client.from('pages').select('id,title,slug,parent_id,position').is('trashed_at', null).order('position').order('id').limit(1000)
+    if (error) return pageFailure('PAGE_UNAVAILABLE')
+    const result = z.array(treeNode).safeParse(data)
+    return result.success ? { data: result.data, error: null } : pageFailure('PAGE_UNAVAILABLE')
+  } catch {
+    return pageFailure('PAGE_UNAVAILABLE')
+  }
 }
 
 /** Newest first, without documents. Private to page administrators. */

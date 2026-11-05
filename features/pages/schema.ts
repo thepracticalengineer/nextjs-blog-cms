@@ -28,6 +28,13 @@ export const pageWriteSchema = z.discriminatedUnion('operation', [
   z.strictObject({ operation: z.literal('unpublish'), ...existing }),
   // Copies a stored revision into the working copy only; publication stays separate.
   z.strictObject({ operation: z.literal('restore'), ...existing, sourceRevision: z.uuid() }),
+  // Withdraws publication and keeps URL reservations; refused while active children exist.
+  z.strictObject({ operation: z.literal('trash'), ...existing }),
+  z.strictObject({ operation: z.literal('recover'), ...existing }),
+  // Permanent: the caller must repeat the page's URL slug as confirmation.
+  z.strictObject({ operation: z.literal('purge'), ...existing, confirmSlug: storedSlug }),
+  // position counts active siblings excluding this page; out-of-range values append.
+  z.strictObject({ operation: z.literal('move'), ...existing, parentId: z.uuid().nullable(), position: z.number().int().min(0).max(10000) }),
 ])
 export type PageDocument = z.infer<typeof pageDocumentSchema>
 export type PageValues = z.infer<typeof pageValuesSchema>
@@ -42,12 +49,15 @@ export const pageRecordSchema = z.object({
   created_by: z.uuid().nullable(), updated_by: z.uuid().nullable(),
   published_at: z.string().nullable(), published_by: z.uuid().nullable(),
   published_slug: z.string().nullable().optional(),
+  parent_id: z.uuid().nullable().optional(), position: z.number().int().optional(),
+  trashed_at: z.string().nullable().optional(), trashed_by: z.uuid().nullable().optional(),
+  purged_at: z.string().nullable().optional(),
 })
 export const pageSnapshotSchema = z.object({
   ...pageValuesSchema.shape,
   page_id: z.uuid(), revision: z.uuid(), published_at: z.string(),
 })
-export const pageRevisionOperations = ['baseline', 'create', 'save', 'publish', 'unpublish', 'restore'] as const
+export const pageRevisionOperations = ['baseline', 'create', 'save', 'publish', 'unpublish', 'restore', 'trash', 'recover', 'move', 'purge'] as const
 const revisionMeta = {
   id: z.uuid(), revision: z.uuid(), operation: z.enum(pageRevisionOperations),
   status: z.enum(['draft', 'published']), restored_from: z.uuid().nullable(),

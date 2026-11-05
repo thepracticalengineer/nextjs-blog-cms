@@ -6,7 +6,7 @@ vi.mock('@/lib/auth/session', () => ({ authorizeSession: mocks.authorize }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.client }))
 vi.mock('@/lib/supabase/static', () => ({ createStaticClient: mocks.publicClient }))
 import { revalidatePath } from 'next/cache'
-import { writePage, getPage, getPageRevision, listPageRevisions } from '@/features/pages/actions'
+import { writePage, getPage, getPageRevision, listPageRevisions, listPageTree } from '@/features/pages/actions'
 import { getPublishedPage } from '@/features/pages/queries'
 const id = '28600000-0000-4000-8000-000000000001'
 const values = { title: 'About', slug: 'about', seo_title: '', seo_description: '', document: { version: 1, blocks: [] } }
@@ -34,7 +34,7 @@ describe('page actions', () => {
     expect(mocks.authorize).toHaveBeenCalledWith(operation === 'create' ? 'pages:create' : operation === 'save' ? 'pages:update' : 'pages:publish')
     expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', {
       p_operation: operation, p_confirm_url_change: false, p_reviewed: operation === 'publish', p_request_key: 'key', p_values: ['create', 'save'].includes(operation) ? values : null,
-      p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id, p_source_revision: null,
+      p_page_id: operation === 'create' ? null : id, p_expected_revision: operation === 'create' ? null : id, p_source_revision: null, p_options: null,
     })
   })
   it('enforces configured image hosts at writes and both stored read boundaries', async () => {
@@ -212,5 +212,48 @@ describe('page revisions', () => {
     expect((await listPageRevisions(id)).error?.code).toBe('FORBIDDEN')
     expect((await getPageRevision(id, source)).error?.code).toBe('FORBIDDEN')
     expect(mocks.client).not.toHaveBeenCalled()
+  })
+})
+
+describe('trash and hierarchy writes', () => {
+  const base = { requestKey: 'k', pageId: id, expectedRevision: id }
+  it.each([
+    ['trash', {}, 'pages:publish', null],
+    ['recover', {}, 'pages:update', null],
+    ['purge', { confirmSlug: 'about' }, 'pages:publish', { confirm_slug: 'about' }],
+    ['move', { parentId: null, position: 2 }, 'pages:update', { parent_id: null, position: 2 }],
+  ] as const)('%s checks its capability and passes options', async (operation, extra, permission, options) => {
+    expect((await writePage({ operation, ...base, ...extra })).error).toBeNull()
+    expect(mocks.authorize).toHaveBeenCalledExactlyOnceWith(permission)
+    expect(mocks.rpc).toHaveBeenCalledWith('write_page_atomic', expect.objectContaining({ p_operation: operation, p_values: null, p_options: options }))
+  })
+  it('invalidates public routes when trashing or purging, not when moving or recovering', async () => {
+    for (const [operation, extra, public_] of [['trash', {}, true], ['purge', { confirmSlug: 'about' }, true], ['move', { parentId: id, position: 0 }, false], ['recover', {}, false]] as const) {
+      vi.mocked(revalidatePath).mockClear()
+      await writePage({ operation, ...base, ...extra })
+      expect(vi.mocked(revalidatePath).mock.calls.some(call => call[0] === '/[slug]')).toBe(public_)
+      expect(revalidatePath).toHaveBeenCalledWith('/dashboard/pages')
+    }
+  })
+  it('rejects malformed hierarchy and purge input before authorization', async () => {
+    for (const input of [{ operation: 'move', ...base, parentId: 'nope', position: 0 }, { operation: 'move', ...base, parentId: null, position: -1 }, { operation: 'move', ...base, parentId: null, position: 1.5 }, { operation: 'purge', ...base }, { operation: 'purge', ...base, confirmSlug: 'Bad Slug' }, { operation: 'trash', ...base, values }]) {
+      expect((await writePage(input)).error?.code).toBe('PAGE_INVALID_INPUT')
+    }
+    expect(mocks.authorize).not.toHaveBeenCalled()
+  })
+  it.each(['PAGE_TRASHED', 'PAGE_HAS_CHILDREN', 'PAGE_HIERARCHY_CYCLE', 'PAGE_HIERARCHY_TOO_DEEP', 'PAGE_DELETE_CONFIRMATION_REQUIRED', 'PAGE_PARENT_TRASHED'])('maps %s', async code => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: code } })
+    expect((await writePage({ operation: 'trash', ...base })).error?.code).toBe(code)
+  })
+  it('lists the active page tree for parent selection', async () => {
+    const order = vi.fn(), limit = vi.fn()
+    const tree = [{ id, title: 'About', slug: 'about', parent_id: null, position: 0 }]
+    const chain = { select: () => chain, is: (column: string, value: null) => { expect([column, value]).toEqual(['trashed_at', null]); return chain }, order: (...args: unknown[]) => { order(...args); return chain }, limit }
+    limit.mockResolvedValue({ data: tree, error: null })
+    mocks.from.mockReturnValue(chain)
+    expect((await listPageTree()).data).toEqual(tree)
+    expect(order).toHaveBeenCalledWith('position')
+    limit.mockResolvedValue({ data: [{ ...tree[0], position: 'x' }], error: null })
+    expect((await listPageTree()).error?.code).toBe('PAGE_UNAVAILABLE')
   })
 })

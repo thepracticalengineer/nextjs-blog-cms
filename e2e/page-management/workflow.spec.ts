@@ -171,3 +171,37 @@ test('revision history compares and restores an older revision without publishin
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+test('page attributes move a page under a parent, then trash and restore it', async ({ page }) => {
+  const parentId = randomUUID()
+  let saved = structuredClone(fixturePage)
+  const requests: PageWrite[] = []
+  await page.route('**/fixture/tree', route => route.fulfill({ json: { data: [
+    { id: fixturePage.id, title: fixturePage.title, slug: fixturePage.slug, parent_id: null, position: 0 },
+    { id: parentId, title: 'Company', slug: 'company', parent_id: null, position: 1 },
+  ], error: null } }))
+  await page.route('**/fixture/write', async route => {
+    const request: PageWrite = route.request().postDataJSON(); requests.push(request)
+    if (request.operation === 'move') saved = { ...saved, parent_id: request.parentId, position: request.position }
+    if (request.operation === 'trash') saved = { ...saved, trashed_at: '2026-11-05T00:00:00Z', status: 'draft' }
+    if (request.operation === 'recover') saved = { ...saved, trashed_at: null }
+    saved = { ...saved, revision: randomUUID() }
+    await route.fulfill({ json: { data: { page: saved, replayed: false }, error: null } })
+  })
+  await page.goto(url)
+  await page.getByText('Page attributes').click()
+  await page.getByLabel('Parent page').selectOption(parentId)
+  await page.getByRole('button', { name: 'Move page' }).click()
+  await expect(page.getByText('Page moved. Its URL is unchanged.')).toBeVisible()
+  expect(requests[0]).toMatchObject({ operation: 'move', parentId, position: 0 })
+  await expect(page.getByText('Current parent: Company')).toBeVisible()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Move to trash' }).click()
+  await expect(page.getByRole('alert', { name: 'Page in trash' })).toBeVisible()
+  await expect(page.getByLabel('Title', { exact: true })).toBeDisabled()
+  expect(requests[1]).toMatchObject({ operation: 'trash' })
+  await page.getByRole('button', { name: 'Restore from trash' }).click()
+  await expect(page.getByText(/Restored from trash as an unpublished draft/)).toBeVisible()
+  await expect(page.getByLabel('Title', { exact: true })).toBeEnabled()
+  expect(requests[2]).toMatchObject({ operation: 'recover' })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
