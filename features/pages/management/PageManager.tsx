@@ -8,12 +8,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { PageEditor } from '../editor/PageEditor'
 import { PageContent } from '../PageContent'
-import { getPage, writePage } from '@/features/pages/actions'
+import { getPage, listPagePatterns, writePage, writePagePattern } from '@/features/pages/actions'
 import { pageValuesSchema, type Page, type PageRevision, type PageValues, type PageWrite } from '../schema'
 import { pageReadiness } from '../readiness'
 import { installNavigationGuard } from '@/features/posts/drafts/navigation'
 import { canCorrectWrite, writeErrorMessage, writeSuccessMessage, editorStatus } from './feedback'
 import { RevisionHistory } from './RevisionHistory'
+import { StarterLayoutPicker } from './StarterLayoutPicker'
+import { isBlankPageDocument, starterLayoutDocument, type StarterLayout } from '../starters'
+import type { PagePatternSource } from '../editor/PatternLibrary'
 import { blankPage, pageValues, readPageRecovery, recoveryKey, storePageRecovery, type PageRecovery } from './recovery'
 
 export function PageManager({ accountId, documentId, initialPage }: Readonly<{ accountId: string; documentId: string; initialPage: Page | null }>) {
@@ -34,6 +37,7 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
   const [message, setMessage] = useState('')
   const [storageError, setStorageError] = useState('')
   const [editorKey, setEditorKey] = useState(0)
+  const [patterns] = useState<PagePatternSource>(() => ({ list: listPagePatterns, write: input => writePagePattern(input, accountId) }))
   const writer = useRef('')
   const running = useRef(false)
   const recoveredKey = useRef<string | null>(null)
@@ -124,6 +128,15 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
     if (!page || dirty || running.current || !window.confirm('Restore this revision as the working draft? The live page stays unchanged until you review and publish.')) return
     void send({ operation: 'restore', requestKey: crypto.randomUUID(), pageId: page.id, expectedRevision: page.revision, sourceRevision: revision.revision })
   }
+  /** Replaces only unsaved input; the page is still created as a private draft by Save Draft. */
+  function applyLayout(layout: StarterLayout) {
+    if (page || running.current) return
+    if (!isBlankPageDocument(values.document) && !window.confirm(`Replace the current page content with the ${layout.name} layout? Undo is not available for this step.`)) return
+    const next = { ...values, title: values.title.trim() ? values.title : layout.title, slug: values.slug ? values.slug : layout.slug, document: starterLayoutDocument(layout.id) }
+    change(next)
+    setEditorKey(key => key + 1)
+    setMessage(`${layout.name} layout applied as unsaved draft content. Replace every [[Replace: …]] placeholder and #replace-link destination before publishing.`)
+  }
   async function loadLatest() {
     if (!page || running.current || !window.confirm('Load the latest saved page? Your current input remains in browser recovery.')) return
     if (!persist(current.current.values, current.current.page, current.current.pending)) return
@@ -180,7 +193,8 @@ export function PageManager({ accountId, documentId, initialPage }: Readonly<{ a
       <div className="grid gap-4 md:grid-cols-2">{(['title', 'slug', 'seo_title', 'seo_description'] as const).map(field => <label className="flex min-w-0 flex-col gap-1" key={field}>{({ title: 'Title', slug: 'URL slug', seo_title: 'SEO title (optional)', seo_description: 'SEO description (optional)' })[field]}<Input value={values[field]} onChange={event => change({ ...values, [field]: event.target.value })} /></label>)}</div>
       <p className="text-sm text-muted-foreground">URL: /{values.slug || 'your-page'}. Empty SEO titles use the page title; empty descriptions are omitted.</p>
       {page?.status === 'published' && page.published_slug && <Link className="underline" href={`/${page.published_slug}`} target="_blank" rel="noopener">View Page</Link>}
-      <PageEditor key={editorKey} editorId={accountId} document={values.document} onChange={document => change({ ...current.current.values, document })} />
+      {!page && <StarterLayoutPicker onApply={applyLayout} />}
+      <PageEditor key={editorKey} editorId={accountId} document={values.document} patterns={patterns} onChange={document => change({ ...current.current.values, document })} />
     </fieldset>
     <div className="flex flex-wrap gap-2"><Button disabled={blocked || reconcile} onClick={save}>Save Draft</Button><Button variant="outline" disabled={!ready} onClick={() => setPreview(value => !value)}>{preview ? 'Close private preview' : 'Private Preview'}</Button><Button variant="outline" disabled={blocked} onClick={() => void duplicate()}>Duplicate</Button>{page && <Button variant="outline" disabled={busy || !!pending} onClick={() => void loadLatest()}>Load latest saved page</Button>}</div>
     {page && <RevisionHistory page={page} disabled={blocked || reconcile || dirty} onRestore={restore} />}

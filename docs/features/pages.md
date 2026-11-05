@@ -1,6 +1,6 @@
 # Pages management, publishing, public URLs and block editor
 
-Issues #286–289 provide the dedicated Pages domain in `features/pages/`,
+Issues #286–289 and #291 provide the dedicated Pages domain in `features/pages/`,
 atomic persistence, a reusable block editor and shared rendering. Administrators
 manage and publish pages; visitors read published snapshots at flat URLs such as
 `/about` and `/contact`, with permanent redirects and published-only SEO.
@@ -25,6 +25,9 @@ the snapshot; unpublishing removes the snapshot and sets status to `draft`.
 `page_revisions` is private, append-only history: one row per successful write,
 holding the resulting working values, status, operation, actor and time. See
 [revision history and restore](#revision-history-and-restore).
+
+`page_patterns` is the private, shared library of saved section patterns. See
+[starter layouts and section patterns](#starter-layouts-and-section-patterns).
 
 `pages:create`, `pages:read`, `pages:update` and `pages:publish` are admin-only.
 The last capability includes unpublishing. Actions use `authorizeSession` and the
@@ -272,6 +275,71 @@ offers a private preview. **Restore as working draft** is disabled while there
 is unsaved input or an unconfirmed request, and asks for confirmation first. On
 success, the editor loads the restored values and publication review starts again.
 
+## Starter layouts and section patterns
+
+Issue #291 adds starting points and reusable sections without any shared state
+between pages.
+
+### Starter layouts
+
+Add Page offers **About**, **Contact** and **Landing page** layouts while the page
+is still unsaved (`features/pages/starters.ts`). Each is an ordinary version 2
+document built only from supported blocks. Layouts start at heading level 2,
+because the page title is the public `h1`, and never skip heading levels. Using a
+layout replaces only editor input (after confirmation if the editor already has
+text, an image or a button) and suggests a title and slug only when those fields
+are empty. Save Draft then creates the page as a private draft through the normal
+`create` operation; there is no template-specific write path.
+
+Placeholder copy contains `[[Replace: …]]` and placeholder destinations use
+`#replace-link`. Publication is refused while any text or button label contains
+`[[Replace` or any button/link destination starts with `#replace-link` (ASCII,
+case-insensitive). The editor lists this as a readiness issue, and
+`pages_private.publishable_document` enforces the same rule under the page lock,
+so a direct RPC call fails with `PAGE_NOT_READY`. Existing snapshots are not
+withdrawn by the migration. The Contact layout lists contact details and links
+only; it has no form, and a form submission/email backend needs its own scoped
+feature.
+
+### Section patterns
+
+The editor's **Section patterns** panel saves the selected section, columns or
+other top-level block as a named pattern, and inserts saved patterns. Every
+insertion is an **independent copy**: the page stores plain blocks and keeps no
+reference to the pattern. Renaming, changing or deleting a pattern never changes
+any working page, revision or published snapshot, and editing an inserted copy
+never changes the pattern. There are no synced sections, so there is no shared
+publication, affected-page list or detach step; adding synced sections later
+needs its own design for review before shared changes reach live pages.
+
+Columns and list items cannot be saved alone because they are not valid at the
+top level. A pattern document is a version 2 page document with 1–100 top-level
+blocks and the same node, depth, size, attribute and link rules as a page
+(`pagePatternValuesSchema` and `pages_private.valid_pattern`). Names have 1–120
+characters and descriptions up to 500. Server actions apply the deployment image
+host allowlist on writes and reads. Insertion goes through the editor's page
+document guard, so a pattern that would exceed nesting depth, node count or size
+at the chosen position is refused with the document unchanged. Inserted blocks
+follow the inserter's placement rules: inside a selected section or column, after
+another selected block, or at the end.
+
+The library is shared by all page administrators: rows are readable only by
+administrators passing the MFA check, and there are no direct write grants.
+`write_page_pattern(operation, request_key, values, pattern_id, expected_revision)`
+supports `create`, `update` and `delete`. Updates and deletes need the current
+revision (`PAGE_PATTERN_STALE`, `PAGE_PATTERN_NOT_FOUND`). Request keys follow the
+page retry contract: an exact replay returns the current pattern (null once
+deleted) with `replayed: true`, and changed input under a used key fails with
+`PAGE_RETRY_CONFLICT`. The library holds at most 200 patterns (`PAGE_PATTERN_LIMIT`).
+`listPagePatterns()` requires `pages:read`; `writePagePattern()` requires
+`pages:update`.
+
+A stored pattern whose document no longer parses (for example a future document
+version this release does not support) or whose images use a host that is no
+longer allowed is listed as unavailable. It cannot be inserted, it is never
+silently dropped or rewritten, and it can be deleted. Deleting a pattern removes
+only the library row; retry receipts are retained.
+
 ## Public URLs, redirects and SEO
 
 `app/(public)/[slug]/page.tsx` resolves a single flat path using
@@ -326,7 +394,10 @@ persisting in the application cache.
 
 1. Apply ordered migrations through
    `20261029152514_page_public_urls.sql` before deploying public routing/server functions.
-   Apply `20261104110000_page_revisions.sql` before deploying revision history. It replaces
+   Apply `20261104110000_page_revisions.sql` before deploying revision history.
+   Apply `20261105130000_page_patterns.sql` before deploying starter layouts and
+   section patterns. It adds the pattern library and makes publication refuse
+   starter placeholders; it does not change pages, revisions or snapshots. It replaces
    `write_page_atomic` with a version that adds `p_source_revision` (default null),
    so existing callers keep working. It backfills one `baseline` revision per
    existing page and does not touch snapshots, reservations or posts.
@@ -355,6 +426,7 @@ persisting in the application cache.
 pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/pages.sql
 docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/page_revisions.sql
+docker exec -i supabase_db_nextjs-blog-cms psql -U postgres -d postgres -v ON_ERROR_STOP=1 < database/tests/page_patterns.sql
 node database/tests/pages-concurrency.mjs
 pnpm exec playwright test --config=e2e/page-editor.config.ts
 pnpm run typecheck
@@ -387,7 +459,8 @@ actions and database writes enforce admin/MFA access independently.
 Save Draft requires a nonblank title, valid lowercase flat slug, supported blocks
 and bounded SEO fields. It never changes a published snapshot. Publish/Update
 requires a saved revision, meaningful text or an image, alternative text on every
-image, allowed image hosts and explicit human review of that saved revision.
+image, no starter placeholders, allowed image hosts and explicit human review of
+that saved revision.
 There is no article word-count/excerpt requirement. SEO title and description are
 optional: an empty title falls back to the page title, and an empty description is
 omitted by public routing. Field bounds remain 200/500

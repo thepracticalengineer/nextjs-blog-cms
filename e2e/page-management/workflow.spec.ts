@@ -171,3 +171,71 @@ test('revision history compares and restores an older revision without publishin
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
 })
+test('a starter layout saves as a draft and cannot be published with placeholders', async ({ page }) => {
+  const requests: PageWrite[] = []
+  await page.route('**/fixture/write', async route => {
+    const request: PageWrite = route.request().postDataJSON(); requests.push(request)
+    const values = 'values' in request ? request.values : {}
+    await route.fulfill({ json: { data: { page: { ...structuredClone(fixturePage), ...values, id: randomUUID(), revision: randomUUID(), status: 'draft' }, replayed: false }, error: null } })
+  })
+  await page.goto(`${url}?draft=${randomUUID()}`)
+  const layouts = page.getByRole('region', { name: 'Start from a layout' })
+  await layouts.getByRole('button', { name: 'Preview the Landing page layout' }).click()
+  await expect(layouts).toContainText('[[Replace: A clear headline')
+  await layouts.getByRole('button', { name: 'Use the Landing page layout' }).click()
+  await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Welcome')
+  await expect(page.getByLabel('Page canvas')).toContainText('[[Replace: First benefit]]')
+  await page.getByRole('button', { name: 'Save Draft', exact: true }).click()
+  await expect(page.getByText(/Draft saved/)).toBeVisible()
+  expect(requests).toHaveLength(1)
+  expect(requests[0]).toMatchObject({ operation: 'create', values: { slug: 'welcome', document: { version: 2 } } })
+  await expect(page.getByRole('region', { name: 'Publication' })).toContainText('Replace the starter layout placeholders')
+  await expect(page.getByRole('checkbox', { name: /personally reviewed/ })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled()
+  await expect(layouts).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
+test('section patterns save a selected block and insert independent copies', async ({ page }) => {
+  const hero = { type: 'section', attrs: { background: 'muted' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Shared hero' }] }] }
+  const stored = { id: randomUUID(), revision: randomUUID(), name: 'Hero', description: 'Muted introduction', document: { version: 2, content: { type: 'doc', content: [hero] } }, created_at: '2026-11-05T00:00:00Z', updated_at: '2026-11-05T00:00:00Z', created_by: fixturePage.id, updated_by: fixturePage.id }
+  let patterns = [stored]
+  const writes: Record<string, unknown>[] = []
+  await page.route('**/fixture/patterns', route => route.fulfill({ json: { data: { patterns, unavailable: [] }, error: null } }))
+  await page.route('**/fixture/pattern-write', async route => {
+    const request = route.request().postDataJSON(); writes.push(request)
+    if (request.operation === 'delete') { patterns = patterns.filter(item => item.id !== request.patternId); return route.fulfill({ json: { data: { pattern: null, replayed: false }, error: null } }) }
+    const created = { ...stored, ...request.values, id: randomUUID(), revision: randomUUID() }
+    patterns = [created, ...patterns]
+    return route.fulfill({ json: { data: { pattern: created, replayed: false }, error: null } })
+  })
+  await page.goto(url)
+  await page.getByText('Section patterns', { exact: true }).click()
+  const saved = page.getByRole('list', { name: 'Saved section patterns' })
+  await expect(saved).toContainText('Hero')
+  // Insert two copies after the selected paragraph, then edit one copy.
+  await page.getByRole('button', { name: 'Select Paragraph 1' }).click()
+  await saved.getByRole('button', { name: 'Insert a copy of Hero' }).click()
+  await saved.getByRole('button', { name: 'Insert a copy of Hero' }).click()
+  const canvas = page.getByLabel('Page canvas')
+  await expect(canvas.getByText('Shared hero')).toHaveCount(2)
+  await canvas.getByText('Shared hero').first().click()
+  await page.keyboard.press('End'); await page.keyboard.type(' edited')
+  await expect(canvas.getByText('Shared hero edited')).toHaveCount(1)
+  await expect(canvas.getByText('Shared hero', { exact: true })).toHaveCount(1)
+  expect(patterns[0].document.content.content[0]).toEqual(hero)
+  // Save the top-level paragraph (nested paragraphs share its outline label) as a new pattern.
+  await page.locator('[data-block-pos="0"]').click()
+  await page.getByLabel('Pattern name').fill('Mission line')
+  await page.getByRole('button', { name: 'Save selection as pattern' }).click()
+  await expect(page.getByText(/Saved “Mission line”/)).toBeVisible()
+  expect(writes[0]).toMatchObject({ operation: 'create', values: { name: 'Mission line', description: '', document: { version: 2, content: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'We build useful things.' }] }] } } } })
+  await expect(saved).toContainText('Mission line')
+  // Deleting a pattern leaves inserted copies in place.
+  page.once('dialog', dialog => dialog.accept())
+  await saved.getByRole('button', { name: 'Delete Hero' }).click()
+  await expect(page.getByText(/Pattern deleted/)).toBeVisible()
+  expect(writes[1]).toMatchObject({ operation: 'delete', patternId: stored.id, expectedRevision: stored.revision })
+  await expect(saved).not.toContainText('Hero')
+  await expect(canvas).toContainText('Shared hero edited')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+})
