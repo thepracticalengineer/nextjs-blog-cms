@@ -459,13 +459,17 @@ CI runs both, along with the existing reaction policy/concurrency checks. See
 
 Run `pnpm exec vitest run __tests__/features/pages __tests__/lib/permissions.test.ts`
 for document validation, action guards, retry/error mapping and read boundaries.
-CI runs `database/tests/pages.sql` and `database/tests/page_revisions.sql` (both rolled back) and
+CI runs `database/tests/pages.sql`, `database/tests/page_revisions.sql` and `database/tests/page_trash_hierarchy.sql` (all rolled back) and
 `node database/tests/pages-concurrency.mjs` against its disposable migrated
 Supabase database. They exercise anonymous/author/admin/MFA access, direct-write
 denial, snapshot isolation, stale saves/publication, retry identity and real
 multi-connection create/save/publish/slug races. The revision suite checks recorded
 authorship, stale/foreign/colliding restores, retry identity, unchanged snapshots,
-append-only history and anonymous/author/AAL1 denial. See [Pages verification](../features/pages.md#verification)
+append-only history and anonymous/author/AAL1 denial. The trash/hierarchy suite checks
+ordering, same-parent reordering, cycle and depth refusal, stale moves, trash
+withdrawing publication while keeping reservations, children blocking trash,
+unpublished recovery, slug-confirmed purge with erased history and retained URLs,
+and child detachment. See [Pages verification](../features/pages.md#verification)
 for local target restrictions. Run `pnpm exec playwright test --config=e2e/page-editor.config.ts` for the real
 page editor and shared renderer with isolated media fixtures. It checks serialized
 reload, structural editing/history, keyboard/drag ordering, bounded settings, image

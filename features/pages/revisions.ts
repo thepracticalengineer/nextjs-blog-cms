@@ -12,7 +12,8 @@ const maxCells = 250_000
 
 export const revisionOperationLabels: Record<PageRevisionSummary['operation'], string> = {
   baseline: 'History started', create: 'Created', save: 'Draft saved', publish: 'Published',
-  unpublish: 'Unpublished', restore: 'Restored',
+  unpublish: 'Unpublished', restore: 'Restored', trash: 'Moved to trash',
+  recover: 'Restored from trash', move: 'Moved', purge: 'Permanently deleted',
 }
 
 function nodeText(node: PageNode): string {

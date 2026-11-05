@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PageManager } from '@/features/pages/management/PageManager'
 import type { Page, PageWrite } from '@/features/pages/schema'
 const id = '28800000-0000-4000-8000-000000000001'
-const mocks = vi.hoisted(() => ({ write: vi.fn(), get: vi.fn(), list: vi.fn(), revision: vi.fn(), push: vi.fn(), user: { id: '28800000-0000-4000-8000-000000000001' } }))
-vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get, listPageRevisions: mocks.list, getPageRevision: mocks.revision }))
+const mocks = vi.hoisted(() => ({ write: vi.fn(), get: vi.fn(), list: vi.fn(), revision: vi.fn(), tree: vi.fn(), push: vi.fn(), user: { id: '28800000-0000-4000-8000-000000000001' } }))
+vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get, listPageRevisions: mocks.list, getPageRevision: mocks.revision, listPageTree: mocks.tree }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/features/auth/context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }))
 vi.mock('@/features/pages/editor/PageEditor', () => ({ PageEditor: () => <div>Canvas</div> }))
@@ -200,5 +200,60 @@ describe('revision history', () => {
     fireEvent.click(screen.getByRole('button', { name: /Created/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Restore as working draft' }))
     expect(mocks.write).not.toHaveBeenCalled()
+  })
+})
+
+describe('trash and hierarchy in the editor', () => {
+  const parent = '28800000-0000-4000-8000-0000000000aa'
+  const sibling = '28800000-0000-4000-8000-0000000000bb'
+  beforeEach(() => {
+    mocks.tree.mockResolvedValue({ data: [
+      { id, title: 'About', slug: 'about', parent_id: null, position: 0 },
+      { id: parent, title: 'Company', slug: 'company', parent_id: null, position: 1 },
+      { id: sibling, title: 'Team', slug: 'team', parent_id: parent, position: 0 },
+    ], error: null })
+    mocks.write.mockImplementation(async (request: PageWrite) => ({ data: { page: { ...page, revision: '28800000-0000-4000-8000-00000000000c',
+      ...(request.operation === 'trash' ? { trashed_at: '2026-11-05T00:00:00Z', status: 'draft' } : {}),
+      ...(request.operation === 'move' ? { parent_id: request.parentId, position: request.position } : {}) }, replayed: false }, error: null }))
+  })
+  it('moves a page under a parent after its siblings without touching the URL', async () => {
+    await mount()
+    const panel = screen.getByText('Page attributes').closest('details')!
+    panel.open = true
+    fireEvent(panel, new Event('toggle'))
+    const parentSelect = await screen.findByLabelText('Parent page')
+    expect(screen.getByRole('option', { name: 'Company (/company)' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /About/ })).not.toBeInTheDocument()
+    fireEvent.change(parentSelect, { target: { value: parent } })
+    fireEvent.change(screen.getByLabelText('Order'), { target: { value: '1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Move page' }))
+    await waitFor(() => expect(mocks.write).toHaveBeenCalledOnce())
+    expect(mocks.write.mock.calls[0][0]).toMatchObject({ operation: 'move', pageId: id, expectedRevision: id, parentId: parent, position: 1 })
+    expect(await screen.findByText('Page moved. Its URL is unchanged.')).toBeInTheDocument()
+  })
+  it('trashes after confirmation and then shows a read-only page with restore', async () => {
+    await mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
+    await waitFor(() => expect(mocks.write).toHaveBeenCalledOnce())
+    expect(mocks.write.mock.calls[0][0]).toMatchObject({ operation: 'trash', pageId: id, expectedRevision: id })
+    expect(await screen.findByRole('alert', { name: 'Page in trash' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Draft' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Move to trash' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Restore from trash' }))
+    await waitFor(() => expect(mocks.write).toHaveBeenCalledTimes(2))
+    expect(mocks.write.mock.calls[1][0]).toMatchObject({ operation: 'recover' })
+  })
+  it('does not trash without confirmation or with unsaved changes', async () => {
+    vi.mocked(window.confirm).mockReturnValue(false)
+    await mount()
+    fireEvent.click(screen.getByRole('button', { name: 'Move to trash' }))
+    fireEvent.change(screen.getByLabelText('Title', { exact: true }), { target: { value: 'Unsaved' } })
+    expect(screen.getByRole('button', { name: 'Move to trash' })).toBeDisabled()
+    expect(mocks.write).not.toHaveBeenCalled()
+  })
+  it('shows only a notice for a permanently deleted page', async () => {
+    render(<PageManager accountId={id} documentId={id} initialPage={{ ...page, trashed_at: '2026-11-05T00:00:00Z', purged_at: '2026-11-05T01:00:00Z' }} />)
+    expect(await screen.findByText(/permanently deleted/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
   })
 })
