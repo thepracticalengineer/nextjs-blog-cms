@@ -2,7 +2,8 @@ import type { PageResult } from '../errors'
 import type { Page, PageWrite } from '../schema'
 
 type WriteError = NonNullable<PageResult<never>['error']>
-const rejectedWrites = new Set(['PAGE_RESERVED_URL', 'PAGE_URL_CONFIRMATION_REQUIRED', 'PAGE_INVALID_INPUT', 'PAGE_INVALID_DOCUMENT', 'PAGE_STALE', 'PAGE_RETRY_CONFLICT', 'PAGE_SLUG_CONFLICT', 'PAGE_NOT_READY', 'PAGE_REVIEW_REQUIRED', 'PAGE_NOT_FOUND', 'PAGE_REVISION_NOT_FOUND'])
+const rejectedWrites = new Set(['PAGE_RESERVED_URL', 'PAGE_URL_CONFIRMATION_REQUIRED', 'PAGE_INVALID_INPUT', 'PAGE_INVALID_DOCUMENT', 'PAGE_STALE', 'PAGE_RETRY_CONFLICT', 'PAGE_SLUG_CONFLICT', 'PAGE_NOT_READY', 'PAGE_REVIEW_REQUIRED', 'PAGE_NOT_FOUND', 'PAGE_REVISION_NOT_FOUND',
+  'PAGE_PATTERN_INVALID', 'PAGE_PATTERN_NOT_FOUND', 'PAGE_PATTERN_STALE', 'PAGE_PATTERN_LIMIT'])
 
 /** A preflight rejection only establishes the outcome of this attempt. An older
  * attempt may have committed before its acknowledgement was lost. */

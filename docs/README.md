@@ -27,7 +27,7 @@
 
 ## Features
 
-- [Pages management, revision history, public URLs, SEO, block editor and rollout](features/pages.md)
+- [Pages management, revision history, starter layouts and section patterns, public URLs, SEO, block editor and rollout](features/pages.md)
 
 - [Signup onboarding, private preferences and rollout](features/onboarding.md)
 

@@ -90,19 +90,49 @@ export function newPageBlock(type: Exclude<InsertableBlock, 'image'>): JSONConte
     default: return { type }
   }
 }
+/** Inside a selected section/column (or the first column of columns), else after the selection, else at the end. */
+function insertionPoint(editor: Editor, selected: number | null): number {
+  const entry = selected === null ? null : location(editor, selected)
+  if (!entry || selected === null) return editor.state.doc.content.size
+  if (['section', 'column'].includes(entry.node.type.name)) return selected + entry.node.nodeSize - 1
+  if (entry.node.type.name === 'columns') return selected + 1 + entry.node.child(0).nodeSize - 1
+  return selected + entry.node.nodeSize
+}
 export function insertPageBlock(editor: Editor, selected: number | null, type: InsertableBlock, image?: JSONContent['attrs']): boolean {
   if (type === 'image' && !image) return false
-  const entry = selected === null ? null : location(editor, selected)
-  let pos = editor.state.doc.content.size
-  if (entry && selected !== null) {
-    if (['section', 'column'].includes(entry.node.type.name)) pos = selected + entry.node.nodeSize - 1
-    else if (entry.node.type.name === 'columns') pos = selected + 1 + entry.node.child(0).nodeSize - 1
-    else pos = selected + entry.node.nodeSize
-  }
+  const pos = insertionPoint(editor, selected)
   const node = editor.schema.nodeFromJSON(type === 'image' ? { type, attrs: image } : newPageBlock(type))
   const $pos = editor.state.doc.resolve(pos)
   if (!$pos.parent.canReplaceWith($pos.index(), $pos.index(), node.type)) return false
   return apply(editor, pos, pos, node, pos)
+}
+/**
+ * Insert a saved section pattern as an independent copy. The blocks are cloned
+ * from plain JSON, so later edits to the page or the pattern never affect each
+ * other. The page document guard still enforces nesting depth, node count, size
+ * and every attribute rule; a rejected insertion leaves the document unchanged.
+ */
+export function insertPagePattern(editor: Editor, selected: number | null, blocks: readonly JSONContent[]): boolean {
+  if (!blocks.length) return false
+  let fragment: Fragment
+  try { fragment = Fragment.fromArray(structuredClone(blocks).map(block => editor.schema.nodeFromJSON(block))) }
+  catch { return false }
+  const pos = insertionPoint(editor, selected)
+  const $pos = editor.state.doc.resolve(pos)
+  if (!$pos.parent.canReplace($pos.index(), $pos.index(), fragment)) return false
+  return apply(editor, pos, pos, fragment, pos)
+}
+/** Blocks that may start a pattern, because they are valid directly inside a document. */
+const patternRoots = new Set(['paragraph', 'heading', 'bulletList', 'orderedList', 'blockquote', 'codeBlock', 'horizontalRule', 'image', 'section', 'columns', 'button'])
+/** A copy of the selected block as pattern content, or null when it cannot stand alone (e.g. a column or list item). */
+export function canSavePattern(editor: Editor, pos: number | null): boolean {
+  if (pos === null) return false
+  const entry = location(editor, pos)
+  return !!entry && patternRoots.has(entry.node.type.name)
+}
+export function patternBlocksFromSelection(editor: Editor, pos: number | null): JSONContent[] | null {
+  if (!canSavePattern(editor, pos)) return null
+  return [structuredClone(editor.state.doc.nodeAt(pos!)!.toJSON() as JSONContent)]
 }
 export function setColumnPreset(editor: Editor, pos: number, preset: string): boolean {
   const entry = location(editor, pos)

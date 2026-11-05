@@ -66,3 +66,41 @@ export type PageRevisionSummary = z.infer<typeof pageRevisionSummarySchema>
 export type PageRevision = z.infer<typeof pageRevisionSchema>
 export type Page = z.infer<typeof pageRecordSchema>
 export type PageSnapshot = z.infer<typeof pageSnapshotSchema>
+
+/**
+ * Section patterns are saved block sequences that are always inserted as
+ * independent copies: a page never references a pattern after insertion.
+ * The document uses the same versioned page schema and limits as a page, and is
+ * restricted to version 2 with one to 100 top-level blocks.
+ */
+export const pagePatternLimits = { name: 120, description: 500, blocks: 100, library: 200 } as const
+export const pagePatternDocumentSchema = pageDocumentSchema.refine(
+  (document): document is Extract<PageDocument, { version: 2 }> => document.version === 2
+    && Array.isArray(document.content.content)
+    && document.content.content.length >= 1 && document.content.content.length <= pagePatternLimits.blocks,
+  'A pattern contains one to 100 version 2 blocks',
+)
+export const pagePatternValuesSchema = z.strictObject({
+  name: text(pagePatternLimits.name).refine(value => value.trim().length > 0),
+  description: text(pagePatternLimits.description),
+  document: pagePatternDocumentSchema,
+})
+const patternExisting = { patternId: z.uuid(), expectedRevision: z.uuid(), requestKey }
+export const pagePatternWriteSchema = z.discriminatedUnion('operation', [
+  z.strictObject({ operation: z.literal('create'), requestKey, values: pagePatternValuesSchema }),
+  z.strictObject({ operation: z.literal('update'), ...patternExisting, values: pagePatternValuesSchema }),
+  z.strictObject({ operation: z.literal('delete'), ...patternExisting }),
+])
+const patternMeta = {
+  id: z.uuid(), revision: z.uuid(), name: z.string(), description: z.string(),
+  created_at: z.string(), updated_at: z.string(),
+  created_by: z.uuid().nullable(), updated_by: z.uuid().nullable(),
+}
+/** Stored rows are parsed loosely first so an unsupported document is reported, not hidden. */
+export const pagePatternRowSchema = z.object({ ...patternMeta, document: z.unknown() })
+export const pagePatternSchema = z.object({ ...patternMeta, ...pagePatternValuesSchema.shape })
+export type PagePatternValues = z.infer<typeof pagePatternValuesSchema>
+export type PagePatternWrite = z.infer<typeof pagePatternWriteSchema>
+export type PagePattern = z.infer<typeof pagePatternSchema>
+export type UnavailablePagePattern = z.infer<typeof pagePatternRowSchema> & { reason: 'PAGE_PATTERN_UNSUPPORTED' | 'PAGE_IMAGE_NOT_ALLOWED' }
+export type PagePatternLibrary = { patterns: PagePattern[]; unavailable: Omit<UnavailablePagePattern, 'document'>[] }

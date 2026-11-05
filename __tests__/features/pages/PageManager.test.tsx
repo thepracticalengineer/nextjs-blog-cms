@@ -4,15 +4,35 @@ import { PageManager } from '@/features/pages/management/PageManager'
 import type { Page, PageWrite } from '@/features/pages/schema'
 const id = '28800000-0000-4000-8000-000000000001'
 const mocks = vi.hoisted(() => ({ write: vi.fn(), get: vi.fn(), list: vi.fn(), revision: vi.fn(), push: vi.fn(), user: { id: '28800000-0000-4000-8000-000000000001' } }))
-vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get, listPageRevisions: mocks.list, getPageRevision: mocks.revision }))
+vi.mock('@/features/pages/actions', () => ({ writePage: mocks.write, getPage: mocks.get, listPageRevisions: mocks.list, getPageRevision: mocks.revision, listPagePatterns: vi.fn(), writePagePattern: vi.fn() }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/features/auth/context/AuthContext', () => ({ useAuth: () => ({ user: mocks.user, loading: false }) }))
-vi.mock('@/features/pages/editor/PageEditor', () => ({ PageEditor: () => <div>Canvas</div> }))
+vi.mock('@/features/pages/editor/PageEditor', () => ({ PageEditor: ({ document }: { document: { version: number } }) => <div>Canvas v{document.version}</div> }))
 vi.mock('@/features/posts/drafts/navigation', () => ({ installNavigationGuard: () => ({ dispose() {}, sync() {} }) }))
 const page: Page = { id, revision: id, status: 'draft', title: 'About', slug: 'about', seo_title: '', seo_description: '', document: { version: 1, blocks: [{ type: 'paragraph', text: 'Hello' }] }, created_at: '', updated_at: '', created_by: id, updated_by: id, published_at: null, published_by: null }
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); mocks.user.id = id; vi.spyOn(window, 'confirm').mockReturnValue(true); mocks.write.mockImplementation(async (request: PageWrite) => ({ data: { page: { ...page, ...('values' in request ? request.values : {}), status: request.operation === 'publish' ? 'published' : 'draft' }, replayed: false }, error: null })) })
 async function mount(initialPage: Page | null = page) { const view = render(<PageManager accountId={id} documentId={id} initialPage={initialPage} />); await waitFor(() => expect(screen.getByRole('button', { name: 'Save Draft' })).toBeEnabled()); return view }
 describe('page management workflow', () => {
+  it('applies a starter layout to unsaved input and creates it only as a draft', async () => {
+    await mount(null)
+    expect(screen.getByText('Canvas v1')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Use the About layout' }))
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(screen.getByText('Canvas v2')).toBeInTheDocument()
+    expect(screen.getByLabelText('Title', { exact: true })).toHaveValue('About')
+    expect(screen.getByLabelText('URL slug')).toHaveValue('about')
+    expect(screen.getByText(/Replace the starter layout placeholders/)).toBeInTheDocument()
+    // Replacing existing content asks first.
+    vi.mocked(window.confirm).mockReturnValueOnce(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Use the Contact layout' }))
+    expect(window.confirm).toHaveBeenCalledOnce()
+    expect(screen.getByLabelText('URL slug')).toHaveValue('about')
+    fireEvent.click(screen.getByRole('button', { name: 'Save Draft' }))
+    await waitFor(() => expect(mocks.write).toHaveBeenCalledOnce())
+    expect(mocks.write.mock.calls[0][0]).toMatchObject({ operation: 'create', values: { title: 'About', document: { version: 2 } } })
+    await screen.findByText(/Draft saved/)
+    expect(screen.queryByRole('button', { name: 'Use the About layout' })).not.toBeInTheDocument()
+  })
   it('requires explicit review of a saved revision and resets it on input changes', async () => {
     await mount()
     expect(screen.getByRole('button', { name: 'Publish' })).toBeDisabled()

@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { authorizeSession } from '@/lib/auth/session'
 import { createClient } from '@/lib/supabase/server'
 import { findDisallowedPageImage } from './document-server'
-import { pageRecordSchema, pageRevisionSchema, pageRevisionSummarySchema, pageWriteSchema, type Page, type PageRevision, type PageRevisionSummary } from './schema'
+import { pagePatternLimits, pagePatternRowSchema, pagePatternSchema, pagePatternWriteSchema, pageRecordSchema, pageRevisionSchema, pageRevisionSummarySchema, pageWriteSchema, type Page, type PagePattern, type PagePatternLibrary, type PageRevision, type PageRevisionSummary } from './schema'
 import { pageDatabaseFailure, pageFailure, pageImageFailure, type PageResult } from './errors'
 
 /** Reuse a requestKey only for an exact retry, including expectedRevision. */
@@ -136,4 +136,83 @@ function readWriteResponse(data: unknown): PageResult<{ page: Page; replayed: bo
   const image = findDisallowedPageImage(result.data.page.document)
   if (image) return pageImageFailure(image)
   return { data: result.data, error: null }
+}
+
+/**
+ * The shared section pattern library for page administrators. Rows whose stored
+ * document is unsupported, or whose images use a host that is no longer allowed,
+ * are listed as unavailable (never inserted, never silently dropped).
+ */
+export async function listPagePatterns(): Promise<PageResult<PagePatternLibrary>> {
+  const { failure } = await authorizeSession('pages:read')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error } }
+  try {
+    const client = await createClient()
+    const { data, error } = await client.from('page_patterns').select('*')
+      .order('updated_at', { ascending: false }).order('id', { ascending: false }).limit(pagePatternLimits.library)
+    if (error) return pageFailure('PAGE_UNAVAILABLE')
+    const rows = z.array(pagePatternRowSchema).safeParse(data)
+    if (!rows.success) return pageFailure('PAGE_UNAVAILABLE')
+    const library: PagePatternLibrary = { patterns: [], unavailable: [] }
+    for (const row of rows.data) {
+      const { document: _document, ...meta } = row
+      const pattern = readPattern(row)
+      if ('reason' in pattern) library.unavailable.push({ ...meta, reason: pattern.reason })
+      else library.patterns.push(pattern)
+    }
+    return { data: library, error: null }
+  } catch {
+    return pageFailure('PAGE_UNAVAILABLE')
+  }
+}
+
+/**
+ * Create, update or delete a saved section pattern. Patterns are copied into a
+ * page on insertion, so no write here can change a page or its published
+ * snapshot. Reuse a requestKey only for an exact retry.
+ */
+export async function writePagePattern(input: unknown, expectedAccountId?: string): Promise<PageResult<{ pattern: PagePattern | null; replayed: boolean }>> {
+  const parsed = pagePatternWriteSchema.safeParse(input)
+  if (!parsed.success) {
+    const rejected = pageFailure(input && typeof input === 'object' && 'values' in input ? 'PAGE_PATTERN_INVALID' : 'PAGE_INVALID_INPUT')
+    return { ...rejected, error: { ...rejected.error, writeAttempted: false } }
+  }
+  const request = parsed.data
+  const { profile, failure } = await authorizeSession('pages:update')
+  if (failure) return { data: null, error: { code: failure.code, message: failure.error, writeAttempted: false } }
+  if (expectedAccountId && profile.id !== expectedAccountId) {
+    const rejected = pageFailure('PAGE_FORBIDDEN')
+    return { ...rejected, error: { ...rejected.error, writeAttempted: false } }
+  }
+  // The same deployment image allowlist as page saves.
+  const image = 'values' in request ? findDisallowedPageImage(request.values.document) : null
+  if (image) {
+    const rejected = pageImageFailure(image)
+    return { ...rejected, error: { ...rejected.error, writeAttempted: false } }
+  }
+  try {
+    const client = await createClient()
+    const { data, error } = await client.rpc('write_page_pattern', {
+      p_operation: request.operation,
+      p_request_key: request.requestKey,
+      p_values: 'values' in request ? request.values : null,
+      p_pattern_id: 'patternId' in request ? request.patternId : null,
+      p_expected_revision: 'expectedRevision' in request ? request.expectedRevision : null,
+    })
+    if (error) return pageDatabaseFailure(error)
+    const result = z.object({ pattern: pagePatternRowSchema.nullable(), replayed: z.boolean() }).safeParse(data)
+    if (!result.success) return pageFailure('PAGE_UNAVAILABLE')
+    if (!result.data.pattern) return { data: { pattern: null, replayed: result.data.replayed }, error: null }
+    const pattern = readPattern(result.data.pattern)
+    if ('reason' in pattern) return pageFailure(pattern.reason)
+    return { data: { pattern, replayed: result.data.replayed }, error: null }
+  } catch {
+    return pageFailure('PAGE_UNAVAILABLE')
+  }
+}
+
+function readPattern(row: unknown): PagePattern | { reason: 'PAGE_PATTERN_UNSUPPORTED' | 'PAGE_IMAGE_NOT_ALLOWED' } {
+  const result = pagePatternSchema.safeParse(row)
+  if (!result.success) return { reason: 'PAGE_PATTERN_UNSUPPORTED' }
+  return findDisallowedPageImage(result.data.document) ? { reason: 'PAGE_IMAGE_NOT_ALLOWED' } : result.data
 }

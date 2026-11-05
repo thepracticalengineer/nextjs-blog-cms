@@ -62,7 +62,9 @@ See [MFA verification and recovery](mfa.md) for authenticator selection, recover
 `pages:create`, `pages:read`, `pages:update` and `pages:publish` are admin-only.
 `pages:publish` covers explicit publication and unpublication. Page revision
 history is readable with `pages:read`; restoring a revision into the working draft
-requires `pages:update` and never publishes it. Authors' existing
+requires `pages:update` and never publishes it. The shared section pattern library
+is listed with `pages:read`; saving, renaming or deleting a pattern requires
+`pages:update`. Pattern writes never change pages or snapshots. Authors' existing
 `posts:publish` does not grant any page-management access. Signup policy remains
 unchanged; #111 is a separate product decision.
 

@@ -1,5 +1,6 @@
 import { pageValuesSchema, type PageValues } from './schema'
 import type { PageNode } from './document'
+import { hasPagePlaceholders } from './placeholders'
 
 /** Page-specific requirements: no article word count or excerpt requirement. */
 export function pageReadiness(values: PageValues): string[] {
@@ -19,6 +20,7 @@ export function pageReadiness(values: PageValues): string[] {
   else visit(values.document.content)
   if (!meaningful) issues.push('Add meaningful text or an image before publishing.')
   if (missingAlt) issues.push('Add alternative text to every page image before publishing.')
+  if (hasPagePlaceholders(values.document)) issues.push('Replace the starter layout placeholders (text marked [[Replace: …]] and #replace-link destinations) before publishing.')
   // Empty SEO fields deliberately fall back to the page title / no description.
   return issues
 }

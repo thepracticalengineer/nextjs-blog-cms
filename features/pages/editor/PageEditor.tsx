@@ -14,7 +14,9 @@ import { pageDocumentSchema, toPageEditorDocument, isSafePageHref, type PageDocu
 import type { PageDocument } from '../schema'
 import { BlockSettings } from './BlockSettings'
 import { createPageExtensions } from './extensions'
-import { blockLabels, blockOutline, deletePageBlock, duplicatePageBlock, insertableBlocks, insertPageBlock, movePageBlock, reorderPageBlock, selectedBlockPosition, type BlockEntry, type InsertableBlock } from './operations'
+import { blockLabels, blockOutline, deletePageBlock, duplicatePageBlock, insertableBlocks, insertPageBlock, canSavePattern, insertPagePattern, movePageBlock, patternBlocksFromSelection, reorderPageBlock, selectedBlockPosition, type BlockEntry, type InsertableBlock } from './operations'
+import { PatternLibrary, type PagePatternSource } from './PatternLibrary'
+import type { PagePattern } from '../schema'
 import '../page-layout.css'
 import './editor.css'
 
@@ -25,6 +27,8 @@ export type PageEditorProps = {
   document: PageDocument
   editorId: string
   onChange: (document: PageDocumentV2) => void
+  /** Enables the saved section pattern library. Omit for an editor without patterns. */
+  patterns?: PagePatternSource
 }
 
 export function PageEditor(props: PageEditorProps) {
@@ -41,7 +45,7 @@ export function PageEditor(props: PageEditorProps) {
   return <PageEditorCanvas {...props} document={initial.document} />
 }
 
-function PageEditorCanvas({ document, editorId, onChange }: PageEditorProps) {
+function PageEditorCanvas({ document, editorId, onChange, patterns }: PageEditorProps) {
   const [initial] = useState(() => toPageEditorDocument(document))
   const [preview, setPreview] = useState(false)
   const [notice, setNotice] = useState('')
@@ -87,6 +91,10 @@ function PageEditorCanvas({ document, editorId, onChange }: PageEditorProps) {
     if (insertPageBlock(editor!, selected, type)) { setNotice(`${blockLabels[type]} added.`); focusOutline() }
     else setError('Select a section, column or top-level block to insert here.')
   }
+  function insertPattern(pattern: PagePattern) {
+    if (insertPagePattern(editor!, selected, pattern.document.content.content ?? [])) { setNotice(`Inserted an independent copy of ${pattern.name}.`); focusOutline() }
+    else setError('That pattern cannot be inserted here or would exceed the page limits. Select a section, column or top-level block and try again.')
+  }
   function tree(items: BlockEntry[]) {
     return <ol className="page-block-list">{items.map((entry, index) => <li key={entry.pos}>
       <button type="button" className="page-block-select" data-block-pos={entry.pos} aria-label={`Select ${blockLabels[entry.node.type.name] ?? entry.node.type.name} ${index + 1}`} aria-pressed={selected === entry.pos}
@@ -120,6 +128,7 @@ function PageEditorCanvas({ document, editorId, onChange }: PageEditorProps) {
         <div className="flex flex-col gap-2"><h2 className="font-semibold">Add a block</h2><p className="text-xs text-muted-foreground">Select a section or column to insert inside it. Other blocks insert after the selection.</p>
           <div className="grid grid-cols-2 gap-1">{insertableBlocks.map(type => <Button key={type} size="sm" variant="outline" onClick={() => add(type)} aria-label={`Add ${blockLabels[type]}`}>{blockLabels[type]}</Button>)}</div>
         </div>
+        {patterns && <PatternLibrary source={patterns} savable={canSavePattern(editor, selected)} readSelection={() => patternBlocksFromSelection(editor, selectedBlockPosition(editor))} onInsert={insertPattern} />}
         <nav ref={outline} aria-label="Block outline" className="flex min-w-0 flex-col gap-2">
           <h2 className="font-semibold">Block outline</h2><p className="text-xs text-muted-foreground">Drag siblings to reorder, or use Alt + ↑ / ↓ and the move buttons.</p>{tree(entries)}
         </nav>
